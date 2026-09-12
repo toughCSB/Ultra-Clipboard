@@ -55,6 +55,8 @@
     "paste": "Paste",
     "pinItem": "Pin item",
     "playCopySound": "Play sound",
+    "pullWebdavBackup": "Download from WebDAV",
+    "pushWebdavBackup": "Upload to WebDAV",
     "resetSettings": "Reset preferences",
     "resetStorageLocation": "Reset data directory",
     "restartAsAdmin": "Restart as administrator",
@@ -99,6 +101,8 @@
     "noteSavedAndFavorited": "Saved and favorited",
     "settingsReset": "Preferences reset",
     "storageLocationChanged": "Data directory changed",
-    "storageLocationReset": "Data directory reset"
+    "storageLocationReset": "Data directory reset",
+    "webdavPulled": "Imported {{imported}} items from WebDAV and skipped {{skipped}} duplicates",
+    "webdavPushed": "Uploaded clipboard backup to WebDAV ({{size}})"
   }
 }

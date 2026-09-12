@@ -55,6 +55,8 @@
     "paste": "粘贴",
     "pinItem": "置顶",
     "playCopySound": "播放提示音",
+    "pullWebdavBackup": "从 WebDAV 下载",
+    "pushWebdavBackup": "上传到 WebDAV",
     "resetSettings": "重置偏好",
     "resetStorageLocation": "还原数据目录",
     "restartAsAdmin": "以管理员权限重启",
@@ -99,6 +101,8 @@
     "noteSavedAndFavorited": "已保存并收藏",
     "settingsReset": "偏好已重置",
     "storageLocationChanged": "数据目录已更改",
-    "storageLocationReset": "数据目录已还原"
+    "storageLocationReset": "数据目录已还原",
+    "webdavPulled": "已从 WebDAV 导入 {{imported}} 条，跳过 {{skipped}} 条重复",
+    "webdavPushed": "已上传剪贴板备份到 WebDAV（{{size}}）"
   }
 }
