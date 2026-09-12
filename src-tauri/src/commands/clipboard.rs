@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Local, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -81,9 +82,9 @@ pub async fn read_clipboard(
     registry: State<'_, AppsRegistry>,
 ) -> Result<Option<ReadClipboardResult>> {
     // 先在同步段抓前台应用 + 读取剪贴板。
-    // 注意：手动「重新读取」时前台应用就是 EcoPaste 自己，不像 OS 监听场景能拿到原应用——
+    // 注意：手动「重新读取」时前台应用就是 Ultra Clipboard 自己，不像 OS 监听场景能拿到原应用——
     // 这里仍保留探测：若用户在外部应用复制后立刻命令式触发，多少能捕获到正确来源；
-    // 命中我们自己也无害（apps 表只是多记一条「EcoPaste」）。
+    // 命中我们自己也无害（apps 表只是多记一条「Ultra Clipboard」）。
     let (item_opt, source) = {
         let source = detect_frontmost();
         let reader = ClipboardReader::new()?;
@@ -353,8 +354,12 @@ pub async fn get_clipboard_preview_payload(
 
 /// 播放一次复制成功提示音，用于偏好设置页试听。
 #[tauri::command]
-pub async fn play_copy_sound() {
-    crate::clipboard::play_copy_sound();
+pub async fn play_copy_sound() -> Result<()> {
+    tauri::async_runtime::spawn_blocking(crate::clipboard::play_copy_sound_now)
+        .await
+        .map_err(|e| anyhow!(e.to_string()))?
+        .map_err(|e| anyhow!(e))?;
+    Ok(())
 }
 
 /// 把指定历史记录写回系统剪贴板（不触发模拟粘贴）。
@@ -784,7 +789,7 @@ fn compute_available_actions(item: &ClipboardItem) -> Vec<ClipboardAction> {
 fn default_saved_image_file_name(item: &ClipboardItem) -> String {
     let local = item.created_at.with_timezone(&Local);
 
-    format!("EcoPaste-image-{}.png", local.format("%Y%m%d-%H%M%S"))
+    format!("UltraClipboard-image-{}.png", local.format("%Y%m%d-%H%M%S"))
 }
 
 /// 保存文件对话框会短暂转移焦点；期间暂停剪贴板窗口失焦/外部点击自动隐藏。
@@ -1544,7 +1549,7 @@ mod tests {
     use super::*;
     use crate::db::items::content_hash;
     use crate::db::models::Platform;
-    use chrono::Utc;
+    use chrono::{TimeZone, Utc};
 
     fn text_item(sub_kind: Option<ClipboardSubKind>, is_sensitive: bool) -> ClipboardItem {
         let content = "<b>secret</b>".to_owned();
@@ -1774,6 +1779,21 @@ mod tests {
         let actions = compute_available_actions(&image_item());
 
         assert!(actions.contains(&ClipboardAction::SaveImage));
+    }
+
+    #[test]
+    fn saved_image_file_name_uses_current_product_name() {
+        let mut item = image_item();
+        item.created_at = Utc.with_ymd_and_hms(2026, 9, 12, 12, 34, 56).unwrap();
+        let stamp = item
+            .created_at
+            .with_timezone(&Local)
+            .format("%Y%m%d-%H%M%S");
+
+        assert_eq!(
+            default_saved_image_file_name(&item),
+            format!("UltraClipboard-image-{stamp}.png")
+        );
     }
 
     #[test]
