@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="./public/logo.png" alt="EcoPaste" width="96" height="96" />
+  <img src="./public/logo.png" alt="Ultra Clipboard" width="96" height="96" />
 
-# EcoPaste
+# Ultra Clipboard
 
-**A local-first clipboard manager for macOS and Windows.**
+**macOS와 Windows를 위한 로컬 우선 클립보드 관리자**
 
-English | [简体中文](./README.zh-CN.md)
+한국어 | [English](./README.en.md) | [简体中文](./README.zh-CN.md)
 
   <br />
 
@@ -16,30 +16,70 @@ English | [简体中文](./README.zh-CN.md)
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078d4?style=flat-square&logo=windows&logoColor=white" />
 </div>
 
-## About
+## 소개
 
-EcoPaste is an open-source desktop clipboard manager built with a Rust-first Tauri architecture: durable behavior lives in Rust, while the React frontend focuses on rendering and interaction.
+Ultra Clipboard는 복사한 내용을 기기에 저장하고 빠르게 다시 찾는 오픈 소스 데스크톱 클립보드 관리자입니다. Rust 중심의 Tauri 구조와 React UI로 구성되어 있으며, 기본 UI 언어는 한국어입니다.
 
-The app is designed to be fast, lightweight, and maintainable, with local storage, SQLite search, native shortcuts, tray integration, backup support, and a focused cross-platform surface for macOS and Windows.
+이 프로젝트는 [EcoPasteHub의 EcoPaste](https://github.com/EcoPasteHub/EcoPaste)를 기반으로 한 독립 유지보수 fork입니다. EcoPasteHub와 공식적으로 제휴하거나 소속된 프로젝트가 아니며, Ultra Clipboard의 개발과 배포는 `toughCSB`가 독립적으로 관리합니다.
 
-## Features
+## 주요 기능
 
-- Capture clipboard history for plain text, HTML, RTF, images, files, and folders.
-- Search clipboard content and notes with SQLite FTS5.
-- Filter history by source application and content type.
-- Protect sensitive content by skipping high-confidence secrets such as private keys, service tokens, AWS keys, and JWTs.
-- Preview text, images, and files in a dedicated preview window.
-- Paste, copy, copy as plain text, reveal files, open links, add notes, pin, favorite, delete, and drag items out to other apps.
-- Organize history with favorites, pinned items, notes, custom groups, and configurable item actions.
-- Tune capture order, size limits, retention, display density, list sorting, and window behavior.
-- Export and import `.ecopastebak` backups, including encrypted backup containers.
-- Keep clipboard data, resources, and settings local to your machine.
+- 일반 텍스트, HTML, RTF, 이미지, 파일과 폴더를 클립보드 기록으로 저장
+- 본문과 메모를 SQLite FTS5로 검색
+- 원본 애플리케이션과 콘텐츠 유형으로 기록 필터링
+- 파일 기록의 전체 경로 표시와 파일 위치 열기
+- 텍스트, 이미지, 파일 미리보기
+- 붙여넣기, 복사, 일반 텍스트로 복사, 링크 열기, 메모, 즐겨찾기, 고정, 삭제
+- 즐겨찾기, 고정 항목, 메모와 사용자 지정 그룹으로 기록 정리
+- 복사 완료 사운드 설정
+- 민감한 값으로 판단되는 private key, service token, AWS key, JWT 등의 수집 및 표시 보호
+- 기록 기본 보존 기간 1개월, 약 30일. 보존 기간은 설정에서 변경할 수 있으며 즐겨찾기와 고정 항목은 자동 정리 대상에서 제외
+- 데이터, 리소스와 설정을 로컬에 저장하는 local-first 방식
 
-## Contributing
+## 백업과 데이터 호환성
 
-Development setup, architecture notes, quality checks, and contribution
-expectations live in the [contribution guide](./CONTRIBUTING.md).
+Ultra Clipboard는 `.ecopastebak` 백업을 내보내고 가져올 수 있습니다. 암호화된 `.ecopastebak` 백업도 지원하며, 백업에는 기록 데이터와 리소스, 설정이 포함됩니다. 백업을 병합하거나 기존 데이터를 덮어쓰는 방식으로 복원할 수 있습니다.
 
-## License
+WebDAV 백업과 복원은 설정에서 직접 실행하는 수동 기능입니다. 실시간 동기화가 아니며, Tailscale을 통한 실시간 동기화도 제공하지 않습니다.
 
-EcoPaste is licensed under the [Apache License 2.0](./LICENSE).
+Ultra Clipboard는 EcoPaste와 별도의 데이터 namespace를 사용합니다. 기존 공식 EcoPaste 데이터를 사용하려면 EcoPaste에서 `.ecopastebak` 백업을 만든 뒤 Ultra Clipboard의 백업 가져오기로 가져오세요. 기존 데이터를 자동으로 이전하지 않습니다.
+
+## 지원 운영체제
+
+- Windows
+- macOS
+
+Linux는 지원하지 않습니다. `v1.1.1-rc.1`은 prerelease이며 macOS runtime QA가 아직 완료되지 않았습니다.
+
+## 다운로드 및 설치
+
+최신 빌드는 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases)에서 받을 수 있습니다.
+
+현재 `v1.1.1-rc.1`은 서명되지 않은 빌드입니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로, 출처와 파일을 확인한 뒤 사용하세요. 이 경고는 코드 서명이나 notarization이 완료되었다는 뜻이 아닙니다.
+
+## 개발
+
+필요한 환경은 macOS 또는 Windows, Node.js 20 이상, pnpm 10 이상, Rust toolchain입니다.
+
+```bash
+pnpm install
+pnpm tauri dev
+pnpm tauri build
+```
+
+프론트엔드 검사와 Rust 검사는 다음처럼 실행합니다.
+
+```bash
+pnpm lint
+pnpm tsc
+cd src-tauri
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
+```
+
+자세한 개발 규칙과 구조는 [기여 안내](./CONTRIBUTING.md)를 참고하세요.
+
+## 라이선스
+
+Ultra Clipboard는 [Apache License 2.0](./LICENSE)으로 배포됩니다. 원 프로젝트의 저작권 고지는 유지되며, fork의 수정 사항은 [NOTICE](./NOTICE)에 별도로 기록되어 있습니다.
