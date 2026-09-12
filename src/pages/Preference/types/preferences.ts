@@ -62,12 +62,11 @@ export type PreferenceControl =
       suffixKey?: string;
     }
   | { type: "retention" }
-  | { type: "text" }
+  | { type: "text"; secret?: boolean }
   | { type: "shortcutRecorder" }
   | { type: "textarea" }
   | { type: "appExclusion" }
   | { type: "action"; danger?: boolean }
-  | { type: "sponsorQr" }
   | { type: "status" }
   | { type: "shortcutTags"; shortcuts: PreferenceShortcutTag[] };
 

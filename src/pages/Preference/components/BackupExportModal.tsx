@@ -126,7 +126,7 @@ const BackupExportModal: FC<BackupExportModalProps> = (props) => {
     ].join("");
 
     return await save({
-      defaultPath: `EcoPaste-Backup-${stamp}.${BACKUP_EXTENSION}`,
+      defaultPath: `UltraClipboard-Backup-${stamp}.${BACKUP_EXTENSION}`,
       filters: [
         {
           extensions: [BACKUP_EXTENSION],
