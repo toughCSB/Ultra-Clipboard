@@ -1,0 +1,719 @@
+{
+  "about": {
+    "checkUpdates": "업데이트 확인"
+  },
+  "backup": {
+    "export": {
+      "confirmPassword": "비밀번호 확인",
+      "confirmRequired": "백업 비밀번호를 다시 입력하세요",
+      "encryptedHint": "이 비밀번호로 백업을 암호화합니다. Ultra Clipboard는 비밀번호를 저장하지 않으며, 잊으면 복구할 수 없습니다.",
+      "modeEncrypted": "암호화 백업 (권장)",
+      "modePlain": "암호화 없는 백업",
+      "ok": "저장 위치 선택",
+      "okReadConfirm": "경고를 읽고 확인",
+      "okReadCountdown": "읽고 확인 ({{seconds}}초)",
+      "password": "백업 비밀번호",
+      "passwordMin": "백업 비밀번호는 8자 이상이어야 합니다",
+      "passwordMismatch": "두 비밀번호가 일치하지 않습니다",
+      "passwordRequired": "백업 비밀번호를 입력하세요",
+      "plainConfirm": "경고를 읽었고 암호화 없는 백업 내보내기를 확인합니다",
+      "plainConfirmRequired": "암호화 없는 백업 위험을 확인하세요",
+      "plainWarning": "파일을 가진 누구나 백업 내용을 바로 읽을 수 있습니다.",
+      "plainWarningTitle": "암호화 없는 백업은 비밀번호로 보호되지 않습니다",
+      "title": "Ultra Clipboard 백업 내보내기"
+    },
+    "fileFilter": "Ultra Clipboard 백업",
+    "import": {
+      "fileFallback": "Ultra Clipboard 백업 파일",
+      "ok": "가져오기",
+      "overwriteConfirm": "경고를 읽었고 현재 데이터를 덮어쓰기를 확인합니다",
+      "overwriteConfirmRequired": "덮어쓰기 가져오기 위험을 확인하세요",
+      "overwriteOkConfirm": "경고를 읽고 확인",
+      "overwriteOkCountdown": "읽고 확인 ({{seconds}}초)",
+      "overwriteWarning": "덮어쓰기는 선택한 현재 데이터를 바로 바꿉니다. 일상 복구는 합치기가 더 안전합니다. 백업을 기준으로 삼을 때만 덮어쓰세요.",
+      "password": "백업 비밀번호",
+      "passwordRequired": "백업 비밀번호를 입력하세요",
+      "pickTitle": "Ultra Clipboard 백업 선택",
+      "strategy": "가져오기 방식",
+      "strategyMerge": "합치기",
+      "strategyOverwrite": "덮어쓰기",
+      "title": "Ultra Clipboard 백업 가져오기",
+      "typeEncrypted": "암호화 백업, 비밀번호 필요",
+      "typePlain": "암호화 없는 백업"
+    },
+    "received": {
+      "encrypted": "암호화 백업을 인식했습니다. 가져오려면 비밀번호가 필요합니다.",
+      "plain": "암호화 없는 백업을 인식했습니다."
+    }
+  },
+  "schema": {
+    "captureKinds": {
+      "files": "파일과 폴더",
+      "html": "HTML 내용",
+      "image": "이미지",
+      "rtf": "RTF 내용",
+      "text": "일반 텍스트"
+    },
+    "numberSuffixes": {
+      "files": "개",
+      "gb": "GB",
+      "hours": "시간",
+      "items": "개",
+      "lines": "줄",
+      "mb": "MB",
+      "px": "px",
+      "seconds": "초"
+    },
+    "retentionUnits": {
+      "days": "일",
+      "hours": "시간",
+      "months": "개월",
+      "weeks": "주"
+    },
+    "sections": {
+      "about": {
+        "title": "앱 정보"
+      },
+      "actions": {
+        "title": "빠른 동작"
+      },
+      "appearance": {
+        "title": "모양과 언어"
+      },
+      "backup": {
+        "description": "Ultra Clipboard 백업 패키지를 내보내거나 가져옵니다.",
+        "title": "백업과 이전"
+      },
+      "capture": {
+        "title": "내용 종류"
+      },
+      "control": {
+        "title": "시스템 진입"
+      },
+      "copy": {
+        "title": "복사 피드백"
+      },
+      "diagnostics": {
+        "title": "진단"
+      },
+      "globalShortcuts": {
+        "title": "전역 단축키"
+      },
+      "groups": {
+        "title": "그룹 관리"
+      },
+      "history": {
+        "title": "보관과 정리"
+      },
+      "localData": {
+        "title": "저장 위치"
+      },
+      "organizing": {
+        "title": "즐겨찾기와 메모"
+      },
+      "paste": {
+        "title": "붙여넣기 동작"
+      },
+      "permissions": {
+        "title": "시스템 권한"
+      },
+      "preview": {
+        "title": "내용 미리보기"
+      },
+      "search": {
+        "title": "검색과 정렬"
+      },
+      "sensitive": {
+        "title": "프라이버시"
+      },
+      "source": {
+        "title": "앱 필터"
+      },
+      "updates": {
+        "title": "업데이트"
+      },
+      "webdav": {
+        "description": "내 WebDAV 폴더로 클립보드 백업을 올리거나 받습니다.",
+        "title": "WebDAV 동기"
+      },
+      "window": {
+        "title": "클립보드 창"
+      }
+    },
+    "settings": {
+      "about": {
+        "checkUpdates": {
+          "controlLabel": "확인",
+          "description": "Ultra Clipboard의 새 버전이 있는지 확인합니다.",
+          "title": "업데이트 확인"
+        },
+        "github": {
+          "controlLabel": "열기",
+          "title": "GitHub"
+        }
+      },
+      "actions": {
+        "deleteConfirm": {
+          "description": "일반 기록을 삭제하기 전에 묻습니다. 즐겨찾기와 고정은 각자 스위치가 있습니다.",
+          "title": "일반 삭제 확인"
+        },
+        "deleteFavoriteConfirm": {
+          "description": "중요한 항목을 잃지 않도록 즐겨찾기를 삭제하기 전에 묻습니다.",
+          "title": "즐겨찾기 삭제 확인"
+        },
+        "deleteFavoriteItems": {
+          "description": "끄면 즐겨찾기 기록에서 삭제 동작과 삭제 단축키가 숨겨집니다.",
+          "title": "즐겨찾기 삭제 허용"
+        },
+        "deleteFavoriteItemsOnlyInFavoriteGroup": {
+          "description": "켜면 즐겨찾기 그룹 밖에서 즐겨찾기 기록의 삭제 동작이 숨겨집니다. 일반 기록은 영향 없습니다.",
+          "title": "즐겨찾기 그룹에서만 삭제"
+        },
+        "deletePinnedConfirm": {
+          "description": "중요한 항목을 잃지 않도록 고정 기록을 삭제하기 전에 묻습니다.",
+          "title": "고정 삭제 확인"
+        },
+        "deletePinnedItems": {
+          "description": "끄면 고정 기록에서 삭제 동작과 삭제 단축키가 숨겨집니다.",
+          "title": "고정 삭제 허용"
+        },
+        "visible": {
+          "controlLabel": "관리",
+          "description": "기록에 마우스를 올렸을 때 보일 동작 버튼을 고릅니다.",
+          "title": "보이는 빠른 동작"
+        }
+      },
+      "appearance": {
+        "fileMaxCount": {
+          "description": "파일 기록 카드에 보여줄 파일 개수를 제한합니다.",
+          "title": "표시할 최대 파일 수"
+        },
+        "imageMaxHeight": {
+          "description": "목록에서 이미지 기록 썸네일 높이를 제한합니다.",
+          "title": "최대 이미지 높이"
+        },
+        "language": {
+          "description": "Ultra Clipboard 인터페이스 언어를 바꿉니다.",
+          "options": {
+            "en-US": "English",
+            "ko-KR": "한국어",
+            "zh-CN": "简体中文"
+          },
+          "title": "언어"
+        },
+        "showOriginalPreview": {
+          "description": "메모가 있는 기록은 기본적으로 메모를 보여주고, 카드에 마우스를 올리면 원문을 잠시 보여줍니다.",
+          "title": "호버 시 원문 보기"
+        },
+        "textMaxLines": {
+          "description": "텍스트 기록 카드에 보여줄 줄 수를 제한합니다.",
+          "title": "최대 텍스트 줄 수"
+        },
+        "theme": {
+          "description": "라이트, 다크, 또는 시스템 모양을 따릅니다.",
+          "options": {
+            "auto": "시스템 따라가기",
+            "dark": "다크",
+            "light": "라이트"
+          },
+          "title": "테마"
+        }
+      },
+      "backup": {
+        "exportHistory": {
+          "controlLabel": "내보내기",
+          "description": ".ecopastebak 형식의 Ultra Clipboard 백업을 내보냅니다. 기본은 비밀번호 암호화입니다.",
+          "title": "백업 내보내기"
+        },
+        "importHistory": {
+          "controlLabel": "가져오기",
+          "description": ".ecopastebak 형식의 Ultra Clipboard 백업을 가져와 합치거나 덮어씁니다.",
+          "title": "백업 가져오기"
+        }
+      },
+      "capture": {
+        "files": {
+          "description": "끄면 복사한 파일과 폴더가 히스토리에 저장되지 않습니다.",
+          "title": "파일과 폴더"
+        },
+        "html": {
+          "description": "끄면 HTML 서식의 리치 텍스트가 히스토리에 저장되지 않습니다.",
+          "title": "HTML 내용"
+        },
+        "image": {
+          "description": "끄면 클립보드 이미지가 히스토리에 저장되지 않습니다.",
+          "title": "이미지"
+        },
+        "maxImageMb": {
+          "description": "이보다 큰 이미지는 히스토리에 저장되지 않습니다. 0이면 제한 없음.",
+          "title": "최대 이미지 수집 크기"
+        },
+        "maxTextMb": {
+          "description": "이보다 큰 텍스트, HTML, RTF는 히스토리에 저장되지 않습니다. 0이면 제한 없음.",
+          "title": "최대 텍스트 수집 크기"
+        },
+        "order": {
+          "controlLabel": "관리",
+          "description": "클립보드에 여러 형식이 있으면 이 순서에서 먼저 맞는 종류를 저장합니다.",
+          "title": "수집 순서"
+        },
+        "rtf": {
+          "description": "끄면 RTF 서식의 리치 텍스트가 히스토리에 저장되지 않습니다.",
+          "title": "RTF 내용"
+        },
+        "text": {
+          "description": "끄면 복사한 일반 텍스트가 히스토리에 저장되지 않습니다.",
+          "title": "일반 텍스트"
+        }
+      },
+      "control": {
+        "autoStart": {
+          "description": "로그인 후 Ultra Clipboard를 자동으로 시작합니다.",
+          "macos": {
+            "description": "로그인 후 Ultra Clipboard를 자동으로 시작합니다.",
+            "title": "로그인 시 실행"
+          },
+          "title": "로그인 시 실행",
+          "windows": {
+            "description": "로그인 후 Ultra Clipboard를 자동으로 시작합니다.",
+            "title": "시작 시 실행"
+          }
+        },
+        "dockIcon": {
+          "description": "시스템 바탕 막대에 Ultra Clipboard 아이콘을 보여줍니다.",
+          "macos": {
+            "description": "Dock에 Ultra Clipboard 아이콘을 보여줍니다.",
+            "title": "Dock 아이콘"
+          },
+          "title": "바탕 막대 아이콘",
+          "windows": {
+            "description": "작업 표시줄에 Ultra Clipboard 아이콘을 보여줍니다.",
+            "title": "작업 표시줄 아이콘"
+          }
+        },
+        "reopenOnboarding": {
+          "controlLabel": "열기",
+          "description": "현재 설정과 히스토리를 초기화하지 않고 첫 설정을 다시 봅니다.",
+          "title": "초기 설정 다시 열기"
+        },
+        "trayIcon": {
+          "description": "시스템 상태 영역에 Ultra Clipboard 아이콘을 보여줍니다.",
+          "macos": {
+            "description": "메뉴 막대에 Ultra Clipboard 아이콘을 보여줍니다.",
+            "title": "메뉴 막대 아이콘"
+          },
+          "title": "상태 영역 아이콘",
+          "windows": {
+            "description": "시스템 트레이에 Ultra Clipboard 아이콘을 보여줍니다.",
+            "title": "시스템 트레이 아이콘"
+          }
+        }
+      },
+      "copy": {
+        "hideWindow": {
+          "description": "히스토리 기록을 복사한 뒤 클립보드 창을 자동으로 숨깁니다.",
+          "title": "복사 후 창 숨기기"
+        },
+        "plainDefault": {
+          "description": "텍스트 기록을 복사할 때 HTML/RTF 서식을 빼고 일반 텍스트로 복사합니다.",
+          "title": "기본적으로 일반 텍스트 복사"
+        },
+        "sound": {
+          "description": "새 클립보드 내용이 히스토리에 저장되면 소리를 냅니다.",
+          "preview": "소리 미리듣기",
+          "title": "복사 소리"
+        },
+        "updateOnReuse": {
+          "description": "히스토리 기록을 복사하거나 붙여넣을 때 사용 시각과 횟수를 갱신합니다.",
+          "title": "재사용 시 기록 갱신"
+        }
+      },
+      "diagnostics": {
+        "resetPreferences": {
+          "confirmContent": "모든 설정을 기본값으로 되돌립니다. 클립보드 히스토리는 유지됩니다.",
+          "confirmTitle": "모든 설정을 초기화할까요?",
+          "controlLabel": "초기화",
+          "description": "히스토리는 유지하고 모든 설정을 기본값으로 되돌립니다.",
+          "title": "모든 설정 초기화"
+        },
+        "windowLifecycle": {
+          "columns": {
+            "generation": "표시 세대",
+            "label": "창",
+            "locks": "파괴 가드",
+            "phase": "단계",
+            "timing": "시간"
+          },
+          "controlLabel": "보기",
+          "description": "숨긴 창의 자원 사용을 점검하려면 창 수명, 파괴 보호, 라이트웨이트 상태를 봅니다.",
+          "durationSeparator": " ",
+          "durationUnits": {
+            "days": "{{count}}일",
+            "hours": "{{count}}시간",
+            "minutes": "{{count}}분",
+            "seconds": "{{count}}초"
+          },
+          "empty": "창 수명 데이터가 아직 없습니다",
+          "generationHint": "보이지 않던 창이 보일 때 1이 늘어납니다. 이미 보이는 창을 다시 보여도 늘어나지 않습니다.",
+          "hiddenFor": "{{duration}} 동안 숨김",
+          "lastActive": "{{duration}} 전에 활성",
+          "locksHint": "dirty 소유자 / keepalive 임대로 표시됩니다. 0이 아니면 파괴가 미뤄집니다.",
+          "modalTitle": "창 수명",
+          "phases": {
+            "created": "생성됨",
+            "destroyed": "파괴됨",
+            "destroyPending": "파괴 대기",
+            "dormant": "휴면",
+            "hiddenWarm": "숨김 유지",
+            "notCreated": "미생성",
+            "ready": "준비",
+            "visible": "보임"
+          },
+          "title": "창 수명",
+          "windows": {
+            "clipboard": "클립보드 창",
+            "contextMenu": "컨텍스트 메뉴 창",
+            "contextSubmenu": "컨텍스트 하위 메뉴 창",
+            "onboarding": "초기 설정 창",
+            "preference": "설정 창",
+            "preview": "클립보드 미리보기 창",
+            "update": "소프트웨어 업데이트 창"
+          }
+        }
+      },
+      "history": {
+        "cleanupIntervalHours": {
+          "description": "지정한 시간마다 히스토리를 검사하고 정리합니다. 0이면 주기 정리를 끄지만, 시작 시 한 번은 정리합니다.",
+          "title": "자동 정리 간격"
+        },
+        "maxCount": {
+          "description": "한도를 넘으면 오래된 일반 기록을 자동으로 정리합니다. 즐겨찾기와 고정은 항상 유지됩니다. 0이면 개수 제한 없음.",
+          "title": "최대 항목 수"
+        },
+        "retention": {
+          "description": "이보다 오래된 일반 기록을 자동으로 정리합니다. 즐겨찾기와 고정은 항상 유지됩니다. 0이면 시간 정리를 끕니다.",
+          "title": "보관 기간"
+        }
+      },
+      "localData": {
+        "cleanCache": {
+          "confirmContent": "히스토리에서 더 이상 참조하지 않는 이미지, 썸네일, 아이콘 캐시를 지웁니다. 사용 중인 자원은 남깁니다.",
+          "confirmTitle": "자원 캐시 정리",
+          "controlLabel": "캐시 정리",
+          "description": "히스토리에서 더 이상 참조하지 않는 이미지, 썸네일, 아이콘 캐시를 지웁니다.",
+          "title": "캐시 정리"
+        },
+        "dataDirectory": {
+          "controlLabel": "열기",
+          "description": "히스토리 데이터베이스, 설정, 자원 캐시가 있는 폴더를 엽니다.",
+          "title": "데이터 폴더"
+        },
+        "logDirectory": {
+          "controlLabel": "열기",
+          "description": "문제 확인에 쓰는 런타임 로그 폴더를 엽니다.",
+          "title": "로그 폴더"
+        }
+      },
+      "organizing": {
+        "autoFavorite": {
+          "description": "비어 있지 않은 메모를 저장하면 그 기록을 즐겨찾기에 자동으로 넣습니다.",
+          "title": "메모 시 자동 즐겨찾기"
+        },
+        "customGroups": {
+          "controlLabel": "관리",
+          "description": "사용자 그룹의 순서, 표시, 이름, 아이콘을 조정합니다.",
+          "title": "사용자 그룹"
+        }
+      },
+      "paste": {
+        "autoPaste": {
+          "description": "히스토리 기록을 왼쪽 마우스 버튼으로 클릭했을 때 할 일을 고릅니다.",
+          "options": {
+            "disabled": "사용 안 함",
+            "doubleClickCopy": "더블클릭으로 복사",
+            "doubleClickPaste": "더블클릭으로 붙여넣기",
+            "singleClickCopy": "클릭으로 복사",
+            "singleClickPaste": "클릭으로 붙여넣기"
+          },
+          "title": "왼쪽 마우스 버튼"
+        },
+        "fileMode": {
+          "description": "파일 기록을 붙여넣을 때 파일 자체 대신 경로를 기본으로 붙여넣습니다.",
+          "title": "기본적으로 파일 경로 붙여넣기"
+        },
+        "middleClick": {
+          "description": "히스토리 기록을 가운데 마우스 버튼으로 클릭했을 때 할 일을 고릅니다.",
+          "options": {
+            "disabled": "사용 안 함",
+            "singleClickCopy": "복사",
+            "singleClickCopyPlain": "일반 텍스트로 복사",
+            "singleClickPaste": "붙여넣기",
+            "singleClickPastePlain": "일반 텍스트로 붙여넣기"
+          },
+          "title": "가운데 마우스 버튼"
+        },
+        "plainDefault": {
+          "description": "텍스트 기록을 붙여넣을 때 HTML/RTF 서식을 빼고 일반 텍스트로 붙여넣습니다.",
+          "title": "기본적으로 일반 텍스트 붙여넣기"
+        }
+      },
+      "permissions": {
+        "accessibility": {
+          "description": "빠른 붙여넣기, 창 제어, 더 안정적인 시스템 동작에 사용합니다.",
+          "title": "손쉬운 사용 권한"
+        },
+        "adminRestartConfirm": {
+          "content": "이 변경을 적용하려면 Ultra Clipboard를 관리자 권한으로 다시 시작해야 합니다. Windows에서 사용자 계정 컨트롤 창이 뜰 수 있습니다.",
+          "ok": "다시 시작",
+          "title": "다시 시작 필요"
+        },
+        "fullDiskAccess": {
+          "description": "필요한 로컬 데이터를 읽고 시스템이 보호하는 앱 자원에 접근할 때 사용합니다.",
+          "title": "전체 디스크 접근 권한"
+        },
+        "runAsAdministrator": {
+          "description": "Ultra Clipboard를 관리자 권한으로 다시 시작하고, 필요할 때 이후 실행도 권한을 유지합니다.",
+          "title": "관리자 권한으로 실행"
+        }
+      },
+      "preview": {
+        "delay": {
+          "description": "미리보기가 나타나기까지 호버 시간을 정합니다.",
+          "options": {
+            "ms300": "300ms",
+            "ms500": "500ms",
+            "ms1000": "1000ms"
+          },
+          "title": "호버 지연"
+        },
+        "hover": {
+          "description": "기록에 마우스를 올리면 전체 내용 미리보기를 보여줍니다.",
+          "title": "호버 미리보기"
+        },
+        "space": {
+          "description": "스페이스를 누른 동안 현재 선택한 기록을 미리봅니다.",
+          "title": "스페이스 미리보기"
+        }
+      },
+      "search": {
+        "clearOnHide": {
+          "description": "다음에 클립보드 창을 열 때 검색어를 지우고 전체 목록을 보여줍니다.",
+          "title": "다음에 열 때 검색 지우기"
+        },
+        "defaultFocus": {
+          "description": "클립보드 창을 열면 검색 상자를 선택해 바로 키워드를 입력할 수 있습니다.",
+          "title": "창을 열 때 검색에 초점"
+        },
+        "sort": {
+          "description": "검색이 없을 때 히스토리 기본 순서를 고릅니다.",
+          "options": {
+            "createdAtDesc": "만든 시각",
+            "updatedAtDesc": "갱신 시각",
+            "useCountDesc": "사용 빈도"
+          },
+          "title": "기본 정렬"
+        }
+      },
+      "sensitive": {
+        "collectSecrets": {
+          "description": "확신도 높은 키, 토큰 같은 시크릿을 히스토리에 저장할지 고릅니다.",
+          "title": "민감 내용 저장"
+        },
+        "redactSecrets": {
+          "description": "저장된 민감 내용은 앞뒤 글자만 보이고 가운데는 *로 가립니다.",
+          "title": "가려서 표시"
+        }
+      },
+      "shortcuts": {
+        "openClipboard": {
+          "description": "클립보드 창을 열거나 숨깁니다.",
+          "placeholder": "Alt+C",
+          "title": "클립보드 창 열기"
+        },
+        "openPreference": {
+          "description": "설정 창을 열거나 숨깁니다.",
+          "placeholder": "Alt+X",
+          "title": "설정 창 열기"
+        },
+        "winV": {
+          "description": "Win+V를 누르면 Windows 클립보드 기록 대신 Ultra Clipboard를 엽니다.",
+          "title": "Win+V 가로채기"
+        }
+      },
+      "source": {
+        "appTransfer": {
+          "addApp": "앱 추가",
+          "allTitle": "사용 가능한 앱",
+          "appFileFilter": "응용 프로그램 파일",
+          "ignoredTitle": "무시할 앱",
+          "itemsUnit": "개",
+          "itemUnit": "개",
+          "refreshApps": "앱 목록 새로고침",
+          "searchPlaceholder": "앱 검색"
+        },
+        "excludedApps": {
+          "description": "이 앱에서 복사한 내용은 히스토리에 저장되지 않습니다.",
+          "title": "무시할 앱"
+        }
+      },
+      "updates": {
+        "autoCheck": {
+          "description": "주기적으로 Ultra Clipboard의 새 버전이 있는지 확인합니다.",
+          "title": "업데이트 자동 확인"
+        },
+        "beta": {
+          "description": "업데이트 확인 시 베타 버전을 받습니다.",
+          "title": "베타 업데이트 받기"
+        },
+        "frequency": {
+          "description": "Ultra Clipboard 업데이트 확인 주기를 정합니다.",
+          "options": {
+            "daily": "매일",
+            "monthly": "매월",
+            "weekly": "매주"
+          },
+          "title": "업데이트 확인 주기"
+        },
+        "nightly": {
+          "description": "업데이트 확인 시 나이틀리 버전을 받습니다.",
+          "title": "나이틀리 업데이트 받기"
+        }
+      },
+      "webdav": {
+        "enabled": {
+          "description": "켜면 WebDAV로 클립보드 백업 파일을 올리고 받을 수 있습니다.",
+          "title": "WebDAV 사용"
+        },
+        "fileName": {
+          "description": "WebDAV 서버에 저장할 파일 이름입니다.",
+          "placeholder": "clipboard.ecopastebak",
+          "title": "원격 파일 이름"
+        },
+        "password": {
+          "description": "WebDAV 비밀번호 또는 앱 비밀번호입니다.",
+          "placeholder": "비밀번호",
+          "title": "비밀번호"
+        },
+        "pull": {
+          "controlLabel": "받기",
+          "description": "원격 백업을 받아 로컬 기록에 합칩니다.",
+          "title": "WebDAV에서 받기"
+        },
+        "push": {
+          "controlLabel": "올리기",
+          "description": "로컬 기록을 내보내 WebDAV 파일로 올립니다.",
+          "title": "WebDAV로 올리기"
+        },
+        "url": {
+          "description": "WebDAV 폴더 URL입니다. Nextcloud files DAV 경로 등을 넣습니다.",
+          "placeholder": "https://cloud.example/remote.php/dav/files/me/clipboard",
+          "title": "서버 URL"
+        },
+        "username": {
+          "description": "WebDAV 사용자 이름입니다.",
+          "placeholder": "사용자 이름",
+          "title": "사용자 이름"
+        }
+      },
+      "window": {
+        "idleDestroySeconds": {
+          "description": "설정, 미리보기, 컨텍스트 메뉴 같은 보조 WebView를 이 시간 동안 숨기면 해제합니다. 다음에 자동으로 다시 만듭니다.",
+          "title": "보조 창 유휴 해제"
+        },
+        "lightweightMode": {
+          "description": "클립보드 창이 숨으면 불필요한 새로고침을 멈추고, 보조 렌더 자원은 유휴 후 해제합니다.",
+          "title": "라이트웨이트 모드"
+        },
+        "position": {
+          "description": "클립보드 창이 열릴 위치를 고릅니다.",
+          "options": {
+            "center": "화면 가운데",
+            "followCursor": "커서 따라가기",
+            "remember": "위치 기억"
+          },
+          "title": "열 위치"
+        },
+        "scrollToTopOnOpen": {
+          "description": "클립보드 창을 열 때마다 맨 위 최신 항목으로 돌아갑니다.",
+          "title": "열 때 맨 위로"
+        },
+        "selectCategoryOnOpen": {
+          "description": "클립보드 창을 열 때 전환할 내용 종류를 고릅니다.",
+          "options": {
+            "all": "전체",
+            "files": "파일",
+            "image": "이미지",
+            "preserve": "마지막 선택 유지",
+            "text": "텍스트"
+          },
+          "title": "열 때 종류 선택"
+        },
+        "selectGroupOnOpen": {
+          "description": "클립보드 창을 열 때 전환할 사용자 그룹을 고릅니다.",
+          "options": {
+            "all": "전체",
+            "missingGroup": "삭제된 그룹",
+            "preserve": "마지막 선택 유지"
+          },
+          "title": "열 때 그룹 선택"
+        },
+        "selectRangeOnOpen": {
+          "description": "클립보드 창을 열 때 전환할 기록 범위를 고릅니다.",
+          "options": {
+            "all": "전체",
+            "favorite": "즐겨찾기",
+            "preserve": "마지막 선택 유지"
+          },
+          "title": "열 때 범위 선택"
+        }
+      }
+    },
+    "tabs": {
+      "about": {
+        "title": "정보"
+      },
+      "data": {
+        "title": "데이터"
+      },
+      "organize": {
+        "title": "기록"
+      },
+      "record": {
+        "title": "수집"
+      },
+      "reuse": {
+        "title": "동작"
+      },
+      "shortcuts": {
+        "title": "단축키"
+      },
+      "workflow": {
+        "title": "인터페이스"
+      }
+    }
+  },
+  "search": {
+    "empty": "일치하는 설정이 없습니다",
+    "placeholder": "설정 검색"
+  },
+  "status": {
+    "alwaysOn": "기본",
+    "comingSoon": "준비 중",
+    "experimental": "실험",
+    "requiresBackend": "대기"
+  },
+  "storage": {
+    "error": "계산 실패",
+    "loading": "계산 중",
+    "title": "로컬 저장",
+    "usage": "{{total}} / {{target}}"
+  },
+  "storageLocation": {
+    "change": "데이터 폴더 변경",
+    "open": "데이터 폴더 열기",
+    "pickTitle": "새 데이터 폴더 위치 선택",
+    "reset": "기본 폴더로 되돌리기",
+    "resetConfirmContent": "Ultra Clipboard가 현재 히스토리 데이터베이스, 설정, 자원 캐시를 기본 데이터 폴더로 옮긴 뒤, 이전이 끝나면 지금 사용자 지정 데이터 폴더를 삭제합니다.",
+    "resetConfirmTitle": "데이터 폴더 초기화"
+  }
+}

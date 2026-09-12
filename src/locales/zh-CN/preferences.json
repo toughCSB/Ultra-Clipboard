@@ -1,15 +1,12 @@
 {
   "about": {
-    "checkUpdates": "检查更新",
-    "sponsor": "赞赏支持",
-    "sponsorHint": "如果 EcoPaste 帮到了你，可以给项目一点支持。",
-    "sponsorQrAlt": "赞赏二维码"
+    "checkUpdates": "检查更新"
   },
   "backup": {
     "export": {
       "confirmPassword": "确认密码",
       "confirmRequired": "请再次输入备份密码",
-      "encryptedHint": "备份会用你输入的密码加密。EcoPaste 不会保存密码，忘记后无法恢复。",
+      "encryptedHint": "备份会用你输入的密码加密。Ultra Clipboard 不会保存密码，忘记后无法恢复。",
       "modeEncrypted": "加密备份（推荐）",
       "modePlain": "明文备份",
       "ok": "选择保存位置",
@@ -23,11 +20,11 @@
       "plainConfirmRequired": "请确认明文备份风险",
       "plainWarning": "任何拿到文件的人都可以直接读取备份内容。",
       "plainWarningTitle": "明文备份不受密码保护",
-      "title": "导出 EcoPaste 备份"
+      "title": "导出 Ultra Clipboard 备份"
     },
-    "fileFilter": "EcoPaste 备份",
+    "fileFilter": "Ultra Clipboard 备份",
     "import": {
-      "fileFallback": "EcoPaste 备份文件",
+      "fileFallback": "Ultra Clipboard 备份文件",
       "ok": "导入",
       "overwriteConfirm": "我已阅读风险提示，确认覆盖当前数据",
       "overwriteConfirmRequired": "请确认覆盖导入风险",
@@ -36,11 +33,11 @@
       "overwriteWarning": "覆盖导入会立即替换已选择的当前数据。合并导入更适合日常恢复；只有确定要以备份为准时再选择覆盖。",
       "password": "备份密码",
       "passwordRequired": "请输入备份密码",
-      "pickTitle": "选择 EcoPaste 备份",
+      "pickTitle": "选择 Ultra Clipboard 备份",
       "strategy": "导入方式",
       "strategyMerge": "合并导入",
       "strategyOverwrite": "覆盖导入",
-      "title": "导入 EcoPaste 备份",
+      "title": "导入 Ultra Clipboard 备份",
       "typeEncrypted": "加密备份，导入时需要密码",
       "typePlain": "未加密备份"
     },
@@ -84,7 +81,7 @@
         "title": "外观与语言"
       },
       "backup": {
-        "description": "导出或导入 EcoPaste 备份包。",
+        "description": "导出或导入 Ultra Clipboard 备份包。",
         "title": "备份迁移"
       },
       "capture": {
@@ -135,6 +132,10 @@
       "updates": {
         "title": "更新"
       },
+      "webdav": {
+        "description": "通过自己的 WebDAV 文件夹上传或下载剪贴板备份。",
+        "title": "WebDAV 同步"
+      },
       "window": {
         "title": "剪贴板窗口"
       }
@@ -143,16 +144,12 @@
       "about": {
         "checkUpdates": {
           "controlLabel": "检查更新",
-          "description": "检查 EcoPaste 是否有可用的新版本。",
+          "description": "检查 Ultra Clipboard 是否有可用的新版本。",
           "title": "检查更新"
         },
         "github": {
           "controlLabel": "打开",
           "title": "GitHub"
-        },
-        "sponsor": {
-          "description": "如果 EcoPaste 帮到了你，可以给项目一点支持。",
-          "title": "赞赏支持"
         }
       },
       "actions": {
@@ -196,9 +193,10 @@
           "title": "图片最大显示高度"
         },
         "language": {
-          "description": "切换 EcoPaste 的界面语言。",
+          "description": "切换 Ultra Clipboard 的界面语言。",
           "options": {
             "en-US": "English",
+            "ko-KR": "한국어",
             "zh-CN": "简体中文"
           },
           "title": "语言"
@@ -224,12 +222,12 @@
       "backup": {
         "exportHistory": {
           "controlLabel": "导出",
-          "description": "导出 .ecopastebak 备份包，默认使用密码加密。",
+          "description": "导出 .ecopastebak 格式的 Ultra Clipboard 备份包，默认使用密码加密。",
           "title": "导出备份"
         },
         "importHistory": {
           "controlLabel": "导入",
-          "description": "导入 .ecopastebak 备份包，支持合并或覆盖恢复。",
+          "description": "导入 .ecopastebak 格式的 Ultra Clipboard 备份包，支持合并或覆盖恢复。",
           "title": "导入备份"
         }
       },
@@ -270,26 +268,26 @@
       },
       "control": {
         "autoStart": {
-          "description": "登录系统后自动启动 EcoPaste。",
+          "description": "登录系统后自动启动 Ultra Clipboard。",
           "macos": {
-            "description": "登录后自动启动 EcoPaste。",
+            "description": "登录后自动启动 Ultra Clipboard。",
             "title": "登录时启动"
           },
           "title": "开机启动",
           "windows": {
-            "description": "登录后自动启动 EcoPaste。",
+            "description": "登录后自动启动 Ultra Clipboard。",
             "title": "开机启动"
           }
         },
         "dockIcon": {
-          "description": "在系统桌面栏显示 EcoPaste 图标。",
+          "description": "在系统桌面栏显示 Ultra Clipboard 图标。",
           "macos": {
-            "description": "在程序坞显示 EcoPaste 图标。",
+            "description": "在程序坞显示 Ultra Clipboard 图标。",
             "title": "程序坞图标"
           },
           "title": "桌面栏图标",
           "windows": {
-            "description": "在任务栏显示 EcoPaste 图标。",
+            "description": "在任务栏显示 Ultra Clipboard 图标。",
             "title": "任务栏图标"
           }
         },
@@ -299,14 +297,14 @@
           "title": "重新打开引导"
         },
         "trayIcon": {
-          "description": "在系统状态栏显示 EcoPaste 图标。",
+          "description": "在系统状态栏显示 Ultra Clipboard 图标。",
           "macos": {
-            "description": "在菜单栏显示 EcoPaste 图标。",
+            "description": "在菜单栏显示 Ultra Clipboard 图标。",
             "title": "菜单栏图标"
           },
           "title": "状态栏图标",
           "windows": {
-            "description": "在系统托盘显示 EcoPaste 图标。",
+            "description": "在系统托盘显示 Ultra Clipboard 图标。",
             "title": "系统托盘图标"
           }
         }
@@ -465,7 +463,7 @@
           "title": "辅助功能访问权限"
         },
         "adminRestartConfirm": {
-          "content": "EcoPaste 需要以管理员权限重启后，此设置才会生效。Windows 可能会弹出用户账户控制确认窗口。",
+          "content": "Ultra Clipboard 需要以管理员权限重启后，此设置才会生效。Windows 可能会弹出用户账户控制确认窗口。",
           "ok": "重启",
           "title": "需要重启"
         },
@@ -474,7 +472,7 @@
           "title": "完全磁盘访问权限"
         },
         "runAsAdministrator": {
-          "description": "用于以管理员权限重启 EcoPaste，并在需要时让后续启动保持提权运行。",
+          "description": "用于以管理员权限重启 Ultra Clipboard，并在需要时让后续启动保持提权运行。",
           "title": "管理员权限启动"
         }
       },
@@ -538,7 +536,7 @@
           "title": "打开偏好设置窗口"
         },
         "winV": {
-          "description": "按 Win+V 唤起 EcoPaste，替代 Windows 系统剪贴板历史面板。",
+          "description": "按 Win+V 唤起 Ultra Clipboard，替代 Windows 系统剪贴板历史面板。",
           "title": "接管 Win+V"
         }
       },
@@ -560,7 +558,7 @@
       },
       "updates": {
         "autoCheck": {
-          "description": "定期检查 EcoPaste 是否有可用的新版本。",
+          "description": "定期检查 Ultra Clipboard 是否有可用的新版本。",
           "title": "自动检查更新"
         },
         "beta": {
@@ -579,6 +577,42 @@
         "nightly": {
           "description": "检查更新时同时接收每日构建版本。",
           "title": "接收每日构建更新"
+        }
+      },
+      "webdav": {
+        "enabled": {
+          "description": "开启后可通过 WebDAV 上传和下载剪贴板备份文件。",
+          "title": "启用 WebDAV"
+        },
+        "fileName": {
+          "description": "WebDAV 服务器上的远程文件名。",
+          "placeholder": "clipboard.ecopastebak",
+          "title": "远程文件名"
+        },
+        "password": {
+          "description": "WebDAV 密码或应用专用密码。",
+          "placeholder": "密码",
+          "title": "密码"
+        },
+        "pull": {
+          "controlLabel": "下载",
+          "description": "下载远程备份并合并到本地历史。",
+          "title": "从 WebDAV 下载"
+        },
+        "push": {
+          "controlLabel": "上传",
+          "description": "导出本地历史并上传到 WebDAV 文件。",
+          "title": "上传到 WebDAV"
+        },
+        "url": {
+          "description": "WebDAV 文件夹 URL，例如 Nextcloud files DAV 路径。",
+          "placeholder": "https://cloud.example/remote.php/dav/files/me/clipboard",
+          "title": "服务器 URL"
+        },
+        "username": {
+          "description": "WebDAV 用户名。",
+          "placeholder": "用户名",
+          "title": "用户名"
         }
       },
       "window": {
