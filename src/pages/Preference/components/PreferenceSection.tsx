@@ -8,6 +8,8 @@ import type {
   StorageLocation,
 } from "@/commands";
 import type { Settings } from "@/types/settings";
+import { cn } from "@/utils/cn";
+import { resolveSectionAccent } from "../constants";
 import type {
   PreferenceSection as PreferenceSectionModel,
   PreferenceSetting,
@@ -55,13 +57,14 @@ const PreferenceSection: FC<PreferenceSectionProps> = (props) => {
     onChange,
   } = props;
   const visual = resolveSectionVisual(section.id);
+  const accent = resolveSectionAccent(section.id);
   const sourceAppsSettings = resolveSourceAppsSettings(section.settings);
 
   if (sourceAppsSettings) {
     return (
       <motion.section
         animate={{ opacity: 1 }}
-        className="relative flex min-h-0 flex-1 scroll-mt-5 flex-col rounded-2 border border-ant-border-secondary bg-ant-container p-4"
+        className="relative flex min-h-0 flex-1 scroll-mt-5 flex-col overflow-hidden rounded-3 border border-ant-border-secondary bg-ant-container"
         id={section.id}
         initial={{ opacity: 0 }}
         transition={{
@@ -69,11 +72,16 @@ const PreferenceSection: FC<PreferenceSectionProps> = (props) => {
           ease: "easeOut",
         }}
       >
-        <SourceAppsTransfer
-          excludedAppsSetting={sourceAppsSettings.excludedApps}
-          onChange={onChange}
-          settings={settings}
+        <span
+          className={cn("absolute inset-y-0 left-0 w-1.5", accent.stripe)}
         />
+        <div className="min-h-0 flex-1 p-4 pl-5">
+          <SourceAppsTransfer
+            excludedAppsSetting={sourceAppsSettings.excludedApps}
+            onChange={onChange}
+            settings={settings}
+          />
+        </div>
       </motion.section>
     );
   }
@@ -81,7 +89,7 @@ const PreferenceSection: FC<PreferenceSectionProps> = (props) => {
   return (
     <motion.section
       animate={{ opacity: 1 }}
-      className="relative scroll-mt-5 overflow-hidden rounded-2 border border-ant-border-secondary bg-ant-container"
+      className="relative scroll-mt-5 overflow-hidden rounded-3 border border-ant-border-secondary bg-ant-container"
       id={section.id}
       initial={{ opacity: 0 }}
       transition={{
@@ -89,9 +97,20 @@ const PreferenceSection: FC<PreferenceSectionProps> = (props) => {
         ease: "easeOut",
       }}
     >
-      <div className="relative flex items-center justify-between gap-4 border-ant-split border-b bg-ant-container px-4 py-3.5">
+      <span className={cn("absolute inset-y-0 left-0 w-1", accent.stripe)} />
+      <div
+        className={cn(
+          "relative flex items-center justify-between gap-4 border-ant-split border-b px-5 py-3.5",
+          accent.wash,
+        )}
+      >
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center text-ant-primary text-xl">
+          <span
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-2 text-xl",
+              accent.chip,
+            )}
+          >
             <i aria-hidden="true" className={visual.icon} />
           </span>
 
@@ -227,6 +246,12 @@ function resolveSectionVisual(id: string): SectionVisual {
   if (normalizedId.includes("control")) {
     return {
       icon: "i-lucide:monitor",
+    };
+  }
+
+  if (normalizedId.includes("webdav")) {
+    return {
+      icon: "i-lucide:cloud",
     };
   }
 

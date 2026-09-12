@@ -2,7 +2,7 @@ import { Input } from "antd";
 import type { ChangeEvent, FC } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/utils/cn";
-import { PREFERENCE_TAB_META } from "../constants";
+import { PREFERENCE_TAB_META, resolveSectionAccent } from "../constants";
 import type { PreferenceSection, PreferenceTab } from "../types/preferences";
 import {
   translatePreferenceSection,
@@ -55,7 +55,8 @@ const PreferenceHeader: FC<PreferenceHeaderProps> = (props) => {
             <i
               aria-hidden="true"
               className={cn(
-                "text-ant-primary text-lg",
+                "text-lg",
+                PREFERENCE_TAB_META[activeTab.id].accent.icon,
                 PREFERENCE_TAB_META[activeTab.id].icon,
               )}
             />
@@ -129,22 +130,16 @@ const SectionTabs: FC<SectionTabsProps> = (props) => {
         return (
           <button
             className={cn(
-              "relative h-7.5 cursor-pointer whitespace-nowrap border-0 bg-transparent px-0.5 font-medium text-sm transition-colors focus-visible:ring-1 focus-visible:ring-ant-primary motion-reduce:transition-none",
+              "relative h-8 cursor-pointer whitespace-nowrap rounded-full border-0 px-3 font-medium text-sm transition-colors focus-visible:ring-1 focus-visible:ring-ant-primary motion-reduce:transition-none",
               selected
-                ? "text-ant-text"
-                : "text-ant-secondary hover:text-ant-text",
+                ? resolveSectionAccent(section.id).pill
+                : "bg-transparent text-ant-secondary hover:bg-ant-fill-tertiary hover:text-ant-text",
             )}
             key={section.id}
             onClick={handleClick}
             type="button"
           >
             {translatePreferenceSection(t, section, "title")}
-            <span
-              className={cn(
-                "absolute right-0 bottom-0 left-0 h-0.5 rounded-full transition-colors motion-reduce:transition-none",
-                selected ? "bg-ant-primary" : "bg-transparent",
-              )}
-            />
           </button>
         );
       })}
