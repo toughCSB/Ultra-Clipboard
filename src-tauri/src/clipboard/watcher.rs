@@ -141,7 +141,6 @@ pub async fn persist_and_notify(
         }
     }
     let result = upsert_item(pool, &item_to_write).await?;
-    sound::maybe_play_copy(app);
     if let Err(err) = app.emit(
         CLIPBOARD_UPDATED_EVENT,
         json!({
@@ -338,8 +337,9 @@ impl ClipboardHandler for ClipboardChangeHandler {
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
             let pool = app.state::<crate::db::DatabaseState>().pool().await;
-            if let Err(err) = persist_and_notify(&app, &pool, &item, source_app.as_ref()).await {
-                log::error!("clipboard watcher: persist failed: {err}");
+            match persist_and_notify(&app, &pool, &item, source_app.as_ref()).await {
+                Ok(_) => sound::maybe_play_copy(&app),
+                Err(err) => log::error!("clipboard watcher: persist failed: {err}"),
             }
         });
     }
@@ -434,7 +434,8 @@ mod tests {
         let item = {
             let _serial = crate::clipboard::test_lock::serial();
             let ctx = ClipboardContext::new().unwrap();
-            ctx.set_text("e2e ecopaste watcher".to_owned()).unwrap();
+            ctx.set_text("e2e ultra clipboard watcher".to_owned())
+                .unwrap();
 
             let reader = ClipboardReader::new().unwrap();
             let payload = reader
@@ -456,7 +457,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .content,
-            "e2e ecopaste watcher"
+            "e2e ultra clipboard watcher"
         );
 
         // 同内容再来一次：命中去重，use_count 累加，不新增行。
@@ -553,7 +554,8 @@ mod tests {
     struct TempDir(std::path::PathBuf);
     impl TempDir {
         fn new() -> Self {
-            let p = std::env::temp_dir().join(format!("ecopaste-watcher-{}", uuid::Uuid::new_v4()));
+            let p = std::env::temp_dir()
+                .join(format!("ultra-clipboard-watcher-{}", uuid::Uuid::new_v4()));
             std::fs::create_dir_all(&p).unwrap();
             Self(p)
         }

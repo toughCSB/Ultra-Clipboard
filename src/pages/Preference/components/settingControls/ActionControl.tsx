@@ -20,6 +20,8 @@ import {
   openOnboarding,
   openPreferenceDirectory,
   openUpdateWindow,
+  pullWebdavBackup,
+  pushWebdavBackup,
   releaseWindowKeepalive,
   resetStorageLocation,
   type StorageLocation,
@@ -50,6 +52,8 @@ const IMPORT_BACKUP_SETTING_ID = "backup.importHistory";
 const LOG_DIRECTORY_SETTING_ID = "localData.logDirectory";
 const REOPEN_ONBOARDING_SETTING_ID = "control.reopenOnboarding";
 const RESET_PREFERENCES_SETTING_ID = "diagnostics.resetPreferences";
+const WEBDAV_PULL_SETTING_ID = "webdav.pull";
+const WEBDAV_PUSH_SETTING_ID = "webdav.push";
 const WINDOW_LIFECYCLE_SETTING_ID = "diagnostics.windowLifecycle";
 const WINDOW_LIFECYCLE_I18N_PREFIX =
   "schema.settings.diagnostics.windowLifecycle";
@@ -377,6 +381,28 @@ const ActionControl: FC<ActionControlProps> = (props) => {
 
     if (setting.id === RESET_PREFERENCES_SETTING_ID) {
       confirmResetPreferences();
+      return;
+    }
+
+    if (setting.id === WEBDAV_PUSH_SETTING_ID) {
+      setLoading(true);
+      try {
+        await runWithKeepalive("push-webdav-backup", pushWebdavBackup);
+        markActionComplete();
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (setting.id === WEBDAV_PULL_SETTING_ID) {
+      setLoading(true);
+      try {
+        await runWithKeepalive("pull-webdav-backup", pullWebdavBackup);
+        markActionComplete();
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
