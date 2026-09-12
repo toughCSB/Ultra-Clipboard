@@ -3,7 +3,7 @@
 > 本文件是本项目 AI 编码工具的**单一真相源**。其它工具入口若存在，只应引用本文件，不要重复维护规则。
 > 分阶段 backlog 已迁移到 `.trellis/tasks/`，每个任务的 PRD 与研究资料以 Trellis task 为准。
 
-EcoPaste 是跨平台剪贴板管理器，采用 Rust-First 的 Tauri 架构。
+Ultra Clipboard 是基于 EcoPaste 的跨平台剪贴板管理器，采用 Rust-First 的 Tauri 架构。
 
 ## 快速原则
 
@@ -65,7 +65,7 @@ src-tauri/
     tray/       # 托盘菜单
     menu/       # 列表项右键菜单（macOS muda / Windows webview 窗）
     drag_out/   # OS 级拖出（文件/图片/文本拖到外部应用）
-    backup/     # .ecopastebak 历史备份导出与接收
+    backup/     # 兼容 .ecopastebak 的历史备份导出与接收
     i18n/       # Rust 侧用户可见文案（托盘、菜单、命令 toast）
     autostart/  # 开机自启
     settings/   # 设置模型与持久化
