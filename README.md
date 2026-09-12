@@ -40,7 +40,7 @@ Ultra Clipboard는 복사한 내용을 기기에 저장하고 빠르게 다시 �
 
 Ultra Clipboard는 `.ecopastebak` 백업을 내보내고 가져올 수 있습니다. 암호화된 `.ecopastebak` 백업도 지원하며, 백업에는 기록 데이터와 리소스, 설정이 포함됩니다. 백업을 병합하거나 기존 데이터를 덮어쓰는 방식으로 복원할 수 있습니다.
 
-WebDAV 백업과 복원은 설정에서 직접 실행하는 수동 기능입니다. 실시간 동기화가 아니며, Tailscale을 통한 실시간 동기화도 제공하지 않습니다.
+WebDAV 백업과 복원은 설정에서 직접 실행하는 수동 기능입니다. 실시간 동기화가 아니며, Tailscale을 통한 실시간 동기화도 제공하지 않습니다. 보안상 HTTPS WebDAV 주소만 지원하며, WebDAV 비밀번호는 백업 파일에 포함하지 않습니다.
 
 Ultra Clipboard는 EcoPaste와 별도의 데이터 namespace를 사용합니다. 기존 공식 EcoPaste 데이터를 사용하려면 EcoPaste에서 `.ecopastebak` 백업을 만든 뒤 Ultra Clipboard의 백업 가져오기로 가져오세요. 기존 데이터를 자동으로 이전하지 않습니다.
 

@@ -39,7 +39,7 @@ Ultra Clipboard 是一个开源桌面剪贴板管理器，将复制的内容保�
 
 ## 备份与数据兼容性
 
-WebDAV 备份和恢复需要在设置中手动执行，不是实时同步。Ultra Clipboard 不提供通过 Tailscale 的实时同步。
+WebDAV 备份和恢复需要在设置中手动执行，不是实时同步。Ultra Clipboard 不提供通过 Tailscale 的实时同步。出于安全考虑，仅支持 HTTPS WebDAV 地址，且备份文件不会包含 WebDAV 密码。
 
 Ultra Clipboard 使用独立于 EcoPaste 的数据 namespace。要导入官方 EcoPaste 数据，请先在 EcoPaste 中创建 `.ecopastebak` 备份，再通过 Ultra Clipboard 的备份导入功能导入。不会自动迁移现有数据。
 

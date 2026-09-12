@@ -40,7 +40,7 @@ This project is an independently maintained fork based on [EcoPaste by EcoPasteH
 
 Ultra Clipboard can export and import `.ecopastebak` backups. Encrypted `.ecopastebak` backups are supported as well. Backups contain clipboard history, resources, and settings, and can be restored by merging with or overwriting current data.
 
-WebDAV backup and restore are manual actions available in settings. They are not real-time synchronization. Ultra Clipboard does not provide real-time Tailscale synchronization.
+WebDAV backup and restore are manual actions available in settings. They are not real-time synchronization. Ultra Clipboard does not provide real-time Tailscale synchronization. Only HTTPS WebDAV endpoints are supported, and the WebDAV password is excluded from backup files.
 
 Ultra Clipboard uses a separate data namespace from EcoPaste. To bring data from the official EcoPaste app, create an `.ecopastebak` backup in EcoPaste and import it through Ultra Clipboard's backup flow. Existing data is not migrated automatically.
 
