@@ -1,6 +1,5 @@
 import DoneStep from "./components/DoneStep";
 import IgnoreAppsStep from "./components/IgnoreAppsStep";
-import LegacyImportStep from "./components/LegacyImportStep";
 import PermissionsStep from "./components/PermissionsStep";
 import ShortcutsStep from "./components/ShortcutsStep";
 import WelcomeStep from "./components/WelcomeStep";
@@ -26,11 +25,6 @@ export const ONBOARDING_STEPS: OnboardingStepDefinition[] = [
     component: IgnoreAppsStep,
     icon: "i-lucide:ban",
     id: "ignoreApps",
-  },
-  {
-    component: LegacyImportStep,
-    icon: "i-lucide:database-backup",
-    id: "legacyImport",
   },
   {
     component: DoneStep,

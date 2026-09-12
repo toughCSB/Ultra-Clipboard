@@ -1,0 +1,96 @@
+{
+  "actions": {
+    "close": "설정 닫기",
+    "finish": "시작하기",
+    "next": "다음",
+    "previous": "이전",
+    "skip": "건너뛰기",
+    "start": "설정 시작"
+  },
+  "done": {
+    "cards": {
+      "open": {
+        "description": "단축키로 언제든 클립보드 창을 엽니다.",
+        "title": "빠른 열기"
+      },
+      "preferences": {
+        "description": "단축키, 무시할 앱, 창 동작은 나중에 설정에서 바꿀 수 있습니다.",
+        "title": "언제든 조정"
+      },
+      "search": {
+        "description": "복사한 뒤 키워드, 종류, 출처 앱으로 바로 찾습니다.",
+        "title": "바로 검색"
+      }
+    },
+    "description": "핵심 설정이 끝났습니다. 복사한 내용을 기록하고 검색하고 다시 쓸 수 있습니다.",
+    "logoAlt": "Ultra Clipboard 아이콘",
+    "title": "Ultra Clipboard 사용 시작"
+  },
+  "ignoreApps": {
+    "description": "기록하지 않을 출처 앱을 고르세요. 비밀번호 관리자, 키 도구, 임시 창이 여기에 잘 맞습니다. 오른쪽 앱에서 복사한 내용은 히스토리에 들어가지 않습니다.",
+    "title": "무시할 앱 설정"
+  },
+  "legacyImport": {
+    "cardDescription": "Ultra Clipboard가 이전 EcoPaste 데이터를 읽기 전용으로 검사합니다. EcoPaste의 기존 기본 데이터 폴더와 설정에 기록된 사용자 지정 저장 폴더를 확인하며, 여기서는 수정하거나 가져오지 않습니다.",
+    "cardTitle": "이전 데이터 검사",
+    "description": "가져오기 결정에 필요한 최소 정보만 남긴 뒤 일반 항목, 즐겨찾기, 또는 둘 다를 고릅니다.",
+    "detecting": "이전 데이터를 검사하는 중...",
+    "emptyDescription": "이전 데이터를 찾지 못했습니다",
+    "importAction": "가져오기",
+    "importSectionTitle": "가져올 항목 선택",
+    "importSummary": "가져옴 {{imported}}, 건너뜀 {{skipped}}; 일반 {{normal}}, 즐겨찾기 {{favorite}}.",
+    "noImportableNote": "이전 폴더는 있지만 가져올 히스토리 데이터베이스나 기록이 없습니다.",
+    "refresh": "다시 검사",
+    "safeNote": "선택한 이전 항목 종류만 가져옵니다. 선택하지 않은 종류는 현재 데이터베이스에 들어가지 않습니다.",
+    "summary": {
+      "compactItems": "가져올 수 있음 {{count}}",
+      "detected": "검사 결과",
+      "detectedValue": "이전 데이터 발견",
+      "importable": "가져올 수 있는 항목",
+      "itemUnit": "개"
+    },
+    "title": "이전 데이터",
+    "types": {
+      "favorite": "즐겨찾기 항목",
+      "normal": "일반 항목"
+    }
+  },
+  "permissions": {
+    "description": {
+      "macos": "macOS에서 Ultra Clipboard는 핵심 동작을 위해 손쉬운 사용과 전체 디스크 접근이 필요합니다.",
+      "windows": "Windows에서 Ultra Clipboard는 일부 시스템 동작을 위해 관리자 권한으로 실행해야 할 수 있습니다."
+    },
+    "title": "권한 허용"
+  },
+  "shortcuts": {
+    "description": "자주 쓰는 단축키를 설정하세요. 나중에 설정에서 언제든 바꿀 수 있습니다.",
+    "title": "단축키 설정"
+  },
+  "steps": {
+    "done": "완료",
+    "ignoreApps": "무시할 앱",
+    "legacyImport": "이전 데이터",
+    "permissions": "권한",
+    "shortcuts": "단축키",
+    "welcome": "환영"
+  },
+  "welcome": {
+    "description": "복사한 내용을 더 빠르게 검색하고 정리하고 다시 쓰도록 돕는 클립보드 관리자입니다.",
+    "features": {
+      "capture": {
+        "description": "텍스트, 이미지, 파일을 자동으로 기록해 다시 복사하지 않아도 됩니다.",
+        "title": "자동 기록"
+      },
+      "reuse": {
+        "description": "단축키, 미리보기, 빠른 동작으로 자주 쓰는 내용을 다시 넣습니다.",
+        "title": "빠른 재사용"
+      },
+      "search": {
+        "description": "키워드, 종류, 출처 앱으로 기록을 바로 찾습니다.",
+        "title": "바로 검색"
+      }
+    },
+    "logoAlt": "Ultra Clipboard 아이콘",
+    "title": "Ultra Clipboard에 오신 것을 환영합니다"
+  }
+}
