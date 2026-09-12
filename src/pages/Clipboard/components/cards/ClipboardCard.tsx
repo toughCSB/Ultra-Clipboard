@@ -9,6 +9,7 @@ import type { ClipboardAction, ClipboardItem } from "@/types/clipboard";
 import type { ItemAction } from "@/types/settings";
 import { cn } from "@/utils/cn";
 import { isMac } from "@/utils/is";
+import { resolveItemTone } from "../../itemTone";
 import ClipboardQuickActions from "./ClipboardQuickActions";
 import FilesCard from "./FilesCard";
 import ImageCard from "./ImageCard";
@@ -81,6 +82,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const [hovered, setHovered] = useState(false);
   const typeKey = subKind ?? kind;
   const typeLabel = t(`types.${typeKey}`);
+  const tone = resolveItemTone(kind);
   const body = renderBody(item, isLinkActive, onOpenLink);
   const showSensitiveIndicator = item.isSensitive && item.kind === "text";
   const showStatusIndicators = item.isPinned || showSensitiveIndicator;
@@ -92,7 +94,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     />
   ) : (
     <img
-      alt="EcoPaste"
+      alt="Ultra Clipboard"
       className="pointer-events-none size-4"
       src={isMac ? "/logo-mac.png" : "/logo.png"}
     />
@@ -136,11 +138,8 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     <div
       aria-selected={isSelected}
       className={cn(
-        "relative flex flex-col gap-1 overflow-hidden rounded-2 border border-ant-border-secondary p-2 transition-colors duration-150 ease-out motion-reduce:transition-none",
-        {
-          "border-ant-primary bg-ant-blue-1": isSelected,
-          "border-ant-primary bg-ant-container": item.isPinned && !isSelected,
-        },
+        "relative flex flex-col gap-1 overflow-hidden rounded-2 border p-2 pl-3 transition-colors duration-150 ease-out motion-reduce:transition-none",
+        isSelected ? tone.cardSelected : tone.card,
       )}
       draggable
       onAuxClick={onAuxClick}
@@ -155,6 +154,10 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
       role="option"
       tabIndex={-1}
     >
+      <span
+        aria-hidden="true"
+        className={cn("absolute inset-y-0 left-0 w-1.5", tone.stripe)}
+      />
       <div className="flex items-center justify-between text-ant-secondary text-xs">
         <div className="flex min-w-0 items-center gap-1 overflow-hidden">
           {hintKey ? (
@@ -165,7 +168,14 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
             sourceAppIcon
           )}
 
-          <span className="truncate">{typeLabel}</span>
+          <span
+            className={cn(
+              "truncate rounded-full px-1.5 py-px font-medium text-[11px] leading-4",
+              tone.pill,
+            )}
+          >
+            {typeLabel}
+          </span>
         </div>
 
         <ClipboardQuickActions
