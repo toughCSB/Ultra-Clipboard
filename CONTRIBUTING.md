@@ -1,20 +1,20 @@
-# Contributing to EcoPaste
+# Contributing to Ultra Clipboard
 
 English | [简体中文](./CONTRIBUTING.zh-CN.md)
 
-Thank you for helping improve EcoPaste. This guide covers the project scope,
+Thank you for helping improve Ultra Clipboard. This guide covers the project scope,
 development setup, architecture boundaries, quality checks, and contribution
 expectations for code and documentation changes.
 
 ## Project Status
 
-EcoPaste has entered its stable release line. Future changes should evolve the
+Ultra Clipboard has entered its release-candidate line. Future changes should evolve the
 current app directly and include migrations or upgrade handling for released
 user data when storage, settings, or database contracts change.
 
 ## Platform Scope
 
-EcoPaste supports macOS and Windows only.
+Ultra Clipboard supports macOS and Windows only.
 
 Linux is not supported, and new code, dependencies, builds, and documentation
 should stay focused on macOS and Windows.
@@ -32,7 +32,7 @@ Use single-line Conventional Commits for commit messages, such as `feat:`,
 
 ## Architecture
 
-EcoPaste uses a Rust-first Tauri architecture:
+Ultra Clipboard uses a Rust-first Tauri architecture:
 
 - `src-tauri/src/clipboard/` owns clipboard capture, content detection,
   writeback, source apps, resource storage, and loop suppression.
@@ -135,7 +135,7 @@ src/
   components/    # shared React components
   constants/     # mirrored cross-layer constants
   hooks/         # shared hooks
-  locales/       # zh-CN and en-US translations
+  locales/       # ko-KR, en-US, and zh-CN translations
   pages/         # Clipboard, Preference, Preview, ContextMenu
   stores/        # Valtio UI state and settings mirrors
   types/         # TypeScript contract mirrors
@@ -152,7 +152,7 @@ src/
   names, event names, channels, or storage keys are reused across layers.
 - Add migrations for released schema changes. Do not edit released migrations in
   place.
-- Update both `zh-CN` and `en-US` locale resources for user-facing frontend
+- Update `ko-KR`, `en-US`, and `zh-CN` locale resources for user-facing frontend
   text.
 - Use Rust-side `i18n/` for short user-visible native strings such as tray
   labels, native menus, and command-returned toast text.

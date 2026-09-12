@@ -2,16 +2,16 @@
 
 [English](./CONTRIBUTING.md) | 简体中文
 
-感谢你帮助改进 EcoPaste。本指南说明本项目的范围、开发环境、架构边界、质量检查，以及代码和文档贡献的基本要求。
+感谢你帮助改进 Ultra Clipboard。本指南说明本项目的范围、开发环境、架构边界、质量检查，以及代码和文档贡献的基本要求。
 
 ## 项目状态
 
-EcoPaste 已进入正式发布通道。后续变更应直接演进当前应用；涉及已发布用户数据的存储、设置或数据库契约变化时，需要提供
+Ultra Clipboard 已进入候选发布通道。后续变更应直接演进当前应用；涉及已发布用户数据的存储、设置或数据库契约变化时，需要提供
 migration 或升级处理。
 
 ## 平台范围
 
-EcoPaste 仅支持 macOS 与 Windows。
+Ultra Clipboard 仅支持 macOS 与 Windows。
 
 Linux 不在支持范围内，新增代码、依赖、构建产物和文档都应聚焦 macOS 与 Windows。
 
@@ -25,7 +25,7 @@ Linux 不在支持范围内，新增代码、依赖、构建产物和文档都�
 
 ## 架构
 
-EcoPaste 采用 Rust-First 的 Tauri 架构：
+Ultra Clipboard 采用 Rust-First 的 Tauri 架构：
 
 - `src-tauri/src/clipboard/` 负责剪贴板采集、内容识别、写回、来源应用、资源落盘和监听回环抑制。
 - `src-tauri/src/db/` 负责 SQLite 仓储、模型、迁移和 FTS 搜索。
@@ -123,7 +123,7 @@ src/
   components/    # 共享 React 组件
   constants/     # 跨层复用常量镜像
   hooks/         # 共享 hooks
-  locales/       # zh-CN 和 en-US 翻译
+  locales/       # ko-KR、en-US 和 zh-CN 翻译
   pages/         # Clipboard、Preference、Preview、ContextMenu
   stores/        # Valtio UI 状态与设置镜像
   types/         # TypeScript 契约镜像
@@ -135,6 +135,6 @@ src/
 - React 侧专注于渲染、交互、UI 状态、前端 i18n 和预览。
 - command 名、事件名、channel、storage key 等跨层复用常量需要同时维护 Rust 常量和 `src/constants/` 镜像。
 - 已发布 schema 变更必须新增 migration，不要直接修改已发布 migration。
-- 前端用户可见文案需要同步更新 `zh-CN` 和 `en-US` 语言资源。
+- 前端用户可见文案需要同步更新 `ko-KR`、`en-US` 和 `zh-CN` 语言资源。
 - 托盘、原生菜单、命令返回 toast 等 Rust 侧短文案走 `i18n/`。
 - 针对改动范围运行检查；触及共享行为或跨层契约时，需要扩大验证范围。
