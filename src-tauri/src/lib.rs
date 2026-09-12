@@ -17,6 +17,7 @@ mod settings;
 mod shortcut;
 mod tray;
 mod update;
+mod webdav;
 mod window;
 
 use tauri::{Manager, WindowEvent};
@@ -80,19 +81,9 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_macos_permissions::init());
 
-    let updater_plugin = match std::env::var("TAURI_UPDATER_PUBLIC_KEY")
-        .or_else(|_| std::env::var("TAURI_SIGNING_PUBLIC_KEY"))
-    {
-        Ok(pubkey) if !pubkey.trim().is_empty() => {
-            tauri_plugin_updater::Builder::new().pubkey(pubkey).build()
-        }
-        _ => tauri_plugin_updater::Builder::new().build(),
-    };
-
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(updater_plugin)
         .plugin(core::prevent_default::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_run_as_admin_status,
@@ -167,6 +158,8 @@ pub fn run() {
             commands::inspect_history_backup,
             commands::take_pending_backup,
             commands::import_history_backup,
+            commands::push_webdav_backup,
+            commands::pull_webdav_backup,
             commands::get_storage_usage,
             commands::get_storage_location,
             commands::change_storage_location,
