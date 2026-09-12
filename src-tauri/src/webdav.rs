@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context};
 use reqwest::StatusCode;
 use serde::Serialize;
+use url::Url;
 
 use crate::core::Result;
 use crate::settings::WebDav;
@@ -13,9 +14,9 @@ pub struct WebDavSyncResult {
 }
 
 pub fn remote_object_url(settings: &WebDav) -> Result<String> {
-    let base = settings.url.trim().trim_end_matches('/');
-    if !(base.starts_with("https://") || base.starts_with("http://")) {
-        return Err(anyhow!("WebDAV URL must start with http:// or https://").into());
+    let mut url = Url::parse(settings.url.trim()).context("WebDAV URL is invalid")?;
+    if url.scheme() != "https" {
+        return Err(anyhow!("WebDAV URL must use https://").into());
     }
 
     let file_name = settings.file_name.trim();
@@ -26,7 +27,12 @@ pub fn remote_object_url(settings: &WebDav) -> Result<String> {
         return Err(anyhow!("WebDAV file name must not contain a path").into());
     }
 
-    Ok(format!("{base}/{file_name}"))
+    url.path_segments_mut()
+        .map_err(|_| anyhow!("WebDAV URL cannot be used as a base URL"))?
+        .pop_if_empty()
+        .push(file_name);
+
+    Ok(url.into())
 }
 
 pub async fn put_bytes(settings: &WebDav, body: Vec<u8>) -> Result<WebDavSyncResult> {
@@ -85,19 +91,32 @@ pub async fn get_bytes(settings: &WebDav) -> Result<(Vec<u8>, String)> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn joins_base_url_and_file_name() {
-        let settings = WebDav {
+    fn settings_with_url(url: &str) -> WebDav {
+        WebDav {
             enabled: true,
-            url: "https://cloud.example/dav/files/me/".to_owned(),
+            url: url.to_owned(),
             username: "me".to_owned(),
             password: "secret".to_owned(),
             file_name: "clipboard.ecopastebak".to_owned(),
-        };
+        }
+    }
+
+    #[test]
+    fn joins_base_url_and_file_name() {
+        let settings = settings_with_url("https://cloud.example/dav/files/me/");
 
         assert_eq!(
             remote_object_url(&settings).unwrap(),
             "https://cloud.example/dav/files/me/clipboard.ecopastebak"
         );
+    }
+
+    #[test]
+    fn rejects_http_before_basic_auth_can_be_sent() {
+        let settings = settings_with_url("http://cloud.example/dav/files/me");
+
+        let error = remote_object_url(&settings).unwrap_err();
+
+        assert!(error.to_string().contains("must use https://"));
     }
 }

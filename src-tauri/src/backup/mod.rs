@@ -584,13 +584,24 @@ fn write_payload_zip(
         options,
         target_path,
     )?;
-    add_optional_file(
-        &mut zip,
-        &source_paths.settings_path,
-        &archive_path(CONFIG_ARCHIVE_DIR, Path::new(SETTINGS_FILENAME))?,
-        options,
-        target_path,
-    )?;
+    if source_paths.settings_path.exists() && !same_path(&source_paths.settings_path, target_path) {
+        let settings_bytes = fs::read(&source_paths.settings_path)
+            .with_context(|| format!("failed to read {:?}", source_paths.settings_path))?;
+        let mut settings: serde_json::Value = serde_json::from_slice(&settings_bytes)
+            .context("failed to parse settings for backup")?;
+        if let Some(webdav) = settings
+            .get_mut("webdav")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            webdav.remove("password");
+        }
+
+        let archive_name = archive_path(CONFIG_ARCHIVE_DIR, Path::new(SETTINGS_FILENAME))?;
+        zip.start_file(&archive_name, options)
+            .with_context(|| format!("failed to start archive file {archive_name}"))?;
+        serde_json::to_writer_pretty(&mut zip, &settings)
+            .context("failed to write sanitized backup settings")?;
+    }
 
     zip.finish()
         .context("failed to finish backup payload archive")?;
@@ -1516,13 +1527,17 @@ mod tests {
     }
 
     #[test]
-    fn payload_zip_contains_only_backup_whitelist() {
+    fn payload_zip_contains_only_backup_whitelist_and_omits_webdav_password() {
         let temp = tempdir().unwrap();
         let root = temp.path();
         let resources = root.join("resources");
         fs::create_dir_all(resources.join("clipboard-images/origin")).unwrap();
         fs::write(root.join("clipboard.db"), b"db").unwrap();
-        fs::write(root.join("settings.json"), b"{}").unwrap();
+        fs::write(
+            root.join("settings.json"),
+            br#"{"webdav":{"username":"me","password":"remote-secret"}}"#,
+        )
+        .unwrap();
         fs::write(root.join("window-state.json"), b"skip").unwrap();
         fs::write(root.join("settings.json.bak"), b"skip").unwrap();
         fs::write(resources.join("clipboard-images/origin/demo.png"), b"image").unwrap();
@@ -1568,6 +1583,14 @@ mod tests {
                 "resources/clipboard-images/origin/demo.png",
             ]
         );
+
+        let mut settings_entry = archive.by_name("config/settings.json").unwrap();
+        let mut settings_json = String::new();
+        settings_entry.read_to_string(&mut settings_json).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(&settings_json).unwrap();
+
+        assert_eq!(settings.pointer("/webdav/username").unwrap(), "me");
+        assert!(settings.pointer("/webdav/password").is_none());
     }
 
     #[tokio::test]
