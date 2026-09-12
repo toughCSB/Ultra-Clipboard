@@ -64,8 +64,17 @@ export const useAppTheme = (mode: SettingsTheme): ThemeConfig => {
   const algorithm =
     resolvedTheme === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const antdTheme = useMemo(() => {
-    return { algorithm };
-  }, [algorithm]);
+    return {
+      algorithm,
+      token: {
+        borderRadius: 10,
+        colorBgContainer: resolvedTheme === "dark" ? "#1a1b1e" : "#ffffff",
+        colorPrimary: "#0f766e",
+        fontFamily:
+          'Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif',
+      },
+    };
+  }, [algorithm, resolvedTheme]);
 
   /**
    * 接收 Tauri 系统主题变化事件，驱动 `auto` 模式的实际主题。
