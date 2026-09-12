@@ -1,5 +1,24 @@
 # 更新日志
 
+## [1.1.1-rc.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.0...v1.1.1-rc.1) (2026-09-12)
+
+### 新功能
+
+- 将独立 fork 重新命名为 Ultra Clipboard，并使用独立的应用标识和新图标。
+- 新增韩语界面并设为默认语言。
+- 新增手动 WebDAV 备份上传与恢复。
+- 在文件类型的剪贴板卡片中显示完整路径。
+- 默认保留一个月，收藏和置顶项目不参与自动清理。
+- 在 Windows 上使用可靠的原生复制提示音。
+- 使用按内容类型区分的强调色改进剪贴板和偏好设置界面。
+
+### 发布说明
+
+- 这是未签名的候选版本，Windows SmartScreen 和 macOS Gatekeeper 可能显示警告。
+- 本版本关闭自动更新；后续版本请从 GitHub Releases 下载。
+- CI 会构建 macOS Intel 与 Apple Silicon 安装包，但 macOS runtime QA 尚未完成。
+- 为兼容 EcoPaste 备份，继续支持 `.ecopastebak` 格式。
+
 ## [1.1.0](https://github.com/EcoPasteHub/EcoPaste/compare/v1.0.0...v1.1.0) (2026-07-22)
 
 ### ✨ 新功能

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.1-rc.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.0...v1.1.1-rc.1) (2026-09-12)
+
+### Features
+
+- Rebrand the independent fork as Ultra Clipboard with a separate application identity and new icon.
+- Add Korean as the default interface language.
+- Add manual WebDAV backup upload and restore.
+- Show full file paths in file clipboard cards.
+- Use a one-month default retention period while preserving favorites and pinned items.
+- Add reliable native copy-sound feedback on Windows.
+- Refresh clipboard and preference layouts with content-aware accents.
+
+### Release Notes
+
+- This is an unsigned release candidate. Windows SmartScreen and macOS Gatekeeper may display warnings.
+- Automatic updates are disabled for this release; download future versions from GitHub Releases.
+- macOS Intel and Apple Silicon packages are built in CI, but macOS runtime QA is still pending.
+- `.ecopastebak` remains supported for EcoPaste backup compatibility.
+
 ## [1.1.0](https://github.com/EcoPasteHub/EcoPaste/compare/v1.0.0...v1.1.0) (2026-07-22)
 
 ### ✨ Features

@@ -1,8 +1,6 @@
 name: Nightly Release CI
 
 "on":
-  schedule:
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -109,8 +107,8 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -225,7 +223,7 @@ jobs:
 
           const cargoLockPath = "src-tauri/Cargo.lock";
           const cargoLock = fs.readFileSync(cargoLockPath, "utf8").replace(
-            /(name = "EcoPaste"\nversion = ")[^"]+(")/,
+            /(name = "UltraClipboard"\nversion = ")[^"]+(")/,
             `$1${version}$2`,
           );
           fs.writeFileSync(cargoLockPath, cargoLock);
@@ -245,10 +243,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           CI: false
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           PLATFORM: ${{ matrix.os }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}
           prerelease: true
