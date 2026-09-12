@@ -3,6 +3,7 @@ import { useEventListener, useMount } from "ahooks";
 import type { ConfigProviderProps } from "antd";
 import { App as AntdApp, ConfigProvider } from "antd";
 import enUS from "antd/locale/en_US";
+import koKR from "antd/locale/ko_KR";
 import zhCN from "antd/locale/zh_CN";
 import type { FC } from "react";
 import { use, useEffect } from "react";
@@ -28,6 +29,7 @@ const ANTD_MODAL_CONFIG = {
  */
 const resolveAntdLocale = (language: Language) => {
   if (language === "en-US") return enUS;
+  if (language === "ko-KR") return koKR;
 
   return zhCN;
 };
