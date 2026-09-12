@@ -1,6 +1,6 @@
-//! EcoPaste 历史备份包导出与接收壳识别。
+//! Ultra Clipboard 历史备份包导出与接收壳识别。
 //!
-//! `.ecopastebak` 有两种格式：明文模式是标准 ZIP；加密模式是 EcoPaste 自有容器。
+//! `.ecopastebak` 有两种格式：明文模式是标准 ZIP；加密模式是兼容 EcoPaste 的自有容器。
 
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
@@ -392,7 +392,7 @@ pub fn backup_path_from_args(args: &[String]) -> Option<PathBuf> {
         .find(|path| is_backup_path(path))
 }
 
-/// 判断路径是否看起来是 EcoPaste 备份包。
+/// 判断路径是否看起来是 Ultra Clipboard 兼容备份包。
 pub fn is_backup_path(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
@@ -830,7 +830,7 @@ fn read_backup_payload(path: &Path, password: Option<&str>) -> Result<Vec<u8>> {
         return Ok(bytes);
     }
     if !bytes.starts_with(MAGIC) {
-        return app_error("不是有效的 EcoPaste 备份文件");
+        return app_error("不是有效的 Ultra Clipboard 备份文件");
     }
 
     let mut cursor = Cursor::new(bytes.as_slice());
@@ -928,7 +928,7 @@ fn inspect_backup_reader<R: Read>(reader: &mut R) -> Result<BackupContainerMode>
         return Ok(BackupContainerMode::Plain);
     }
 
-    app_error("不是有效的 EcoPaste 备份文件")
+    app_error("不是有效的 Ultra Clipboard 备份文件")
 }
 
 fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<ContainerHeader> {
@@ -1531,7 +1531,7 @@ mod tests {
         let target = root.join("backup.ecopastebak");
         let manifest = BackupManifest {
             format_version: FORMAT_VERSION,
-            app_name: "EcoPaste".to_owned(),
+            app_name: "Ultra Clipboard".to_owned(),
             app_version: "0.0.0".to_owned(),
             exported_at: Utc::now(),
             platform: "macos".to_owned(),
