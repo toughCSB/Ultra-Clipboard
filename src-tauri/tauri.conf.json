@@ -24,7 +24,7 @@
         "minHeight": 600,
         "minWidth": 360,
         "skipTaskbar": true,
-        "title": "EcoPaste",
+        "title": "Ultra Clipboard",
         "transparent": true,
         "url": "index.html/#/",
         "visible": false,
@@ -33,25 +33,25 @@
     ]
   },
   "build": {
-    "beforeBuildCommand": "pnpm build",
-    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "npx pnpm@10.33.1 build",
+    "beforeDevCommand": "npx pnpm@10.33.1 dev",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
-    "copyright": "Copyright 2026 ayangweb",
-    "createUpdaterArtifacts": true,
+    "copyright": "Copyright 2026 toughCSB and ayangweb",
+    "createUpdaterArtifacts": false,
     "fileAssociations": [
       {
-        "description": "EcoPaste history backup",
+        "description": "Ultra Clipboard history backup",
         "exportedType": {
           "conformsTo": ["public.data"],
-          "identifier": "com.ayangweb.eco-paste.backup"
+          "identifier": "com.toughcsb.ultraclipboard.backup"
         },
         "ext": ["ecopastebak"],
-        "mimeType": "application/vnd.ecopaste.backup",
-        "name": "EcoPaste Backup",
+        "mimeType": "application/vnd.ultraclipboard.backup",
+        "name": "Ultra Clipboard Backup",
         "role": "Editor"
       }
     ],
@@ -65,20 +65,10 @@
     "license": "Apache-2.0",
     "licenseFile": "../LICENSE",
     "resources": ["assets/tray.ico"],
-    "shortDescription": "EcoPaste",
+    "shortDescription": "Ultra Clipboard",
     "targets": ["nsis", "dmg", "app"]
   },
-  "identifier": "com.ayangweb.eco-paste",
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": ["https://releases.ecopaste.cn/update?channel=stable"],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIwMzUzRkJCQUI3NjY4RgpSV1NQWnJlNisxTURBbFE2WWJpUlBJR0x0OXJOclVuUGlVYVhoNjJPZitYN0Q4V05GeW1aU2w0Zwo=",
-      "windows": {
-        "installMode": "passive"
-      }
-    }
-  },
-  "productName": "EcoPaste",
+  "identifier": "com.toughcsb.ultraclipboard",
+  "productName": "Ultra Clipboard",
   "version": "../package.json"
 }

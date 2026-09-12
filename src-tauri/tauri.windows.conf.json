@@ -5,9 +5,9 @@
       "nsis": {
         "displayLanguageSelector": true,
         "installMode": "both",
-        "languages": ["English", "SimpChinese"]
+        "languages": ["English", "Korean", "SimpChinese"]
       }
     }
   },
-  "identifier": "com.ayangweb.eco-paste"
+  "identifier": "com.toughcsb.ultraclipboard"
 }
