@@ -9,7 +9,7 @@ const Clipboard = () => {
 
   return (
     <div
-      className="flex size-screen flex-col overflow-hidden bg-ant-container"
+      className="flex h-screen w-full flex-col overflow-hidden rounded-3 bg-slate-100 dark:bg-neutral-900"
       data-tauri-drag-region
     >
       <Header />

@@ -168,6 +168,7 @@ const List: FC = () => {
     setSelectedId(null);
     if (keywordRef.current !== keyword) keywordRef.current = keyword;
     deferredReloadRef.current = false;
+    isAtTopRef.current = true;
     closePreview("filterChange");
   }, [snapshot]);
 
@@ -753,7 +754,7 @@ const List: FC = () => {
    * 自动刷新请求只在顶部执行；离开顶部时保留 pending，等待回顶后消费。
    */
   function requestReloadAtTop() {
-    if (!isAtTopRef.current) {
+    if (!isAtTopRef.current && total > 0) {
       deferredReloadRef.current = true;
       return;
     }
@@ -773,39 +774,41 @@ const List: FC = () => {
 
   if (loading && !loadedInitial) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex min-h-0 flex-1 items-center justify-center">
         <Spin />
       </div>
     );
   }
 
-  if (loadedInitial && total === 0) {
-    const description = getEmptyDescription(
-      t,
-      keyword,
-      range,
-      category,
-      groupId,
-      currentGroupName,
-    );
-
-    return (
-      <div
-        className="flex flex-1 flex-col items-center justify-center"
-        data-tauri-drag-region
-      >
-        <Empty description={description} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      </div>
-    );
-  }
+  const showEmpty = loadedInitial && total === 0 && !loading;
+  const emptyDescription = getEmptyDescription(
+    t,
+    keyword,
+    range,
+    category,
+    groupId,
+    currentGroupName,
+  );
 
   return (
     <div
-      className="relative flex-1 overflow-hidden"
+      className="relative min-h-0 flex-1 overflow-hidden bg-slate-100 dark:bg-neutral-900"
       onPointerLeave={handlePreviewAreaPointerLeave}
       role="listbox"
     >
-      <VirtuosoScroller>{renderVirtuoso}</VirtuosoScroller>
+      {showEmpty ? (
+        <div
+          className="flex h-full flex-col items-center justify-center"
+          data-tauri-drag-region
+        >
+          <Empty
+            description={emptyDescription}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </div>
+      ) : (
+        <VirtuosoScroller>{renderVirtuoso}</VirtuosoScroller>
+      )}
 
       <NoteModal
         item={noteTarget}

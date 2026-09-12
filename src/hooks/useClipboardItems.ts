@@ -178,9 +178,6 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
     const token = requestTokenRef.current + 1;
     requestTokenRef.current = token;
     resetLoadingRanges();
-    commitItems(new Map());
-    commitTotal(0);
-    commitLoadedInitial(false);
     setLoading(true);
     viewRangeRef.current = {
       end: PAGE_SIZE - 1,
@@ -192,13 +189,7 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
       replace: true,
       token,
     });
-  }, [
-    commitItems,
-    commitLoadedInitial,
-    commitTotal,
-    fetchRange,
-    resetLoadingRanges,
-  ]);
+  }, [fetchRange, resetLoadingRanges]);
 
   const reloadCurrentRange = useCallback(() => {
     const token = requestTokenRef.current + 1;
