@@ -12,7 +12,6 @@ use tauri::tray::TrayIconBuilder;
 #[cfg(target_os = "windows")]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_opener::OpenerExt;
 
 use crate::clipboard::WatcherPause;
 use crate::core::Result;
@@ -24,12 +23,9 @@ use crate::window::CLIPBOARD_WINDOW_LABEL;
 use crate::window::{self, PREFERENCE_WINDOW_LABEL};
 
 const TRAY_ID: &str = "app-tray";
-const GITHUB_URL: &str = "https://github.com/EcoPasteHub/EcoPaste";
 
 const MENU_PREFERENCE: &str = "tray::preference";
 const MENU_TOGGLE_LISTEN: &str = "tray::toggle_listen";
-const MENU_OPEN_SOURCE: &str = "tray::open_source";
-const MENU_CHECK_FOR_UPDATES: &str = "tray::check_for_updates";
 const MENU_RELAUNCH: &str = "tray::relaunch";
 const MENU_EXIT: &str = "tray::exit";
 
@@ -48,7 +44,7 @@ pub fn init(app: &AppHandle, settings: &Settings) -> Result<()> {
         .icon(icon)
         .icon_as_template(cfg!(target_os = "macos"))
         .show_menu_on_left_click(cfg!(target_os = "macos"))
-        .tooltip(format!("EcoPaste v{version}"))
+        .tooltip(format!("Ultra Clipboard v{version}"))
         .menu(&menu)
         .on_menu_event(|app, event| handle_menu_event(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
@@ -157,22 +153,6 @@ fn build_menu(
         None::<&str>,
     )
     .context("build toggle_listen menu item")?;
-    let open_source = MenuItem::with_id(
-        app,
-        MENU_OPEN_SOURCE,
-        tray_i18n::label(lang, Key::OpenSourceAddress),
-        true,
-        None::<&str>,
-    )
-    .context("build open_source menu item")?;
-    let check_for_updates = MenuItem::with_id(
-        app,
-        MENU_CHECK_FOR_UPDATES,
-        tray_i18n::label(lang, Key::CheckForUpdates),
-        true,
-        None::<&str>,
-    )
-    .context("build check_for_updates menu item")?;
     let version_item = MenuItem::with_id(
         app,
         "tray::version",
@@ -198,16 +178,12 @@ fn build_menu(
     )
     .context("build exit menu item")?;
     let sep1 = PredefinedMenuItem::separator(app).context("build separator")?;
-    let sep2 = PredefinedMenuItem::separator(app).context("build separator")?;
 
     MenuBuilder::new(app)
         .items(&[
             &preference,
             &toggle_listen,
             &sep1,
-            &open_source,
-            &check_for_updates,
-            &sep2,
             &version_item,
             &relaunch,
             &exit,
@@ -232,16 +208,6 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
                 if let Err(err) = rebuild_menu(app) {
                     log::warn!("rebuild tray menu after toggle failed: {err}");
                 }
-            }
-        }
-        MENU_OPEN_SOURCE => {
-            if let Err(err) = app.opener().open_url(GITHUB_URL, None::<&str>) {
-                log::error!("tray open url failed: {err:?}");
-            }
-        }
-        MENU_CHECK_FOR_UPDATES => {
-            if let Err(err) = window::show_window(app, window::UPDATE_WINDOW_LABEL) {
-                log::error!("tray open update window failed: {err:?}");
             }
         }
         MENU_RELAUNCH => app.restart(),
