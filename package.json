@@ -1,17 +1,17 @@
 {
-  "name": "eco-paste",
+  "name": "ultra-clipboard",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1-rc.1",
   "description": "A local-first clipboard manager for macOS and Windows.",
-  "author": "ayangweb",
+  "author": "toughCSB",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/EcoPasteHub/EcoPaste#readme",
+  "homepage": "https://github.com/toughCSB/Ultra-Clipboard#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/EcoPasteHub/EcoPaste.git"
+    "url": "https://github.com/toughCSB/Ultra-Clipboard"
   },
   "bugs": {
-    "url": "https://github.com/EcoPasteHub/EcoPaste/issues"
+    "url": "https://github.com/toughCSB/Ultra-Clipboard/issues"
   },
   "type": "module",
   "packageManager": "pnpm@10.33.1",

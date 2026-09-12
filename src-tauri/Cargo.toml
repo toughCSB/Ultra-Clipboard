@@ -1,11 +1,11 @@
 [package]
-name = "EcoPaste"
-version = "1.1.0"
+name = "UltraClipboard"
+version = "1.1.1-rc.1"
 description = "A local-first clipboard manager for macOS and Windows."
-authors = ["ayangweb"]
+authors = ["toughCSB", "ayangweb"]
 license = "Apache-2.0"
-homepage = "https://github.com/EcoPasteHub/EcoPaste"
-repository = "https://github.com/EcoPasteHub/EcoPaste"
+homepage = "https://github.com/toughCSB/Ultra-Clipboard"
+repository = "https://github.com/toughCSB/Ultra-Clipboard"
 readme = "../README.md"
 publish = false
 edition = "2021"
@@ -16,7 +16,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "eco_paste_lib"
+name = "ultra_clipboard_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -58,6 +58,7 @@ chacha20poly1305 = { version = "0.10", features = ["std"] }
 rand = "0.8"
 zeroize = "1"
 url = "2"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.25"
@@ -89,6 +90,7 @@ windows = { version = "0.52", features = [
     "Win32_System_DataExchange",
     "Win32_System_SystemServices",
     "Win32_System_Threading",
+    "Win32_Media_Audio",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
 ] }
