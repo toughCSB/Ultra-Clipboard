@@ -6,6 +6,7 @@ pub mod clipboard_menu;
 pub mod commands;
 mod en_us;
 mod keys;
+mod ko_kr;
 pub mod tray;
 mod zh_cn;
 

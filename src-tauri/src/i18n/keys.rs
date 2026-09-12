@@ -32,8 +32,6 @@ pub enum TrayKey {
     Preference,
     StartListening,
     StopListening,
-    OpenSourceAddress,
-    CheckForUpdates,
     Version,
     Relaunch,
     Exit,
