@@ -53,6 +53,8 @@ export const TAURI_COMMAND = {
   PASTE_CLIPBOARD_ITEM: "paste_clipboard_item",
   PLAY_COPY_SOUND: "play_copy_sound",
   POPUP_CLIPBOARD_ITEM_MENU: "popup_clipboard_item_menu",
+  PULL_WEBDAV_BACKUP: "pull_webdav_backup",
+  PUSH_WEBDAV_BACKUP: "push_webdav_backup",
   RELEASE_WINDOW_KEEPALIVE: "release_window_keepalive",
   RESET_SETTINGS: "reset_settings",
   RESET_STORAGE_LOCATION: "reset_storage_location",

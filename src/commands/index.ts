@@ -740,6 +740,42 @@ export const importHistoryBackup = async (
   return result;
 };
 
+export interface WebDavSyncResult {
+  bytes: number;
+  remoteUrl: string;
+}
+
+export const pushWebdavBackup = async () => {
+  const result = await call<WebDavSyncResult>(
+    TAURI_COMMAND.PUSH_WEBDAV_BACKUP,
+    "commands:labels.pushWebdavBackup",
+  );
+
+  getMessageApi().success(
+    i18n.t("commands:messages.webdavPushed", {
+      size: formatCommandBytes(result.bytes),
+    }),
+  );
+
+  return result;
+};
+
+export const pullWebdavBackup = async () => {
+  const result = await call<ImportHistoryBackupResult>(
+    TAURI_COMMAND.PULL_WEBDAV_BACKUP,
+    "commands:labels.pullWebdavBackup",
+  );
+
+  getMessageApi().success(
+    i18n.t("commands:messages.webdavPulled", {
+      imported: result.importedItems,
+      skipped: result.skippedItems,
+    }),
+  );
+
+  return result;
+};
+
 /**
  * 命令层 toast 使用的轻量字节格式化，避免偏好页工具反向依赖命令入口。
  */

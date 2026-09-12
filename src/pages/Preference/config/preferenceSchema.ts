@@ -804,6 +804,90 @@ export const preferenceTabs: PreferenceTab[] = [
         ],
       },
       {
+        id: "webdav",
+        settings: [
+          {
+            control: { type: "switch" },
+            id: "webdav.enabled",
+            keywords: ["webdav", "sync", "cloud", "nextcloud"],
+            path: ["webdav", "enabled"],
+            value: (settings) => {
+              return settings.webdav.enabled;
+            },
+          },
+          {
+            control: { type: "text" },
+            disabledWhen: (settings) => {
+              return !settings.webdav.enabled;
+            },
+            id: "webdav.url",
+            keywords: ["webdav", "url", "server"],
+            parentId: "webdav.enabled",
+            path: ["webdav", "url"],
+            value: (settings) => {
+              return settings.webdav.url;
+            },
+          },
+          {
+            control: { type: "text" },
+            disabledWhen: (settings) => {
+              return !settings.webdav.enabled;
+            },
+            id: "webdav.username",
+            keywords: ["webdav", "user", "username"],
+            parentId: "webdav.enabled",
+            path: ["webdav", "username"],
+            value: (settings) => {
+              return settings.webdav.username;
+            },
+          },
+          {
+            control: { secret: true, type: "text" },
+            disabledWhen: (settings) => {
+              return !settings.webdav.enabled;
+            },
+            id: "webdav.password",
+            keywords: ["webdav", "password"],
+            parentId: "webdav.enabled",
+            path: ["webdav", "password"],
+            value: (settings) => {
+              return settings.webdav.password;
+            },
+          },
+          {
+            control: { type: "text" },
+            disabledWhen: (settings) => {
+              return !settings.webdav.enabled;
+            },
+            id: "webdav.fileName",
+            keywords: ["webdav", "file", "backup"],
+            parentId: "webdav.enabled",
+            path: ["webdav", "fileName"],
+            value: (settings) => {
+              return settings.webdav.fileName;
+            },
+          },
+          {
+            control: { type: "action" },
+            disabledWhen: (settings) => {
+              return !settings.webdav.enabled;
+            },
+            id: "webdav.push",
+            keywords: ["webdav", "upload", "push", "sync"],
+            parentId: "webdav.enabled",
+          },
+          {
+            control: { type: "action" },
+            disabledWhen: (settings) => {
+              return !settings.webdav.enabled;
+            },
+            id: "webdav.pull",
+            keywords: ["webdav", "download", "pull", "sync"],
+            parentId: "webdav.enabled",
+          },
+        ],
+      },
+      {
         id: "diagnostics",
         settings: [
           {
@@ -815,84 +899,6 @@ export const preferenceTabs: PreferenceTab[] = [
             control: { danger: true, type: "action" },
             id: "diagnostics.resetPreferences",
             keywords: ["reset", "preferences"],
-          },
-        ],
-      },
-      {
-        id: "updates",
-        settings: [
-          {
-            control: { type: "switch" },
-            id: "updates.autoCheck",
-            keywords: ["update", "version"],
-            path: ["update", "autoCheck"],
-            value: (settings) => {
-              return settings.update.autoCheck;
-            },
-          },
-          {
-            control: {
-              options: [
-                { value: "daily" },
-                { value: "weekly" },
-                { value: "monthly" },
-              ],
-              type: "segmented",
-            },
-            disabledWhen: (settings) => {
-              return !settings.update.autoCheck;
-            },
-            id: "updates.frequency",
-            keywords: ["update", "frequency", "schedule"],
-            parentId: "updates.autoCheck",
-            path: ["update", "frequency"],
-            value: (settings) => {
-              return settings.update.frequency;
-            },
-          },
-          {
-            control: { type: "switch" },
-            id: "updates.beta",
-            keywords: ["beta", "update"],
-            path: ["update", "includeBeta"],
-            value: (settings) => {
-              return settings.update.includeBeta;
-            },
-          },
-          {
-            control: { type: "switch" },
-            id: "updates.nightly",
-            keywords: ["nightly", "update"],
-            path: ["update", "includeNightly"],
-            value: (settings) => {
-              return settings.update.includeNightly;
-            },
-          },
-        ],
-      },
-    ],
-  },
-  {
-    icon: "i-lucide:info",
-    id: "about",
-    sections: [
-      {
-        id: "about",
-        settings: [
-          {
-            control: { type: "action" },
-            id: "about.checkUpdates",
-            keywords: ["update", "version"],
-          },
-          {
-            control: { type: "action" },
-            id: "about.github",
-            keywords: ["github", "source", "repository"],
-          },
-          {
-            control: { type: "sponsorQr" },
-            id: "about.sponsor",
-            keywords: ["sponsor", "donate", "support"],
           },
         ],
       },
