@@ -35,6 +35,7 @@ import type {
 } from "@/types/clipboard";
 import { cn } from "@/utils/cn";
 import { getModalApi } from "@/utils/feedback";
+import { resolveFilterSelectedClass } from "../itemTone";
 
 type GroupModalMode = "create" | "edit";
 type MoreMenuAction = "manageGroups" | "newGroup";
@@ -200,12 +201,14 @@ const Group: FC = () => {
    */
   const selectRange = (value: ClipboardRange) => {
     clipboardViewState.range = value;
+    clipboardViewState.category = null;
   };
 
   /**
-   * 切换分类；再次点击当前分类时取消。
+   * 종류 탭은 즐겨찾기와 별개다. 켜면 해당 종류 전체를 보고, 같은 탭을 다시 누르면 해제한다.
    */
   const toggleCategory = (value: ClipboardCategory) => {
+    clipboardViewState.range = "all";
     clipboardViewState.category =
       clipboardViewState.category === value ? null : value;
   };
@@ -318,6 +321,7 @@ const Group: FC = () => {
       options.length;
     const normalizedIndex = (nextIndex + options.length) % options.length;
 
+    clipboardViewState.range = "all";
     clipboardViewState.category = options[normalizedIndex];
   };
 
@@ -604,10 +608,12 @@ const Group: FC = () => {
     return (
       <Tooltip key={`${type}:${value}`} title={label}>
         <button
-          className={cn(GROUP_ICON_BUTTON_CLASS, {
-            "bg-ant-primary text-ant-light-solid": selected,
-            "text-ant-secondary hover:bg-ant-fill-tertiary": !selected,
-          })}
+          className={cn(
+            GROUP_ICON_BUTTON_CLASS,
+            selected
+              ? resolveFilterSelectedClass(value)
+              : "text-ant-secondary hover:bg-ant-fill-tertiary",
+          )}
           data-type={type}
           data-value={value}
           onClick={handleGroupClick}
@@ -628,7 +634,7 @@ const Group: FC = () => {
   return (
     <>
       <div
-        className="flex items-center gap-1 overflow-hidden px-3 pb-2"
+        className="flex items-center gap-1 overflow-hidden bg-slate-100 px-3 pb-2 dark:bg-neutral-900"
         data-tauri-drag-region
         ref={toolbarRef}
       >

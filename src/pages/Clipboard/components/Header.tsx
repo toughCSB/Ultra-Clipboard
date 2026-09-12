@@ -180,7 +180,7 @@ const Header: FC = () => {
 
   return (
     <div
-      className="flex items-center justify-between p-3 pb-2"
+      className="flex items-center justify-between border-teal-400 border-b-2 bg-teal-50 p-3 pb-2 dark:border-teal-500 dark:bg-teal-950/40"
       data-tauri-drag-region
     >
       <img alt={t("header.logoAlt")} className="size-5" src="/logo.png" />
