@@ -19,13 +19,14 @@ pub struct Settings {
     pub clipboard: Clipboard,
     pub onboarding: Onboarding,
     pub update: Update,
+    pub webdav: WebDav,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct General {
     pub auto_start: bool,
-    /// Windows: persist the user's intent to run EcoPaste with administrator privileges.
+    /// Windows: persist the user's intent to run Ultra Clipboard with administrator privileges.
     pub run_as_admin: bool,
     /// macOS 菜单栏 / Windows 系统托盘图标。
     pub tray_icon: bool,
@@ -81,7 +82,7 @@ impl Default for Appearance {
     fn default() -> Self {
         Self {
             theme: Theme::Auto,
-            language: Language::ZhCN,
+            language: Language::KoKR,
         }
     }
 }
@@ -98,6 +99,8 @@ pub enum Theme {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Language {
     #[default]
+    #[serde(rename = "ko-KR")]
+    KoKR,
     #[serde(rename = "zh-CN")]
     ZhCN,
     #[serde(rename = "en-US")]
@@ -105,11 +108,13 @@ pub enum Language {
 }
 
 impl Language {
-    /// 把系统 locale（如 `zh_CN.UTF-8` / `en-US` / `ja-JP`）映射到支持的语言；
-    /// 任何 zh-* 都归到 zh-CN，其余一律 en-US。
+    /// 시스템 locale을 지원 언어로 매핑한다.
+    /// ko-* → ko-KR, zh-* → zh-CN, 그 외 → en-US.
     pub fn from_system_locale(tag: &str) -> Self {
         let lower = tag.to_ascii_lowercase();
-        if lower.starts_with("zh") {
+        if lower.starts_with("ko") {
+            Self::KoKR
+        } else if lower.starts_with("zh") {
             Self::ZhCN
         } else {
             Self::EnUS
@@ -179,7 +184,7 @@ impl Default for Capture {
             image: true,
             files: true,
             max_text_mb: 4,
-            max_image_mb: 100,
+            max_image_mb: 20,
             order: CaptureKind::default_order(),
         }
     }
@@ -502,7 +507,7 @@ pub enum PreviewHoverDelayMs {
     Ms1000,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct History {
     pub retention: Retention,
@@ -510,6 +515,19 @@ pub struct History {
     pub max_count: u32,
     /// 自动清理周期（小时）。`0` = 关闭周期清理，但启动时仍清理一次。
     pub cleanup_interval_hours: u32,
+}
+
+impl Default for History {
+    fn default() -> Self {
+        Self {
+            retention: Retention {
+                value: 1,
+                unit: RetentionUnit::Months,
+            },
+            max_count: 0,
+            cleanup_interval_hours: 24,
+        }
+    }
 }
 
 /// 历史保留时长。`unit = Forever` 时忽略 `value`。
@@ -623,6 +641,28 @@ pub enum WindowPosition {
 #[serde(default, rename_all = "camelCase")]
 pub struct Feedback {
     pub copy_sound: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct WebDav {
+    pub enabled: bool,
+    pub url: String,
+    pub username: String,
+    pub password: String,
+    pub file_name: String,
+}
+
+impl Default for WebDav {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: String::new(),
+            username: String::new(),
+            password: String::new(),
+            file_name: "clipboard.ecopastebak".to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

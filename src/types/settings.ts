@@ -18,7 +18,7 @@ import type {
 export type Theme = "auto" | "light" | "dark";
 
 /** Rust enum `Language`（手动 `serde(rename)`）。 */
-export type Language = "zh-CN" | "en-US";
+export type Language = "ko-KR" | "zh-CN" | "en-US";
 
 export type AutoPaste =
   | "disabled"
@@ -205,6 +205,14 @@ export interface Update {
   skippedVersion: string | null;
 }
 
+export interface WebDav {
+  enabled: boolean;
+  url: string;
+  username: string;
+  password: string;
+  fileName: string;
+}
+
 export interface Settings {
   general: General;
   appearance: Appearance;
@@ -212,6 +220,7 @@ export interface Settings {
   clipboard: Clipboard;
   onboarding: Onboarding;
   update: Update;
+  webdav: WebDav;
 }
 
 /**

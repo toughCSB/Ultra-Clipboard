@@ -332,7 +332,12 @@ mod tests {
         assert!(!parsed.clipboard.content.delete_pinned_items);
         assert!(parsed.clipboard.content.delete_pinned_confirm);
         assert!(!parsed.clipboard.content.update_on_reuse);
-        assert_eq!(parsed.clipboard.history.cleanup_interval_hours, 0);
+        assert_eq!(parsed.clipboard.history.cleanup_interval_hours, 24);
+        assert_eq!(parsed.clipboard.history.retention.value, 1);
+        assert_eq!(
+            parsed.clipboard.history.retention.unit,
+            crate::settings::RetentionUnit::Months
+        );
         assert!(parsed.clipboard.window.scroll_to_top_on_open);
         assert_eq!(
             parsed.clipboard.window.select_range_on_open,
