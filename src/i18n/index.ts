@@ -7,6 +7,13 @@ import onboardingEnUS from "@/locales/en-US/onboarding.json";
 import preferencesEnUS from "@/locales/en-US/preferences.json";
 import previewEnUS from "@/locales/en-US/preview.json";
 import updateEnUS from "@/locales/en-US/update.json";
+import clipboardKoKR from "@/locales/ko-KR/clipboard.json";
+import commandsKoKR from "@/locales/ko-KR/commands.json";
+import commonKoKR from "@/locales/ko-KR/common.json";
+import onboardingKoKR from "@/locales/ko-KR/onboarding.json";
+import preferencesKoKR from "@/locales/ko-KR/preferences.json";
+import previewKoKR from "@/locales/ko-KR/preview.json";
+import updateKoKR from "@/locales/ko-KR/update.json";
 import clipboardZhCN from "@/locales/zh-CN/clipboard.json";
 import commandsZhCN from "@/locales/zh-CN/commands.json";
 import commonZhCN from "@/locales/zh-CN/common.json";
@@ -16,7 +23,7 @@ import previewZhCN from "@/locales/zh-CN/preview.json";
 import updateZhCN from "@/locales/zh-CN/update.json";
 import type { Language } from "@/types/settings";
 
-export const DEFAULT_LANGUAGE: Language = "zh-CN";
+export const DEFAULT_LANGUAGE: Language = "ko-KR";
 export const I18N_NAMESPACES = [
   "common",
   "commands",
@@ -47,6 +54,15 @@ void i18n.use(initReactI18next).init({
       preferences: preferencesEnUS,
       preview: previewEnUS,
       update: updateEnUS,
+    },
+    "ko-KR": {
+      clipboard: clipboardKoKR,
+      commands: commandsKoKR,
+      common: commonKoKR,
+      onboarding: onboardingKoKR,
+      preferences: preferencesKoKR,
+      preview: previewKoKR,
+      update: updateKoKR,
     },
     "zh-CN": {
       clipboard: clipboardZhCN,

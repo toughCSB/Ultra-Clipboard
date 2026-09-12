@@ -1,0 +1,24 @@
+{
+  "actions": {
+    "add": "추가",
+    "cancel": "취소",
+    "clear": "지우기",
+    "delete": "삭제",
+    "open": "열기",
+    "reset": "초기화",
+    "save": "저장"
+  },
+  "app": {
+    "tagline": "크로스플랫폼 클립보드 관리자"
+  },
+  "shortcutRecorder": {
+    "clear": "단축키 지우기",
+    "click": "클릭해서 기록",
+    "conflict": "{{shortcut}}은(는) 이미 \"{{label}}\"에서 사용 중입니다",
+    "press": "단축키를 누르세요"
+  },
+  "units": {
+    "items": "{{count}}개 항목",
+    "settings": "{{count}}개 설정"
+  }
+}
