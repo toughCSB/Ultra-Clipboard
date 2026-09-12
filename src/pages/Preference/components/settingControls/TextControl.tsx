@@ -42,8 +42,10 @@ const TextControl: FC<TextControlProps> = (props) => {
     await commit();
   };
 
+  const Field = control.secret ? Input.Password : Input;
+
   return (
-    <Input
+    <Field
       disabled={disabled}
       onBlur={handleBlur}
       onChange={handleChange}

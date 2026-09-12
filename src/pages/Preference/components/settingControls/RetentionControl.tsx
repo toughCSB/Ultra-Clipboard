@@ -10,7 +10,7 @@ import type {
 } from "../../types/preferences";
 import type { ControlProps } from "./types";
 
-const DEFAULT_RETENTION_UNIT: RetentionUnit = "days";
+const DEFAULT_RETENTION_UNIT: RetentionUnit = "months";
 
 interface RetentionControlProps extends ControlProps {
   setting: PreferenceSetting;
@@ -37,7 +37,7 @@ export function resolveRetentionValue(
 }
 
 /**
- * 历史保留周期控件：单位固定为天，0 表示不按时间清理。
+ * 历史保留周期控件：单位固定为月，0 表示不按时间清理。
  */
 const RetentionControl: FC<RetentionControlProps> = (props) => {
   const { t } = useTranslation("preferences");
@@ -81,7 +81,7 @@ const RetentionControl: FC<RetentionControlProps> = (props) => {
         onPressEnter={handlePressEnter}
         value={draftValue}
       />
-      <Space.Addon>{t("schema.retentionUnits.days")}</Space.Addon>
+      <Space.Addon>{t("schema.retentionUnits.months")}</Space.Addon>
     </Space.Compact>
   );
 };

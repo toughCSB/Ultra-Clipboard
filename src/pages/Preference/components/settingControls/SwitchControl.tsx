@@ -1,9 +1,9 @@
 import { Divider, Space, Switch } from "antd";
 import type { FC } from "react";
 import { useTranslation } from "react-i18next";
-import { playCopySound } from "@/commands";
 import Tooltip from "@/components/Tooltip";
 import { cn } from "@/utils/cn";
+import { playCopySoundFx } from "@/utils/copySound";
 import type { PreferenceSetting } from "../../types/preferences";
 import ControlFrame from "./ControlFrame";
 import type { ControlProps } from "./types";
@@ -27,8 +27,8 @@ const SwitchControl: FC<SwitchControlProps> = (props) => {
     await onChange(setting, checked);
   };
 
-  const handlePreviewSound = async () => {
-    await playCopySound();
+  const handlePreviewSound = () => {
+    void playCopySoundFx();
   };
 
   return (
