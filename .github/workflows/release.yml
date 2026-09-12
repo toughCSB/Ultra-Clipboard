@@ -36,7 +36,7 @@ jobs:
         id: release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           INPUT_TAG_NAME: ${{ inputs.tag_name }}
         run: |
           set -euo pipefail
@@ -69,6 +69,14 @@ jobs:
           fi
 
           version="${tag_name#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          cargo_version="$(awk -F'\"' '/^version = / { print $2; exit }' src-tauri/Cargo.toml)"
+
+          if [[ "${package_version}" != "${version}" || "${cargo_version}" != "${version}" ]]; then
+            echo "::error::Tag ${tag_name}, package.json ${package_version}, and Cargo.toml ${cargo_version} must match."
+            exit 1
+          fi
+
           extract_changelog_section() {
             local file="$1"
             local output="$2"
@@ -260,10 +268,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           CI: false
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           PLATFORM: ${{ matrix.os }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}
           prerelease: ${{ needs.release-metadata.outputs.prerelease }}

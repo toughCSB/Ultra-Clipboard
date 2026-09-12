@@ -10,12 +10,9 @@ use crate::core::{AppError, Result};
 use crate::settings::{SettingsStore, Update as UpdateSettings, UpdateFrequency};
 
 const UPDATE_PROGRESS_EVENT: &str = "update://progress";
-const STABLE_ENDPOINT_ENV: &str = "ECOPASTE_UPDATE_ENDPOINT";
-const BETA_ENDPOINT_ENV: &str = "ECOPASTE_UPDATE_BETA_ENDPOINT";
-const NIGHTLY_ENDPOINT_ENV: &str = "ECOPASTE_UPDATE_NIGHTLY_ENDPOINT";
-const DEFAULT_STABLE_ENDPOINT: &str = "https://releases.ecopaste.cn/update?channel=stable";
-const DEFAULT_BETA_ENDPOINT: &str = "https://releases.ecopaste.cn/update?channel=beta";
-const DEFAULT_NIGHTLY_ENDPOINT: &str = "https://releases.ecopaste.cn/update?channel=nightly";
+const STABLE_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_ENDPOINT";
+const BETA_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_BETA_ENDPOINT";
+const NIGHTLY_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_NIGHTLY_ENDPOINT";
 const AUTO_CHECK_INITIAL_DELAY_SECONDS: u64 = 8;
 const AUTO_CHECK_SETTINGS_REFRESH_SECONDS: u64 = 60 * 60;
 const AUTO_CHECK_FAILURE_RETRY_SECONDS: u64 = 60 * 60;
@@ -309,12 +306,9 @@ fn metadata_from_update(update: &TauriUpdate) -> UpdateMetadata {
 }
 
 fn update_endpoints(include_beta: bool, include_nightly: bool) -> Result<Vec<Url>> {
-    let stable_endpoint =
-        std::env::var(STABLE_ENDPOINT_ENV).unwrap_or_else(|_| DEFAULT_STABLE_ENDPOINT.to_owned());
-    let beta_endpoint =
-        std::env::var(BETA_ENDPOINT_ENV).unwrap_or_else(|_| DEFAULT_BETA_ENDPOINT.to_owned());
-    let nightly_endpoint =
-        std::env::var(NIGHTLY_ENDPOINT_ENV).unwrap_or_else(|_| DEFAULT_NIGHTLY_ENDPOINT.to_owned());
+    let stable_endpoint = std::env::var(STABLE_ENDPOINT_ENV).unwrap_or_default();
+    let beta_endpoint = std::env::var(BETA_ENDPOINT_ENV).unwrap_or_default();
+    let nightly_endpoint = std::env::var(NIGHTLY_ENDPOINT_ENV).unwrap_or_default();
 
     update_endpoints_from_values(
         include_beta,
@@ -345,6 +339,12 @@ fn update_endpoints_from_values(
 }
 
 fn parse_endpoint(endpoint: &str) -> Result<Url> {
+    if endpoint.trim().is_empty() {
+        return Err(AppError::Other(anyhow::anyhow!(
+            "update endpoint is not configured"
+        )));
+    }
+
     endpoint
         .parse::<Url>()
         .map_err(|err| AppError::Other(anyhow::anyhow!("update endpoint is invalid: {err}")))
@@ -517,5 +517,12 @@ mod tests {
                 "https://example.com/update?channel=stable",
             ]
         );
+    }
+
+    #[test]
+    fn update_endpoints_reject_an_unconfigured_stable_channel() {
+        let error = update_endpoints_from_values(false, false, "", "", "").unwrap_err();
+
+        assert!(error.to_string().contains("is not configured"));
     }
 }
