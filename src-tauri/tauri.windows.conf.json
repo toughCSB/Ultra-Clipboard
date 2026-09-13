@@ -5,7 +5,7 @@
       "nsis": {
         "displayLanguageSelector": true,
         "installMode": "both",
-        "languages": ["English", "Korean", "SimpChinese"]
+        "languages": ["English", "Korean"]
       }
     }
   },
