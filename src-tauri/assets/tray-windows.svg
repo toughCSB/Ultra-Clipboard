@@ -1,0 +1,10 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <title>Ultra Clipboard tray icon</title>
+  <path d="M16 0h32l16 16v32L48 64H16L0 48V16z" fill="#f00116" />
+  <path d="M17 6h30l11 11v30L47 58H17L6 47V17z" fill="#fff" />
+  <path d="M21 6h22l5 5v8H16v-8z" fill="#000" />
+  <path
+    d="M8 22h6v17c0 5 2 8 5 8s5-3 5-8V22h6v18c0 9-4 13-11 13S8 49 8 40zm50 4c-3-3-6-5-11-5-9 0-15 7-15 16s6 16 15 16c5 0 8-2 11-5l-5-4c-2 2-3 3-6 3-5 0-8-4-8-10s3-10 8-10c3 0 4 1 6 3z"
+    fill="#000"
+  />
+</svg>
