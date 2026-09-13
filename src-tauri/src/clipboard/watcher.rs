@@ -1,13 +1,3 @@
-//! OS 级剪贴板监听：把 [`clipboard_rs`] 的 watcher 接到「读取 → 去重入库 → emit」闭环。
-//!
-//! [`clipboard_rs`] 内部已实现 macOS（`NSPasteboard.changeCount` 轮询）/ Windows
-//! （`AddClipboardFormatListener` → `WM_CLIPBOARDUPDATE`）的平台监听，这里不重复造。
-//!
-//! 线程模型：`ClipboardWatcherContext::start_watch()` 是阻塞调用，故整个监听跑在独立
-//! `std::thread` 上。`ClipboardContext` 等平台句柄**在该线程内构造**，不跨线程移动，
-//! 从而绕开其 `Send` 约束；只有 `Send` 的数据（`AppHandle`、`item`）会被
-//! 投递进 Tauri 异步运行时做 sqlx 入库与事件 emit。
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,12 +21,8 @@ use crate::db::items::{upsert_item, UpsertResult};
 use crate::db::models::{ClipboardApp, ClipboardItem};
 use crate::settings::SettingsStore;
 
-/// 剪贴板更新事件名。前端监听此事件后增量刷新 / 重新拉取列表。
 pub const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
 
-/// macOS 轮询 `changeCount` 的间隔。上游 clipboard-rs 默认 500ms，对复制响应（尤其图片）
-/// 偏慢；我们 fork 出 `new_with_interval` 后调到 120ms，跟手且 CPU 开销可忽略。
-/// Windows 走事件驱动（`WM_CLIPBOARDUPDATE`），此值被忽略。
 const CLIPBOARD_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(120);
 
 /// Another clipboard listener can briefly hold the Windows clipboard open. Retry those read
@@ -62,8 +48,6 @@ fn read_with_retry<T, E>(
     result
 }
 
-/// 监听暂停开关。托盘菜单「停止监听」翻转，handler 早返回跳过整条入库链路。
-/// 用 `Arc<AtomicBool>` 跨线程共享；不停 watcher 线程本身，避免反复重建平台句柄。
 #[derive(Debug, Default, Clone)]
 pub struct WatcherPause(Arc<AtomicBool>);
 
@@ -77,12 +61,6 @@ impl WatcherPause {
     }
 }
 
-/// 把同步抓到的 [`FrontmostApp`] 落 icon 字节 + 拼成可入库的 [`ClipboardApp`]。
-/// icon 落盘失败不阻断（仍保留应用名），仅 warn。
-///
-/// `registry` 命中缓存时优先复用，省掉一次 PNG 字节 sha256/IO；
-/// 缓存未命中再走 FrontmostApp.icon_png 路径，
-/// 并把结果回写缓存，让首次见到的应用后续直接命中。
 pub fn materialize_source(
     store: &AppIconStore,
     registry: Option<&AppsRegistry>,
@@ -119,11 +97,6 @@ pub fn materialize_source(
     app
 }
 
-/// 去重入库 + emit「剪贴板更新」事件。监听回调与 `read_clipboard` 命令共用，
-/// 保证两条路径的入库语义与事件契约一致。失败仅记日志（监听场景无人接收 Result）。
-///
-/// `source_app` 为 `Some` 时先 upsert apps 表再写 item，满足 FK 约束。
-/// 应用 upsert 失败不阻断条目入库——清掉 source_app_id 后继续，避免单次系统调用抽风丢内容。
 pub async fn persist_and_notify(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -154,9 +127,6 @@ pub async fn persist_and_notify(
     Ok(result)
 }
 
-/// 启动监听：注册 [`WritebackGuard`] / [`ImageStore`] / [`AppIconStore`] 到 Tauri `State`
-/// （供写回时打标记 / 取图 / 取来源应用图标），并在独立线程上跑 OS 级监听。
-/// 应在 `setup` 中、连接池就绪后调用一次。store 创建失败属致命配置错误，直接返回错误。
 pub fn init(app: &AppHandle) -> crate::core::Result<()> {
     let guard = Arc::new(WritebackGuard::new());
     app.manage(guard.clone());
@@ -176,7 +146,6 @@ pub fn init(app: &AppHandle) -> crate::core::Result<()> {
     let pause = WatcherPause::default();
     app.manage(pause.clone());
 
-    // 启动期只把已落库的应用读进缓存；运行中应用由偏好页打开/刷新时补齐。
     {
         let registry = registry.clone();
         let excluded_app_ids = app
@@ -211,7 +180,6 @@ fn spawn_watch_thread(
     std::thread::Builder::new()
         .name("clipboard-watcher".to_owned())
         .spawn(move || {
-            // 平台剪贴板句柄在本线程内构造，不跨线程移动。
             let reader = match ClipboardReader::new() {
                 Ok(reader) => reader,
                 Err(err) => {
@@ -240,7 +208,7 @@ fn spawn_watch_thread(
             });
 
             log::info!("clipboard watcher started");
-            // 阻塞直至进程退出。
+
             watcher.start_watch();
         })
         .expect("failed to spawn clipboard watcher thread");
@@ -258,19 +226,12 @@ struct ClipboardChangeHandler {
 
 impl ClipboardHandler for ClipboardChangeHandler {
     fn on_clipboard_change(&mut self) {
-        // 用户从托盘关掉「监听」时直接早退，不读取、不入库、不 emit。
         if self.pause.is_paused() {
             return;
         }
 
-        // **先**抓前台应用：等异步入库再问，前台早就切回我们自己了。
-        // 自身写回的事件会在下方 guard 处被丢弃，但 detect 仍会无害地返回我们自己的 bundle id——
-        // 顺序换不得：guard 判定依赖 content_hash，必须先把 payload 读出来才能判，
-        // 而 read_all 期间用户可能已经切走前台。
         let source = source::detect_frontmost();
 
-        // 用户在偏好里勾选了「过滤此应用」时，本次复制整条直接丢弃——不读取、不入库、不 emit。
-        // 提前到读 payload 前判定，省掉无效的 OS 调用 + 图片解码开销。
         if let Some(src) = &source {
             let excluded = self
                 .app
@@ -295,7 +256,6 @@ impl ClipboardHandler for ClipboardChangeHandler {
             .map(|s| s.snapshot())
             .unwrap_or_default();
 
-        // 同步读取 + 转换（含图片落盘）：拿到 content_hash 才能判定是否为自身写回。
         let payload = match read_with_retry(&CLIPBOARD_READ_RETRY_DELAYS, || {
             self.reader.read_with_capture(&settings.clipboard.capture)
         }) {
@@ -322,7 +282,6 @@ impl ClipboardHandler for ClipboardChangeHandler {
             }
         };
 
-        // 自身写回触发的变更：跳过入库，避免回环。
         if self.guard.should_skip(&item.content_hash) {
             return;
         }
@@ -333,7 +292,6 @@ impl ClipboardHandler for ClipboardChangeHandler {
             item.source_app_id = Some(src.id.clone());
         }
 
-        // 入库与 emit 交给异步运行时；只移动 Send 数据，不碰平台句柄。
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
             let pool = app.state::<crate::db::DatabaseState>().pool().await;
@@ -420,9 +378,6 @@ mod tests {
         (dir, store)
     }
 
-    // 复刻 on_clipboard_change 的同步部分（读取 → 转换 → 去重判定）+ async 入库，
-    // 但绕开 Tauri AppHandle / emit（无法在单测里构造），验证整条数据链路。
-    // 触碰真实系统剪贴板，默认 ignore；本机用 `cargo test -- --ignored` 验证。
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "touches the real system clipboard; run with --ignored on a desktop session"]
     async fn end_to_end_text_ingests_once_then_dedups() {
@@ -430,7 +385,6 @@ mod tests {
         let guard = WritebackGuard::new();
         let (_dir, store) = temp_image_store();
 
-        // 串行锁只覆盖触碰真实剪贴板的同步段，await DB 前即释放（不跨 await 持锁）。
         let item = {
             let _serial = crate::clipboard::test_lock::serial();
             let ctx = ClipboardContext::new().unwrap();
@@ -448,7 +402,6 @@ mod tests {
         };
         assert!(!guard.should_skip(&item.content_hash));
 
-        // 首次入库：新行。
         let first = upsert_item(&pool, &item).await.unwrap();
         assert!(!first.deduplicated);
         assert_eq!(
@@ -460,7 +413,6 @@ mod tests {
             "e2e ultra clipboard watcher"
         );
 
-        // 同内容再来一次：命中去重，use_count 累加，不新增行。
         let second = upsert_item(&pool, &item).await.unwrap();
         assert!(second.deduplicated);
         assert_eq!(first.id, second.id);
@@ -489,14 +441,11 @@ mod tests {
             .unwrap();
         let item = build_item(&store, &payload).unwrap().unwrap();
 
-        // 模拟写回前登记 → 监听读到同内容 → 被抑制。
         let guard = WritebackGuard::new();
         guard.suppress(item.content_hash.clone());
         assert!(guard.should_skip(&item.content_hash));
     }
 
-    // 验证真实剪贴板图片链路：set_image（OS 原生 TIFF）→ read_with_capture 解码为 PNG →
-    // build_item 落盘原图/缩略图 → upsert 入库。覆盖合成 PNG 测不到的 OS 解码段。
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "touches the real system clipboard; run with --ignored on a desktop session"]
     async fn end_to_end_image_stores_and_ingests() {
@@ -533,10 +482,10 @@ mod tests {
         assert_eq!(item.kind, crate::db::models::ClipboardKind::Image);
         assert!(item.content.ends_with(".png"));
         assert!(item.width.unwrap() > 0 && item.height.unwrap() > 0);
-        // 复制热路径只落原图；缩略图懒生成，此刻尚未存在。
+
         assert!(store.origin_path(&item.content).exists());
         assert!(!store.thumbnail_path(&item.content).exists());
-        // 模拟前端首次取图：按需生成缩略图。
+
         assert!(store.ensure_thumbnail(&item.content).unwrap().exists());
 
         let result = upsert_item(&pool, &item).await.unwrap();

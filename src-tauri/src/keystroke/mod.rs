@@ -1,11 +1,7 @@
-//! 模拟系统级粘贴。
+//! - macOS: Command+V through CGEvent
 //!
-//! 写回剪贴板由 `clipboard::write` 负责；本模块只负责「按键模拟」这一步——
-//! 配合 watcher 的 `WritebackGuard` 抑制自身写回带来的回环。
-//!
-//! - macOS：⌘V（CGEvent）
-//! - Windows：Shift+Insert（SendInput）。比 Ctrl+V 兼容性更好，传统 Win32
-//!   控件、终端、部分 Electron 应用都接收。
+//! Clipboard writeback is handled by `clipboard::write`; this module only
+//! injects the paste keystroke and relies on `WritebackGuard` for loop suppression.
 
 #[cfg(target_os = "macos")]
 mod macos;

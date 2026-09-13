@@ -18,7 +18,6 @@ const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
 const STORAGE_CONTENT_DIRS: [&str; 4] = ["db", "resources", "config", "state"];
 const CUSTOM_STORAGE_CONTAINER_DIR: &str = "UltraClipboardData";
 
-/// 偏好页侧栏展示的本地存储占用概览。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageUsage {
@@ -28,7 +27,6 @@ pub struct StorageUsage {
     pub settings_bytes: u64,
 }
 
-/// 清理本地资源缓存后的结果，用于前端展示与刷新侧栏存储占用。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanCacheResult {
@@ -37,10 +35,8 @@ pub struct CleanCacheResult {
     pub storage_usage: StorageUsage,
 }
 
-/// 当前数据目录位置及是否已切到自定义目录。
 pub type StorageLocation = crate::core::paths::StorageLocation;
 
-/// 更改或还原数据目录后的刷新结果。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangeStorageLocationResult {
@@ -48,7 +44,6 @@ pub struct ChangeStorageLocationResult {
     pub storage_usage: StorageUsage,
 }
 
-/// 偏好页允许打开的固定本地目录，避免前端传入任意文件系统路径。
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreferenceDirectoryTarget {
@@ -56,13 +51,11 @@ pub enum PreferenceDirectoryTarget {
     Logs,
 }
 
-/// 读取当前真实数据目录位置。
 #[tauri::command]
 pub async fn get_storage_location(app: AppHandle) -> Result<StorageLocation> {
     crate::core::paths::storage_location(&app)
 }
 
-/// 统计当前 `env_dir()` 数据目录的递归总占用，并拆分常见分项供侧栏展示。
 #[tauri::command]
 pub async fn get_storage_usage(app: AppHandle) -> Result<StorageUsage> {
     let total_bytes = dir_size(&crate::core::paths::app_data_dir(&app)?)?;
@@ -78,7 +71,6 @@ pub async fn get_storage_usage(app: AppHandle) -> Result<StorageUsage> {
     })
 }
 
-/// 将数据目录迁移到用户选择的父目录下，并热切换当前运行时状态。
 #[tauri::command]
 pub async fn change_storage_location(
     app: AppHandle,
@@ -89,7 +81,6 @@ pub async fn change_storage_location(
     switch_storage_location(app, db.inner(), target).await
 }
 
-/// 将数据目录迁回默认位置，并热切换当前运行时状态。
 #[tauri::command]
 pub async fn reset_storage_location(
     app: AppHandle,
@@ -99,7 +90,6 @@ pub async fn reset_storage_location(
     switch_storage_location(app, db.inner(), target).await
 }
 
-/// 删除资源目录中不再被历史记录或资源索引引用的文件。
 #[tauri::command]
 pub async fn clean_resource_cache(
     app: AppHandle,
@@ -140,7 +130,6 @@ pub async fn clean_resource_cache(
     })
 }
 
-/// 在系统文件管理器中打开偏好页本地数据相关目录。
 #[tauri::command]
 pub async fn open_preference_directory(
     app: AppHandle,
@@ -240,7 +229,9 @@ async fn switch_storage_location(
 
 fn reject_nested_storage_move(current: &Path, target: &Path) -> Result<()> {
     if target.starts_with(current) || current.starts_with(target) {
-        return Err(anyhow::anyhow!("新旧数据目录不能互相包含").into());
+        return Err(
+            anyhow::anyhow!("기존 데이터 폴더와 새 데이터 폴더는 서로 포함할 수 없습니다").into(),
+        );
     }
 
     Ok(())
@@ -417,7 +408,6 @@ impl Drop for WatcherPauseRestore {
     }
 }
 
-/// 查询仍被 image 历史记录引用的图片文件名。
 async fn referenced_image_files(pool: &SqlitePool) -> Result<HashSet<String>> {
     let rows =
         sqlx::query_scalar::<_, String>("SELECT content FROM clipboard_items WHERE kind = 'image'")
@@ -428,7 +418,6 @@ async fn referenced_image_files(pool: &SqlitePool) -> Result<HashSet<String>> {
     Ok(rows.into_iter().collect())
 }
 
-/// 查询仍被来源应用引用的应用图标文件名。
 async fn referenced_app_icon_files(pool: &SqlitePool) -> Result<HashSet<String>> {
     let rows = sqlx::query_scalar::<_, String>(
         "SELECT DISTINCT icon_file FROM clipboard_apps WHERE icon_file IS NOT NULL",
@@ -440,7 +429,6 @@ async fn referenced_app_icon_files(pool: &SqlitePool) -> Result<HashSet<String>>
     Ok(rows.into_iter().collect())
 }
 
-/// 查询仍被文件类型图标索引引用的文件名。
 async fn referenced_file_icon_files(pool: &SqlitePool) -> Result<HashSet<String>> {
     let rows = sqlx::query_scalar::<_, String>("SELECT DISTINCT icon_file FROM file_type_icons")
         .fetch_all(pool)
@@ -450,7 +438,6 @@ async fn referenced_file_icon_files(pool: &SqlitePool) -> Result<HashSet<String>
     Ok(rows.into_iter().collect())
 }
 
-/// 统计 SQLite 主文件与 WAL / SHM sidecar，反映真实数据库占用。
 fn database_bytes(app: &AppHandle) -> Result<u64> {
     let db_path = crate::db::db_path(app)?;
     let mut total = file_size(&db_path)?;
@@ -468,7 +455,6 @@ struct CleanCacheStats {
     bytes: u64,
 }
 
-/// 清理平铺目录下没有被引用的文件。
 fn clean_flat_files(
     root: &Path,
     referenced_files: &HashSet<String>,
@@ -501,7 +487,6 @@ fn clean_flat_files(
     Ok(())
 }
 
-/// 清理带分片子目录的缓存文件，保留仍被数据库引用的文件名。
 fn clean_sharded_files(
     root: &Path,
     referenced_files: &HashSet<String>,
@@ -510,7 +495,6 @@ fn clean_sharded_files(
     clean_flat_files(root, referenced_files, removed)
 }
 
-/// 文件名不在引用集合中时删除该文件，并累计删除数量与字节数。
 fn remove_unreferenced_file(
     path: &Path,
     file_bytes: u64,
@@ -531,19 +515,16 @@ fn remove_unreferenced_file(
     Ok(())
 }
 
-/// 尽力删除空目录；非空、缺失或无权限时由文件清理主流程处理即可。
 fn remove_dir_if_empty(path: &Path) {
     let _ = fs::remove_dir(path);
 }
 
-/// 统计设置主文件大小。
 fn settings_bytes(app: &AppHandle) -> Result<u64> {
     let settings_path = crate::core::paths::config_dir(app)?.join("settings.json");
 
     file_size(&settings_path)
 }
 
-/// 文件不存在时按 0 处理，避免首次启动时显示错误状态。
 fn file_size(path: &Path) -> Result<u64> {
     if !path.exists() {
         return Ok(0);
@@ -554,7 +535,6 @@ fn file_size(path: &Path) -> Result<u64> {
         .len())
 }
 
-/// 递归统计目录大小；目录不存在时按 0 处理。
 fn dir_size(path: &Path) -> Result<u64> {
     if !path.exists() {
         return Ok(0);

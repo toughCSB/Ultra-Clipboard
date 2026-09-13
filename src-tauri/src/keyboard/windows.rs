@@ -25,7 +25,6 @@ fn consumed_keys() -> &'static Mutex<HashSet<u32>> {
     SET.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
-/// 仅放行当前前端需要的 Ctrl 快捷键：C、D、F、K、M、N、O、P、Q、T、Enter、Backspace、Delete、逗号与数字 0-9。
 fn ctrl_shortcut_key(vk: u32) -> Option<String> {
     match vk as i32 {
         0x43 => Some("c".to_string()),
@@ -60,7 +59,6 @@ fn nav_key(vk: u32) -> Option<&'static str> {
     }
 }
 
-/// 预览按键需要 keydown / keyup 配对发送，供前端按住显示、松开关闭。
 fn preview_key(vk: u32) -> Option<&'static str> {
     match vk as i32 {
         VK_SPACE => Some(" "),
@@ -72,7 +70,6 @@ pub fn enable_navigation_keys(app: &AppHandle) {
     let _ = APP_HANDLE.set(app.clone());
     NAV_ENABLED.store(true, Ordering::Relaxed);
 
-    // 已有钩子线程时不再起新线程；NAV_ENABLED 的恢复就够了。
     if HOOK_THREAD_ID
         .lock()
         .expect("hook thread id poisoned")
@@ -91,7 +88,7 @@ pub fn enable_navigation_keys(app: &AppHandle) {
         *HOOK_THREAD_ID.lock().expect("hook thread id poisoned") = Some(GetCurrentThreadId());
 
         let mut msg: MSG = std::mem::zeroed();
-        // GetMessageW 收到 WM_QUIT 返回 0 → 消息泵自然退出。
+
         while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {}
 
         UnhookWindowsHookEx(hook);
@@ -106,8 +103,6 @@ pub fn enable_navigation_keys(app: &AppHandle) {
 pub fn disable_navigation_keys() {
     NAV_ENABLED.store(false, Ordering::Relaxed);
 
-    // 隐藏窗口时主动通知前端 Ctrl 已松开：隐藏后钩子线程随即退出，
-    // 此后真实的 Ctrl keyup 不会再被捕获，否则前端会残留"Ctrl 按下"状态。
     if let Some(app) = APP_HANDLE.get() {
         if let Err(err) = app.emit(
             NAV_EVENT,
@@ -160,7 +155,6 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             }
         }
 
-        // Ctrl 状态只用于前端展示与组合键识别，不在此处吞键，避免影响系统行为。
         return CallNextHookEx(null_mut(), code, wparam, lparam);
     }
 
@@ -226,8 +220,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                     log::warn!("emit nav event failed: {err:?}");
                 }
             }
-            // 记下 KEYDOWN 的 VK，配对的 KEYUP 也要吞——
-            // 否则背后被聚焦的应用会收到孤立 KEYUP，造成奇怪行为。
+
             consumed_keys()
                 .lock()
                 .expect("consumed keys poisoned")

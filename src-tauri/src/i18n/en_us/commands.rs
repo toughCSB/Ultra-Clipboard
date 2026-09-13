@@ -1,6 +1,5 @@
 use crate::i18n::keys::CommandKey as Key;
 
-/// 返回美式英文 Tauri 命令错误根因文案。
 pub fn label(key: Key) -> &'static str {
     match key {
         Key::DragSourceFilesMissing => "The dragged source files no longer exist",

@@ -1,14 +1,9 @@
-//! file_type_icons 表：按文件类型缓存 icon，避免重复抽取系统 icon。
-//!
-//! cache_key 生成规则见 `clipboard::icon::get_icon_cache_key`。
-
 use chrono::Utc;
 use sqlx::SqlitePool;
 
 use super::models::Platform;
 use crate::core::Result;
 
-/// 查询指定 cache_key 的 icon 文件名。
 pub async fn get_icon(
     pool: &SqlitePool,
     cache_key: &str,
@@ -28,7 +23,6 @@ pub async fn get_icon(
     Ok(row.map(|r| r.0))
 }
 
-/// upsert：插入或更新 icon 记录。
 pub async fn upsert_icon(
     pool: &SqlitePool,
     cache_key: &str,

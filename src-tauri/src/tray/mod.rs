@@ -1,8 +1,4 @@
-//! 系统托盘：Rust 侧实现。
-//!
-//! - icon 沿用 `assets/tray.ico`（Windows）/ `assets/tray-mac.ico`（macOS），作为 Tauri 资源打包。
-//! - 菜单文案做 i18n，跟随 `Appearance.language` 即时切换（见 [`crate::i18n::tray`]）。
-//! - 显隐跟随 `General.tray_icon`；语言或显隐变更后由 `commands/settings.rs` 调用 [`apply`] 同步。
+//! System tray implementation and localized tray menu construction.
 
 use anyhow::Context;
 use tauri::image::Image;
@@ -48,8 +44,6 @@ pub fn init(app: &AppHandle, settings: &Settings) -> Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| handle_menu_event(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
-            // macOS 左键已经走 show_menu_on_left_click，不在这里处理；
-            // Windows 左键单击显剪贴板窗口。
             #[cfg(target_os = "windows")]
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -75,7 +69,6 @@ pub fn init(app: &AppHandle, settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-/// 根据最新 settings 更新菜单和可见性。语言变了就重建菜单；显隐位变了就 set_visible。
 pub fn apply(app: &AppHandle, settings: &Settings) -> Result<()> {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return Ok(());
@@ -92,7 +85,6 @@ pub fn apply(app: &AppHandle, settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-/// 重建菜单但不动可见性，用于「停止/开启监听」翻转后只刷文案。
 fn rebuild_menu(app: &AppHandle) -> Result<()> {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return Ok(());

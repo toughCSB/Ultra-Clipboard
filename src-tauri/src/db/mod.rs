@@ -18,8 +18,6 @@ pub(crate) mod test_support {
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use sqlx::SqlitePool;
 
-    /// 仓储层单测用的内存库连接池：单连接（保证所有查询命中同一个 in-memory DB）+
-    /// 开启外键（验证 `ON DELETE SET NULL`）+ 跑完整 `migrations`。
     pub async fn memory_pool() -> SqlitePool {
         let options = SqliteConnectOptions::from_str("sqlite::memory:")
             .expect("valid sqlite url")

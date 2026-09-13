@@ -1,25 +1,11 @@
-//! 跨平台从「任意文件路径」抽取图标，落地为 PNG 字节。
-//! macOS 走 NSWorkspace.iconForFile，Windows 走 SHGetFileInfo，由 `file_icon_provider` 封装。
-
 use std::path::Path;
 
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 
-/// App 图标 / 文件类型图标统一默认像素尺寸。
-/// 256 覆盖 Retina 下 ~96–128pt 高清显示（列表卡片 + 拖拽预览同源），
-/// 单张 PNG ~20–60KB；按文件类型缓存，整库通常几十张，总占用可忽略。
 const DEFAULT_ICON_PIXEL_SIZE: u32 = 256;
 
-/// 目录的 icon 缓存 key。`<>` 是 macOS/Windows 文件名非法字符，不会与真实路径撞 key。
 pub const DIR_CACHE_KEY: &str = "<dir>";
 
-/// 生成文件 icon 的缓存 key，用于 `file_type_icons` 表查询。
-///
-/// 规则：
-/// - 目录：[`DIR_CACHE_KEY`]
-/// - `.app` / `.exe`：完整路径（每个 bundle 单独缓存）
-/// - 有扩展名：`.pdf`、`.txt`（小写、带点）
-/// - 无扩展名：文件名本身（`Makefile`、`README` 等由 OS 决定是否有专属 icon）
 pub fn get_icon_cache_key(path: &Path) -> String {
     if path.is_dir() {
         return DIR_CACHE_KEY.to_string();
@@ -27,14 +13,12 @@ pub fn get_icon_cache_key(path: &Path) -> String {
 
     let extname = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-    // .app / .exe 用完整路径
     if (cfg!(target_os = "macos") && extname == "app")
         || (cfg!(target_os = "windows") && extname == "exe")
     {
         return path.to_string_lossy().to_string();
     }
 
-    // 无扩展名：用文件名本身（OS 会按需给 Makefile 等返回专属 icon，其余返回通用文件 icon）
     if extname.is_empty() {
         return path
             .file_name()
@@ -43,12 +27,9 @@ pub fn get_icon_cache_key(path: &Path) -> String {
             .to_string();
     }
 
-    // 普通扩展名：小写、带点
     format!(".{}", extname.to_lowercase())
 }
 
-/// 抽取指定路径的图标 PNG 字节。`size` 为 `None` 时用内置默认值。
-/// 失败一律返回 `None`，由调用方决定回退。
 pub fn icon_png(path: &Path, size: Option<u32>) -> Option<Vec<u8>> {
     let size = size.unwrap_or(DEFAULT_ICON_PIXEL_SIZE);
     let icon = match file_icon_provider::get_file_icon(path, size as u16) {
@@ -85,7 +66,7 @@ mod tests {
         let path = PathBuf::from("/System/Library/CoreServices/Finder.app");
         let png = icon_png(&path, None).expect("expected PNG bytes");
         assert!(png.len() > 100, "PNG too small: {}", png.len());
-        // PNG 签名
+
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
         println!("Finder.app icon PNG size: {} bytes", png.len());
     }

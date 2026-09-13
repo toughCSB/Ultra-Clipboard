@@ -1,7 +1,3 @@
-//! Ultra Clipboard 历史备份包导出与接收壳识别。
-//!
-//! `.ecopastebak` 有两种格式：明文模式是标准 ZIP；加密模式是兼容 EcoPaste 的自有容器。
-
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -47,25 +43,12 @@ const RESOURCES_ARCHIVE_DIR: &str = "resources";
 const CONFIG_ARCHIVE_DIR: &str = "config";
 const MANIFEST_FILENAME: &str = "manifest.json";
 
-/// 偏好窗口被销毁时暂存的待处理备份接收事件。
-///
-/// `emit_received_backup` 在 preference 不存在（已空闲销毁）时无法 push 事件——重建是异步的，
-/// 前端 listener 尚未挂载。改为存入此 slot，由前端重建后通过 `take_pending_backup` 主动拉取，
-/// 两条路径（存活 push / 销毁 pull）互斥，避免事件丢失。
 static PENDING_BACKUP: LazyLock<Mutex<Option<BackupReceivedPayload>>> =
     LazyLock::new(|| Mutex::new(None));
 
-/// 应用是否已进入可安全建窗的就绪态（由 `RunEvent::Ready` 置位）。
-///
-/// macOS 冷启动用文件关联打开 app 时，系统会在事件循环刚起步、`setup` 尚未跑完时，
-/// 经 ObjC `application:openURLs:` **同步**投递 `RunEvent::Opened`。此刻去建偏好窗口会
-/// panic，而该回调跨 `extern "C"` 边界不可 unwind，直接 abort（应用闪退）。
-/// 故未就绪时只把文件路径压入 [`PENDING_OPEN_FILES`]，待 `Ready` 后由
-/// [`mark_app_ready`] 统一补投。
 #[cfg(target_os = "macos")]
 static APP_READY: AtomicBool = AtomicBool::new(false);
 
-/// 就绪前到达的待处理打开文件路径队列（仅冷启动文件关联场景会用到）。
 #[cfg(target_os = "macos")]
 static PENDING_OPEN_FILES: LazyLock<Mutex<Vec<PathBuf>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
@@ -214,7 +197,6 @@ struct BackupSourcePaths {
     settings_path: PathBuf,
 }
 
-/// 导出当前环境历史数据库、资源文件和设置为 `.ecopastebak` 备份包。
 pub async fn export_history_backup(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -248,7 +230,6 @@ pub async fn export_history_backup(
     })
 }
 
-/// 从 `.ecopastebak` 导入历史和设置；合并写入当前库，覆盖热替换当前数据。
 pub async fn import_history_backup(
     app: &AppHandle,
     db: &crate::db::DatabaseState,
@@ -272,7 +253,6 @@ pub async fn import_history_backup(
     }
 }
 
-/// 识别 `.ecopastebak` 文件头并返回容器模式；不解密、不导入。
 pub fn inspect_backup_file(path: &Path) -> Result<BackupContainerMode> {
     ensure_backup_extension(path)?;
 
@@ -280,11 +260,6 @@ pub fn inspect_backup_file(path: &Path) -> Result<BackupContainerMode> {
     inspect_backup_reader(&mut file)
 }
 
-/// 将系统打开文件或拖入文件统一转成偏好页接收事件。
-///
-/// preference 已改为空闲可销毁窗口：若窗口仍存活，照常 show + push 事件；
-/// 若已销毁，先把 payload 存入 [`PENDING_BACKUP`]，再 show 触发重建——
-/// 前端重建后经 `take_pending_backup` 主动拉取，规避「重建异步、push 丢失」竞态。
 pub fn emit_received_backup(
     app: &AppHandle,
     path: PathBuf,
@@ -316,7 +291,6 @@ pub fn emit_received_backup(
     Ok(())
 }
 
-/// 存入待处理备份接收事件，覆盖旧值（仅保留最近一次）。
 fn set_pending_backup(payload: BackupReceivedPayload) {
     let mut guard = PENDING_BACKUP.lock().unwrap_or_else(|poisoned| {
         log::error!("pending backup mutex poisoned on set, recovering");
@@ -325,7 +299,6 @@ fn set_pending_backup(payload: BackupReceivedPayload) {
     *guard = Some(payload);
 }
 
-/// 取走并清空待处理备份接收事件，供偏好窗口重建后首屏拉取。
 pub fn take_pending_backup() -> Option<BackupReceivedPayload> {
     let mut guard = PENDING_BACKUP.lock().unwrap_or_else(|poisoned| {
         log::error!("pending backup mutex poisoned on take, recovering");
@@ -334,14 +307,6 @@ pub fn take_pending_backup() -> Option<BackupReceivedPayload> {
     guard.take()
 }
 
-/// 处理一次「系统打开文件」请求，对应用就绪状态鲁棒。
-///
-/// macOS 冷启动双击文件关联时，系统会在 `setup` 完成前从 ObjC `application:openURLs:`
-/// 同步投递 `RunEvent::Opened`。此时建窗会读取尚未 `manage` 的 state 而 panic，且 panic
-/// 无法穿过 tao 的 `extern "C"` 回调边界（`panic_cannot_unwind`）→ abort。
-///
-/// 故未就绪时只把路径压入 [`PENDING_OPEN_FILES`]，待 [`mark_app_ready`] 在 `RunEvent::Ready`
-/// 时排空处理；已就绪则立即处理。调用方仍应额外用 `catch_unwind` 兜底，杜绝任何残余 panic 越界。
 #[cfg(target_os = "macos")]
 pub fn handle_open_file(app: &AppHandle, path: PathBuf, source: BackupReceiveSource) {
     if !is_backup_path(&path) {
@@ -362,10 +327,6 @@ pub fn handle_open_file(app: &AppHandle, path: PathBuf, source: BackupReceiveSou
     }
 }
 
-/// 标记应用已就绪并排空启动期暂存的待打开文件。
-///
-/// 在 `RunEvent::Ready` 调用——此时事件循环已运行、所有 state 已 `manage`，建窗安全。
-/// 排空前先置位 [`APP_READY`]，使其后到达的 `Opened` 直接走立即处理路径。
 #[cfg(target_os = "macos")]
 pub fn mark_app_ready(app: &AppHandle) {
     APP_READY.store(true, Ordering::Release);
@@ -385,14 +346,12 @@ pub fn mark_app_ready(app: &AppHandle) {
     }
 }
 
-/// 从进程参数中查找 `.ecopastebak` 路径，供 Windows 文件关联和第二实例回调使用。
 pub fn backup_path_from_args(args: &[String]) -> Option<PathBuf> {
     args.iter()
         .map(PathBuf::from)
         .find(|path| is_backup_path(path))
 }
 
-/// 判断路径是否看起来是 Ultra Clipboard 兼容备份包。
 pub fn is_backup_path(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
@@ -405,10 +364,10 @@ fn validate_password_options(
     match options.mode {
         BackupExportMode::Encrypted => {
             let Some(password) = options.password.as_ref() else {
-                return app_error("请输入备份密码");
+                return app_error("백업 비밀번호를 입력하세요");
             };
             if password.chars().count() < 8 {
-                return app_error("备份密码至少需要 8 个字符");
+                return app_error("백업 비밀번호는 8자 이상이어야 합니다");
             }
 
             Ok(Some(Zeroizing::new(password.clone())))
@@ -419,7 +378,7 @@ fn validate_password_options(
                 .as_deref()
                 .is_some_and(|value| !value.is_empty())
             {
-                return app_error("明文备份不应包含密码");
+                return app_error("암호화되지 않은 백업에는 비밀번호를 포함할 수 없습니다");
             }
 
             Ok(None)
@@ -435,7 +394,7 @@ fn validate_import_options(
     match inspect_backup_file(&path)? {
         BackupContainerMode::Encrypted => {
             if input.password.as_deref().is_none_or(str::is_empty) {
-                return app_error("请输入备份密码");
+                return app_error("백업 비밀번호를 입력하세요");
             }
         }
         BackupContainerMode::Plain => {
@@ -444,7 +403,7 @@ fn validate_import_options(
                 .as_deref()
                 .is_some_and(|value| !value.is_empty())
             {
-                return app_error("明文备份不应包含密码");
+                return app_error("암호화되지 않은 백업에는 비밀번호를 포함할 수 없습니다");
             }
         }
     }
@@ -454,12 +413,14 @@ fn validate_import_options(
 
 fn normalize_backup_path(path: PathBuf) -> Result<PathBuf> {
     if path.as_os_str().is_empty() {
-        return app_error("请选择备份保存位置");
+        return app_error("백업 저장 위치를 선택하세요");
     }
 
     match path.extension().and_then(|value| value.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case(BACKUP_EXTENSION) => Ok(path),
-        Some(_) => app_error(format!("备份文件后缀必须是 .{BACKUP_EXTENSION}")),
+        Some(_) => app_error(format!(
+            "백업 파일 확장자는 .{BACKUP_EXTENSION}이어야 합니다"
+        )),
         None => Ok(path.with_extension(BACKUP_EXTENSION)),
     }
 }
@@ -469,7 +430,7 @@ fn ensure_backup_extension(path: &Path) -> Result<()> {
         return Ok(());
     }
 
-    app_error(format!("请选择 .{BACKUP_EXTENSION} 备份文件"))
+    app_error(format!(".{BACKUP_EXTENSION} 백업 파일을 선택하세요"))
 }
 
 async fn checkpoint_database(pool: &SqlitePool) -> Result<()> {
@@ -544,7 +505,6 @@ fn current_platform() -> &'static str {
     }
 }
 
-/// 汇总备份允许写入包内的源路径，避免把日志、缓存、临时文件等环境杂项带进迁移包。
 fn backup_source_paths(app: &AppHandle) -> Result<BackupSourcePaths> {
     Ok(BackupSourcePaths {
         db_path: crate::db::db_path(app)?,
@@ -841,7 +801,7 @@ fn read_backup_payload(path: &Path, password: Option<&str>) -> Result<Vec<u8>> {
         return Ok(bytes);
     }
     if !bytes.starts_with(MAGIC) {
-        return app_error("不是有效的 Ultra Clipboard 备份文件");
+        return app_error("올바른 Ultra Clipboard 백업 파일이 아닙니다");
     }
 
     let mut cursor = Cursor::new(bytes.as_slice());
@@ -849,13 +809,13 @@ fn read_backup_payload(path: &Path, password: Option<&str>) -> Result<Vec<u8>> {
     let header = read_container_header_after_magic(&mut cursor)?;
     let ciphertext_start = cursor.position() as usize;
     let Some(kdf) = header.kdf else {
-        return app_error("加密备份文件头无效");
+        return app_error("암호화 백업 파일 헤더가 올바르지 않습니다");
     };
     let Some(cipher) = header.cipher else {
-        return app_error("加密备份文件头无效");
+        return app_error("암호화 백업 파일 헤더가 올바르지 않습니다");
     };
     let Some(password) = password else {
-        return app_error("请输入备份密码");
+        return app_error("백업 비밀번호를 입력하세요");
     };
 
     decrypt_payload(&bytes[ciphertext_start..], password, &kdf, &cipher)
@@ -868,10 +828,10 @@ fn decrypt_payload(
     cipher_header: &CipherHeader,
 ) -> Result<Vec<u8>> {
     if kdf.algorithm != "argon2id" || cipher_header.algorithm != "xchacha20poly1305" {
-        return app_error("暂不支持该备份加密格式");
+        return app_error("이 백업 암호화 형식은 지원하지 않습니다");
     }
     if kdf.salt.len() != SALT_LEN || cipher_header.nonce.len() != NONCE_LEN {
-        return app_error("加密备份文件头无效");
+        return app_error("암호화 백업 파일 헤더가 올바르지 않습니다");
     }
 
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
@@ -892,9 +852,11 @@ fn decrypt_payload(
     let mut nonce = [0u8; NONCE_LEN];
     nonce.copy_from_slice(&cipher_header.nonce);
     let nonce = XNonce::from(nonce);
-    cipher
-        .decrypt(&nonce, ciphertext)
-        .map_err(|_| AppError::Other(anyhow!("备份密码不正确或文件已损坏")))
+    cipher.decrypt(&nonce, ciphertext).map_err(|_| {
+        AppError::Other(anyhow!(
+            "백업 비밀번호가 올바르지 않거나 파일이 손상되었습니다"
+        ))
+    })
 }
 
 fn extract_payload_zip(payload: &[u8]) -> Result<TempDir> {
@@ -910,17 +872,17 @@ fn extract_payload_zip(payload: &[u8]) -> Result<TempDir> {
 
 fn validate_extracted_payload(root: &Path) -> Result<()> {
     if !root.join(MANIFEST_FILENAME).exists() {
-        return app_error("备份文件缺少 manifest.json");
+        return app_error("백업 파일에 manifest.json이 없습니다");
     }
     if !root.join(DB_ARCHIVE_DIR).join(DB_FILENAME).exists() {
-        return app_error("备份文件缺少历史数据库");
+        return app_error("백업 파일에 기록 데이터베이스가 없습니다");
     }
     if !root
         .join(CONFIG_ARCHIVE_DIR)
         .join(SETTINGS_FILENAME)
         .exists()
     {
-        return app_error("备份文件缺少设置文件");
+        return app_error("백업 파일에 설정 파일이 없습니다");
     }
 
     Ok(())
@@ -939,7 +901,7 @@ fn inspect_backup_reader<R: Read>(reader: &mut R) -> Result<BackupContainerMode>
         return Ok(BackupContainerMode::Plain);
     }
 
-    app_error("不是有效的 Ultra Clipboard 备份文件")
+    app_error("올바른 Ultra Clipboard 백업 파일이 아닙니다")
 }
 
 fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<ContainerHeader> {
@@ -949,7 +911,7 @@ fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<Containe
         .context("failed to read backup header length")?;
     let header_len = u32::from_le_bytes(len) as usize;
     if header_len == 0 || header_len > 64 * 1024 {
-        return app_error("备份文件头无效");
+        return app_error("백업 파일 헤더가 올바르지 않습니다");
     }
 
     let mut header = vec![0u8; header_len];
@@ -959,7 +921,7 @@ fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<Containe
     let header: ContainerHeader =
         serde_json::from_slice(&header).context("failed to parse backup header")?;
     if header.format_version != FORMAT_VERSION {
-        return app_error("暂不支持该备份格式版本");
+        return app_error("이 백업 형식 버전은 지원하지 않습니다");
     }
 
     Ok(header)
@@ -1283,7 +1245,6 @@ impl Drop for WatcherPauseRestore {
     }
 }
 
-/// 暂停剪贴板监听，并在 guard drop 时恢复导入前的暂停状态。
 fn pause_watcher(app: &AppHandle) -> WatcherPauseRestore {
     let pause = app.try_state::<crate::clipboard::WatcherPause>();
     let previous = pause.as_ref().is_some_and(|state| state.is_paused());
@@ -1297,7 +1258,6 @@ fn pause_watcher(app: &AppHandle) -> WatcherPauseRestore {
     }
 }
 
-/// 用备份数据库替换当前主数据库，并移除旧 WAL / SHM sidecar。
 fn replace_live_database(app: &AppHandle, src: &Path) -> Result<()> {
     let dst = crate::db::db_path(app)?;
     copy_file_to(src, &dst)?;
@@ -1312,7 +1272,6 @@ fn replace_live_database(app: &AppHandle, src: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 覆盖导入后从新数据库重建来源应用内存缓存。
 async fn refresh_apps_registry(app: &AppHandle) {
     let Some(registry) = app.try_state::<crate::clipboard::AppsRegistry>() else {
         return;

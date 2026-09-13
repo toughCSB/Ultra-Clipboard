@@ -21,7 +21,6 @@ pub fn enable_outside_click_hide(app: &AppHandle) {
     let _ = APP_HANDLE.set(app.clone());
     ENABLED.store(true, Ordering::Relaxed);
 
-    // 已有钩子线程时不再起新线程；ENABLED 的恢复就够了。
     if HOOK_THREAD_ID
         .lock()
         .expect("hook thread id poisoned")
@@ -40,7 +39,7 @@ pub fn enable_outside_click_hide(app: &AppHandle) {
         *HOOK_THREAD_ID.lock().expect("hook thread id poisoned") = Some(GetCurrentThreadId());
 
         let mut msg: MSG = std::mem::zeroed();
-        // GetMessageW 收到 WM_QUIT 返回 0 → 消息泵自然退出。
+
         while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {}
 
         UnhookWindowsHookEx(hook);
@@ -77,8 +76,6 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     let cursor = data.pt;
 
     if let Some(app) = APP_HANDLE.get() {
-        // 右键菜单优先：菜单可见时，光标在菜单矩形外 → 关菜单（剪贴板窗口不连带关，
-        // 避免「打开菜单后误点窗内空白处」直接收掉整个面板）。
         let menu_handled = if crate::menu::context_window::is_visible(app) {
             if cursor_outside_context_menu(app, cursor) {
                 schedule_hide_context_menu(app);
@@ -96,7 +93,6 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         }
     }
 
-    // 不吞键：用户的点击应该正常落到目标窗口。
     CallNextHookEx(null_mut(), code, wparam, lparam)
 }
 
@@ -121,8 +117,6 @@ fn cursor_outside_clipboard_window(app: &AppHandle, cursor: POINT) -> bool {
         || cursor.y >= position.y + size.height as i32
 }
 
-/// 钩子收到的 `cursor` 是 physical 坐标，菜单矩形也用 physical 比对，
-/// 不走 logical 换算（避免边缘 1px 舍入误判）。
 fn cursor_outside_context_menu(app: &AppHandle, cursor: POINT) -> bool {
     !crate::menu::context_window::contains_physical_point(app, cursor.x, cursor.y)
 }

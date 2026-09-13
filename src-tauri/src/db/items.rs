@@ -1,3 +1,5 @@
+//! Clipboard item queries and mutations, including FTS filtering and cleanup.
+
 use anyhow::Context;
 use blake3::Hasher;
 use chrono::Utc;
@@ -12,13 +14,6 @@ const SELECT_ITEM: &str = "SELECT id, kind, sub_kind, group_id, source_app_id, c
      content_hash, search_text, summary, file_types, size, width, height, use_count, is_favorite, is_pinned, \
      is_sensitive, platform, note, created_at, updated_at FROM clipboard_items";
 
-/// 列表/单条刷新场景的精简 SELECT：text 类型条目的 `content` 与 `search_text` 一律置空，
-/// 由前端用 `summary` 渲染。HTML/RTF/长纯文本可能很大（用户复制整段文档），
-/// 整段过 IPC + 进 DOM 是这条链路最昂贵的一环；image/files 的 content 是
-/// 文件名 / 路径列表，保留原值。预览/写回走 [`find_item_by_id`] 拿完整 content。
-///
-/// LEFT JOIN `clipboard_apps` 顺带把来源应用名 / 图标文件名带回，前端直接渲染，
-/// 不再额外发 list_clipboard_apps + get_clipboard_app_icon_path 请求。
 const LIST_SELECT_ITEM: &str = "SELECT clipboard_items.id, clipboard_items.kind, \
      clipboard_items.sub_kind, clipboard_items.group_id, clipboard_items.source_app_id, \
      CASE WHEN clipboard_items.kind = 'text' THEN '' ELSE clipboard_items.content END AS content, \
@@ -35,18 +30,12 @@ const LIST_SELECT_ITEM: &str = "SELECT clipboard_items.id, clipboard_items.kind,
      FROM clipboard_items \
      LEFT JOIN clipboard_apps ON clipboard_apps.id = clipboard_items.source_app_id";
 
-/// 入库去重的结果：`id` 为生效行的主键（命中时是已有行，未命中时是新插入行），
-/// `deduplicated` 表示是否命中了已有内容（命中则只 `use_count + 1` 未插入新行）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpsertResult {
     pub id: String,
     pub deduplicated: bool,
 }
 
-/// 计算去重指纹：`blake3("<kind>:<content>")`。
-/// 加 `kind` 前缀，避免 text 与 files 恰好同串内容被误判为重复。
-/// text 直接哈希内容串即可；image/files 的 `content` 是落盘引用/路径，
-/// 调用方持有原始字节时可改为对原始内容字节哈希后写入 `content_hash`。
 pub fn content_hash(kind: ClipboardKind, content: &str) -> String {
     let mut hasher = Hasher::new();
     hasher.update(kind_tag(kind).as_bytes());
@@ -63,9 +52,6 @@ fn kind_tag(kind: ClipboardKind) -> &'static str {
     }
 }
 
-/// 入库主入口：按 `item.content_hash` 去重。
-/// 命中已有记录 → 复用 [`increment_item_use_count`] 累加并刷新 `updated_at`，不插入新行；
-/// 未命中 → 调用 [`insert_item`] 插入。返回生效行 id 与是否去重。
 pub async fn upsert_item(pool: &SqlitePool, item: &ClipboardItem) -> Result<UpsertResult> {
     if let Some(existing) = find_item_by_content_hash(pool, &item.content_hash).await? {
         increment_item_use_count(pool, &existing.id).await?;
@@ -82,7 +68,6 @@ pub async fn upsert_item(pool: &SqlitePool, item: &ClipboardItem) -> Result<Upse
     })
 }
 
-/// 按 `content_hash` 查最近一条同内容记录（命中 `idx_clipboard_items_content_hash` 索引）。
 pub async fn find_item_by_content_hash(
     pool: &SqlitePool,
     hash: &str,
@@ -100,7 +85,6 @@ pub async fn find_item_by_content_hash(
     Ok(item)
 }
 
-/// 插入一条剪贴板记录（不做去重；去重请走 [`upsert_item`]）。
 pub async fn insert_item(pool: &SqlitePool, item: &ClipboardItem) -> Result<()> {
     sqlx::query(
         "INSERT INTO clipboard_items \
@@ -136,17 +120,11 @@ pub async fn insert_item(pool: &SqlitePool, item: &ClipboardItem) -> Result<()> 
     Ok(())
 }
 
-/// 仅返回项的轻量查询：生产路径走 [`query_items_page`]（顺带返回 total），
-/// 本函数留给单元测试做断言。
 #[cfg(test)]
 pub async fn query_items(pool: &SqlitePool, q: &ClipboardItemQuery) -> Result<Vec<ClipboardItem>> {
     fetch_items(pool, q, KeywordFilter::from_keyword(q.keyword.as_deref())).await
 }
 
-/// 列表 + 总数一次返回，供命令层组装 [`ClipboardItemPage`]：
-/// 一次 IPC 拿到「本页项 / 当前过滤下的总数 / 是否还有下一页」。
-/// `keyword` 按字符长度分流：≥3 走 FTS5（trigram 分词），1–2 走 `LIKE '%kw%'`
-/// （兜底短词；trigram 索引最短 3 字符，对 1–2 字符词永远 0 命中）。
 pub async fn query_items_page(
     pool: &SqlitePool,
     q: &ClipboardItemQuery,
@@ -157,7 +135,6 @@ pub async fn query_items_page(
     Ok((items, total))
 }
 
-/// 按 `id` 查找单条记录，不存在时返回 `None`。
 pub async fn find_item_by_id(pool: &SqlitePool, id: &str) -> Result<Option<ClipboardItem>> {
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT_ITEM);
     qb.push(" WHERE id = ").push_bind(id.to_owned());
@@ -170,10 +147,6 @@ pub async fn find_item_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Clipb
     Ok(item)
 }
 
-/// 按 `id` 查找单条记录的「列表视图」副本——与 [`fetch_items`] 走同款 [`LIST_SELECT_ITEM`] 裁剪：
-/// text 类型条目的 `content` / `search_text` 一律置空，由前端用 `summary` 渲染。
-/// 供前端响应 `clipboard://updated` 事件时按 id 拉取使用，避免事件驱动刷新整页 refetch
-/// 时回传整段 HTML/RTF。需要完整 `content` 的写回 / 预览路径请走 [`find_item_by_id`]。
 pub async fn find_item_for_list_by_id(
     pool: &SqlitePool,
     id: &str,
@@ -190,7 +163,6 @@ pub async fn find_item_for_list_by_id(
     Ok(item)
 }
 
-/// 翻转 `is_favorite`（收藏 / 取消收藏），返回翻转后的新状态。
 pub async fn toggle_item_favorite(pool: &SqlitePool, id: &str) -> Result<bool> {
     let new_value: bool = sqlx::query_scalar(
         "UPDATE clipboard_items SET is_favorite = NOT is_favorite WHERE id = ? RETURNING is_favorite",
@@ -202,7 +174,6 @@ pub async fn toggle_item_favorite(pool: &SqlitePool, id: &str) -> Result<bool> {
     Ok(new_value)
 }
 
-/// 幂等地将 `is_favorite` 置为 true（已收藏的无变化）。auto-favorite 场景用。
 pub async fn mark_item_favorite(pool: &SqlitePool, id: &str) -> Result<()> {
     sqlx::query("UPDATE clipboard_items SET is_favorite = 1 WHERE id = ?")
         .bind(id)
@@ -212,7 +183,6 @@ pub async fn mark_item_favorite(pool: &SqlitePool, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// 翻转 `is_pinned`（置顶 / 取消置顶），返回翻转后的新状态。
 pub async fn toggle_item_pinned(pool: &SqlitePool, id: &str) -> Result<bool> {
     let new_value: bool = sqlx::query_scalar(
         "UPDATE clipboard_items SET is_pinned = NOT is_pinned WHERE id = ? RETURNING is_pinned",
@@ -224,7 +194,6 @@ pub async fn toggle_item_pinned(pool: &SqlitePool, id: &str) -> Result<bool> {
     Ok(new_value)
 }
 
-/// 更新备注，传 `None` 清空备注。
 pub async fn update_item_note(pool: &SqlitePool, id: &str, note: Option<&str>) -> Result<()> {
     sqlx::query("UPDATE clipboard_items SET note = ? WHERE id = ?")
         .bind(note)
@@ -235,7 +204,6 @@ pub async fn update_item_note(pool: &SqlitePool, id: &str, note: Option<&str>) -
     Ok(())
 }
 
-/// 更新条目所属分组；不刷新 `updated_at`，避免污染最近使用排序。
 pub async fn update_item_group(pool: &SqlitePool, id: &str, group_id: Option<&str>) -> Result<()> {
     sqlx::query("UPDATE clipboard_items SET group_id = ? WHERE id = ?")
         .bind(group_id)
@@ -246,7 +214,6 @@ pub async fn update_item_group(pool: &SqlitePool, id: &str, group_id: Option<&st
     Ok(())
 }
 
-/// `use_count + 1` 并刷新 `updated_at`（命中去重时复用）。
 pub async fn increment_item_use_count(pool: &SqlitePool, id: &str) -> Result<()> {
     sqlx::query(
         "UPDATE clipboard_items SET use_count = use_count + 1, updated_at = ? WHERE id = ?",
@@ -259,11 +226,6 @@ pub async fn increment_item_use_count(pool: &SqlitePool, id: &str) -> Result<()>
     Ok(())
 }
 
-/// 删除单条记录。若删除的是图片记录，返回其落盘文件名（`<hash>.png`），供调用方删图；
-/// 否则返回 `None`。记录不存在时也返回 `None`。
-///
-/// image 去重指纹源自 PNG 字节、落盘文件名即字节哈希，故库里同图至多一行，
-/// 删行后该文件必为孤儿，调用方可直接删，无需引用计数。
 pub async fn delete_item(pool: &SqlitePool, id: &str) -> Result<Option<String>> {
     let row = sqlx::query_as::<_, (ClipboardKind, String)>(
         "DELETE FROM clipboard_items WHERE id = ? RETURNING kind, content",
@@ -275,12 +237,10 @@ pub async fn delete_item(pool: &SqlitePool, id: &str) -> Result<Option<String>> 
     Ok(row.and_then(|(kind, content)| image_file_name(kind, content)))
 }
 
-/// 取被删行里需要连带删除的图片文件名：kind 为 image 时 `content` 即文件名，否则 `None`。
 fn image_file_name(kind: ClipboardKind, content: String) -> Option<String> {
     (kind == ClipboardKind::Image).then_some(content)
 }
 
-/// 批量删除，返回实际删除行数；`ids` 为空时不发查询。
 #[allow(dead_code)]
 pub async fn delete_items(pool: &SqlitePool, ids: &[String]) -> Result<u64> {
     if ids.is_empty() {
@@ -303,15 +263,12 @@ pub async fn delete_items(pool: &SqlitePool, ids: &[String]) -> Result<u64> {
     Ok(result.rows_affected())
 }
 
-/// 历史清理的结果：删除行数 + 其中图片记录的落盘文件名（供调用方删图）。
 #[derive(Debug, Default)]
 pub struct CleanupOutcome {
     pub removed: u64,
     pub image_files: Vec<String>,
 }
 
-/// 历史清理：按「时间下限」和「最大条数」删除条目；置顶 / 收藏项一律保留。
-/// 返回删除行数与被删图片的文件名。`older_than = None` 跳过时长清理；`max_count = None` 或 `Some(0)` 跳过条数清理。
 pub async fn cleanup_history(
     pool: &SqlitePool,
     older_than: Option<chrono::DateTime<chrono::Utc>>,
@@ -333,8 +290,6 @@ pub async fn cleanup_history(
     }
 
     if let Some(max) = max_count.filter(|n| *n > 0) {
-        // 仅在非置顶 / 非收藏集合内按 created_at DESC 保留前 max 条，多余的删除。
-        // SQLite 中 `LIMIT -1 OFFSET n` 表示「跳过前 n 条，剩下全要」。
         let rows = sqlx::query_as::<_, (ClipboardKind, String)>(
             "DELETE FROM clipboard_items WHERE id IN ( \
                  SELECT id FROM clipboard_items \
@@ -354,7 +309,6 @@ pub async fn cleanup_history(
     Ok(outcome)
 }
 
-/// 把一批被删行计入 outcome：累加行数，并收集其中的图片文件名。
 fn absorb_deleted(outcome: &mut CleanupOutcome, rows: Vec<(ClipboardKind, String)>) {
     outcome.removed += rows.len() as u64;
     outcome.image_files.extend(
@@ -363,7 +317,6 @@ fn absorb_deleted(outcome: &mut CleanupOutcome, rows: Vec<(ClipboardKind, String
     );
 }
 
-/// 清空记录，返回删除行数与被删图片文件名；未显式删除的收藏 / 置顶项会保留。
 pub async fn clear_items(
     pool: &SqlitePool,
     delete_favorites: bool,
@@ -393,24 +346,16 @@ pub async fn clear_items(
     Ok(outcome)
 }
 
-/// 关键词过滤分流：≥3 字符走 FTS5（trigram），1–2 字符走 LIKE 兜底，空 / 仅空白不过滤。
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum KeywordFilter {
     None,
-    /// `clipboard_items_fts MATCH ?` 的表达式，已含前缀通配。
+
     Fts(String),
-    /// 已转义 `% _ \` 的关键词；下游统一拼成 `%<kw>%` 多列模糊匹配。
+
     Like(String),
 }
 
 impl KeywordFilter {
-    /// 按字符数（非字节）判定走 FTS 还是 LIKE。CJK 一个字符也算 1，
-    /// 与 trigram 的 3 字符门槛保持一致。
-    ///
-    /// 注意：门槛按**每个空白分词**判定，而非整串字符数。trigram 索引对 <3 字符的
-    /// token 永远 0 命中，而 FTS5 表达式里多 token 之间默认是 AND —— 只要有一个短词，
-    /// 整条表达式就被拖成 0 结果（例如 `a b` 会生成 `"a"* "b"*`，二者皆 <3 字符）。
-    /// 因此仅当所有分词均 ≥3 字符时才走 FTS，否则降级到 LIKE 兜底。
     fn from_keyword(keyword: Option<&str>) -> Self {
         let Some(trimmed) = keyword.map(str::trim).filter(|s| !s.is_empty()) else {
             return Self::None;
@@ -430,8 +375,6 @@ impl KeywordFilter {
     }
 }
 
-/// 把用户关键词拆成 FTS5 前缀匹配表达式（如 `foo bar` -> `"foo"* "bar"*`）。
-/// 双引号包裹 + 转义，避免关键词中的 FTS5 语法字符被当作运算符。空白关键词返回 `None`。
 fn build_fts_expr(keyword: &str) -> Option<String> {
     let expr = keyword
         .split_whitespace()
@@ -442,7 +385,6 @@ fn build_fts_expr(keyword: &str) -> Option<String> {
     (!expr.is_empty()).then_some(expr)
 }
 
-/// 转义 LIKE 的特殊字符（`\ % _`），配合 SQL 端 `ESCAPE '\\'`。
 fn escape_like(keyword: &str) -> String {
     let mut out = String::with_capacity(keyword.len());
     for ch in keyword.chars() {
@@ -454,8 +396,6 @@ fn escape_like(keyword: &str) -> String {
     out
 }
 
-/// 拼装查询：过滤（含可选关键词匹配） + 排序（置顶恒前置） + 分页。
-/// 所有 bind 均传入拥有所有权/Copy 的值，避免 `QueryBuilder` 借用 `q` 引发的生命周期问题。
 async fn fetch_items(
     pool: &SqlitePool,
     q: &ClipboardItemQuery,
@@ -489,7 +429,6 @@ async fn fetch_items(
     Ok(items)
 }
 
-/// 统计满足同样过滤条件的总条数（不参与排序 / 分页），与 [`fetch_items`] 共用 [`push_filter_clauses`]。
 async fn fetch_items_count(
     pool: &SqlitePool,
     q: &ClipboardItemQuery,
@@ -507,7 +446,6 @@ async fn fetch_items_count(
     Ok(row.0)
 }
 
-/// 把当前查询的过滤条件追加到 `qb`（不含 ORDER BY / LIMIT / OFFSET），供列表查询与计数共用。
 fn push_filter_clauses(
     qb: &mut QueryBuilder<Sqlite>,
     q: &ClipboardItemQuery,
@@ -523,8 +461,6 @@ fn push_filter_clauses(
             .push(")");
         }
         KeywordFilter::Like(kw) => {
-            // FTS 索引覆盖 search_text / note 两列，LIKE 兜底也跟齐，
-            // 让 1–2 字符短词的命中范围与长词一致。
             let pattern = format!("%{kw}%");
             qb.push(" AND (clipboard_items.search_text LIKE ")
                 .push_bind(pattern.clone())
@@ -533,7 +469,7 @@ fn push_filter_clauses(
                 .push(" ESCAPE '\\')");
         }
     }
-    // group（UI Tab）覆盖显式 kind / favorite；为 None 时回退到显式字段（单测使用）。
+
     let (effective_kind, effective_favorite) = match q.group {
         Some(ClipboardGroupFilter::All) => (None, None),
         Some(ClipboardGroupFilter::Text) => (Some(ClipboardKind::Text), None),
@@ -652,7 +588,6 @@ mod tests {
         let first = sample_item("first");
         upsert_item(&pool, &first).await.unwrap();
 
-        // 不同 id，但内容相同 → content_hash 相同 → 命中去重，不插入新行。
         let mut dup = sample_item("second");
         dup.content = first.content.clone();
         dup.content_hash = first.content_hash.clone();
@@ -665,7 +600,7 @@ mod tests {
                 deduplicated: true,
             }
         );
-        // 仍只有一行，且命中行 use_count 累加到 2。
+
         let all = query_items(&pool, &ClipboardItemQuery::default())
             .await
             .unwrap();
@@ -696,17 +631,16 @@ mod tests {
 
     #[test]
     fn content_hash_is_stable_and_kind_scoped() {
-        // 同 kind 同内容 → 同哈希（稳定、可去重）。
         assert_eq!(
             content_hash(ClipboardKind::Text, "hello"),
             content_hash(ClipboardKind::Text, "hello")
         );
-        // 内容不同 → 哈希不同。
+
         assert_ne!(
             content_hash(ClipboardKind::Text, "hello"),
             content_hash(ClipboardKind::Text, "world")
         );
-        // 内容相同但 kind 不同 → 哈希不同（kind 前缀隔离）。
+
         assert_ne!(
             content_hash(ClipboardKind::Text, "same"),
             content_hash(ClipboardKind::Files, "same")
@@ -836,7 +770,6 @@ mod tests {
             insert_item(&pool, item).await.unwrap();
         }
 
-        // 置顶项 b 恒前置；其余按时间倒序 c(20) > a(0)。
         let by_time = query_items(
             &pool,
             &ClipboardItemQuery {
@@ -848,7 +781,6 @@ mod tests {
         .unwrap();
         assert_eq!(ids(&by_time), ["b", "c", "a"]);
 
-        // 置顶项 b 恒前置；其余按更新时间倒序 a(10) > c(0)。
         let by_updated = query_items(
             &pool,
             &ClipboardItemQuery {
@@ -860,7 +792,6 @@ mod tests {
         .unwrap();
         assert_eq!(ids(&by_updated), ["b", "a", "c"]);
 
-        // 置顶项 b 恒前置；其余按使用次数倒序 a(9) > c(5)。
         let by_use = query_items(
             &pool,
             &ClipboardItemQuery {
@@ -887,7 +818,7 @@ mod tests {
             offset,
             ..Default::default()
         };
-        // created_at 倒序：id4, id3, id2, id1, id0
+
         assert_eq!(
             ids(&query_items(&pool, &page(2, 0)).await.unwrap()),
             ["id4", "id3"]
@@ -1040,11 +971,9 @@ mod tests {
         let pool = memory_pool().await;
         insert_item(&pool, &sample_item("a")).await.unwrap();
 
-        // 文本行删除：无图片文件名返回。
         assert_eq!(delete_item(&pool, "a").await.unwrap(), None);
         assert!(find_item_by_id(&pool, "a").await.unwrap().is_none());
 
-        // 记录不存在：同样返回 None，不报错。
         assert_eq!(delete_item(&pool, "missing").await.unwrap(), None);
     }
 
@@ -1057,7 +986,6 @@ mod tests {
         img.content_hash = content_hash(ClipboardKind::Image, "deadbeef.png");
         insert_item(&pool, &img).await.unwrap();
 
-        // 图片行删除：返回落盘文件名供调用方删图。
         assert_eq!(
             delete_item(&pool, "img").await.unwrap().as_deref(),
             Some("deadbeef.png")
@@ -1158,14 +1086,14 @@ mod tests {
         let all = query_items(&pool, &ClipboardItemQuery::default())
             .await
             .unwrap();
-        // 置顶项恒前置；保留集合：old-pin、old-fav、recent。
+
         assert_eq!(ids(&all), ["old-pin", "recent", "old-fav"]);
     }
 
     #[tokio::test]
     async fn cleanup_history_enforces_max_count_keeping_pinned_and_favorite() {
         let pool = memory_pool().await;
-        // 五条普通项 + 一条收藏 + 一条置顶；max_count = 2 时仅保留两条最新的普通项。
+
         for n in 0..5i64 {
             let mut it = sample_item(&format!("p{n}"));
             it.created_at = DateTime::from_timestamp(1_000 + n, 0).unwrap();
@@ -1181,7 +1109,7 @@ mod tests {
         insert_item(&pool, &pin).await.unwrap();
 
         let outcome = cleanup_history(&pool, None, Some(2)).await.unwrap();
-        assert_eq!(outcome.removed, 3); // p0, p1, p2 被删
+        assert_eq!(outcome.removed, 3);
         assert!(outcome.image_files.is_empty());
 
         let all = query_items(&pool, &ClipboardItemQuery::default())
@@ -1208,7 +1136,7 @@ mod tests {
     #[tokio::test]
     async fn cleanup_history_collects_deleted_image_file_names() {
         let pool = memory_pool().await;
-        // 一条旧图片 + 一条旧文本，都早于 cutoff；只有图片应进入 image_files。
+
         let mut img = sample_item("img");
         img.kind = ClipboardKind::Image;
         img.content = "cafe1234.png".to_owned();
@@ -1233,17 +1161,15 @@ mod tests {
             KeywordFilter::None
         );
 
-        // 1–2 字符走 LIKE（含 CJK）。
         assert_eq!(
             KeywordFilter::from_keyword(Some("a")),
             KeywordFilter::Like("a".to_owned())
         );
         assert_eq!(
-            KeywordFilter::from_keyword(Some("中文")),
-            KeywordFilter::Like("中文".to_owned())
+            KeywordFilter::from_keyword(Some("한국")),
+            KeywordFilter::Like("한국".to_owned())
         );
 
-        // ≥3 字符走 FTS。
         assert_eq!(
             KeywordFilter::from_keyword(Some("foo")),
             KeywordFilter::Fts("\"foo\"*".to_owned())
@@ -1260,8 +1186,6 @@ mod tests {
 
     #[test]
     fn keyword_filter_drops_multi_token_short_words_to_like() {
-        // 整串 ≥3 字符，但每个空白分词都 <3 字符：trigram 对 <3 字符 token 永远 0 命中，
-        // 且 FTS5 多 token 默认 AND，整条表达式会被任一短词拖成 0 结果 → 必须降级 LIKE。
         assert_eq!(
             KeywordFilter::from_keyword(Some("a b")),
             KeywordFilter::Like("a b".to_owned())
@@ -1270,12 +1194,12 @@ mod tests {
             KeywordFilter::from_keyword(Some("ab cd")),
             KeywordFilter::Like("ab cd".to_owned())
         );
-        // 混合长度：只要有一个分词 <3 字符，整条 FTS 表达式就会被拖成 0 命中 → LIKE。
+
         assert_eq!(
             KeywordFilter::from_keyword(Some("foo b")),
             KeywordFilter::Like("foo b".to_owned())
         );
-        // 所有分词均 ≥3 字符仍走 FTS（回归保障，语义不变）。
+
         assert_eq!(
             KeywordFilter::from_keyword(Some("foo bar baz")),
             KeywordFilter::Fts("\"foo\"* \"bar\"* \"baz\"*".to_owned())
@@ -1296,8 +1220,6 @@ mod tests {
             ..Default::default()
         };
 
-        // 旧逻辑按整串字符数（5 ≥ 3）判走 FTS：`"ab"* "cd"*`，两个 token 均 <3 字符，
-        // trigram 返回 0 行 → 搜不到刚插入的记录。现按分词长度降级 LIKE `%ab cd%`，命中。
         let found = query_items(&pool, &q).await.unwrap();
         assert_eq!(ids(&found), ["short"]);
     }

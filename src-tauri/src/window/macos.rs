@@ -1,5 +1,5 @@
-//! macOS 窗口管理：剪贴板窗口转 NSPanel（show_and_make_key 拿键盘焦点但不激活 App），
-//! 其它窗口走常规 show/hide。
+//! macOS window management. The clipboard window uses an NSPanel, while other
+//! windows use the regular show and hide path.
 
 #![allow(clippy::unused_unit)]
 
@@ -30,12 +30,10 @@ tauri_panel! {
     })
 }
 
-/// setup 最早阶段调用：plugin 必须在 to_panel 前注册。
 pub fn register_plugin(app_handle: &AppHandle) {
     let _ = app_handle.plugin(tauri_nspanel::init());
 }
 
-/// setup 末尾调用：转 NSPanel + 绑事件 emit。
 pub fn setup_clipboard_panel(app_handle: &AppHandle) -> Result<()> {
     show_taskbar_icon(app_handle, false)?;
 
@@ -64,8 +62,6 @@ pub fn setup_clipboard_panel(app_handle: &AppHandle) -> Result<()> {
             return;
         }
 
-        // 失焦即隐藏：Tauri 不主动隐藏 NSPanel，统一走 window::hide_window
-        // 以触发 `window://visibility` 等下游副作用。
         if let Err(err) = super::hide_window(&resign_handle, CLIPBOARD_WINDOW_LABEL) {
             log::warn!("auto-hide clipboard window on resign-key failed: {err}");
         }
@@ -106,7 +102,6 @@ pub fn show_taskbar_icon(app_handle: &AppHandle, visible: bool) -> Result<()> {
     Ok(())
 }
 
-/// 点击 dock 图标 reopen 时，无可见窗口则唤起偏好窗口。
 pub fn handle_reopen(app_handle: &AppHandle, has_visible_windows: bool) {
     if has_visible_windows {
         return;
@@ -126,7 +121,6 @@ pub fn handle_reopen(app_handle: &AppHandle, has_visible_windows: bool) {
     }
 }
 
-/// 所有 panel 方法必须在主线程。
 fn show_clipboard_panel(app_handle: &AppHandle) -> Result<()> {
     let handle = app_handle.clone();
 
@@ -137,7 +131,7 @@ fn show_clipboard_panel(app_handle: &AppHandle) -> Result<()> {
         if let Err(err) = handle.run_on_main_thread(move || {
             if let Ok(panel) = panel_handle.get_webview_panel(CLIPBOARD_WINDOW_LABEL) {
                 panel.show_and_make_key();
-                // show 时切到 can_join_all_spaces：跟随用户当前 space 出现。
+
                 panel.set_collection_behavior(
                     CollectionBehavior::new()
                         .stationary()
@@ -163,7 +157,7 @@ fn hide_clipboard_panel(app_handle: &AppHandle) -> Result<()> {
         .run_on_main_thread(move || {
             if let Ok(panel) = handle.get_webview_panel(CLIPBOARD_WINDOW_LABEL) {
                 panel.hide();
-                // hide 后切回 move_to_active_space：下次 show 时按当前 space 重新落位。
+
                 panel.set_collection_behavior(
                     CollectionBehavior::new()
                         .stationary()
@@ -177,8 +171,6 @@ fn hide_clipboard_panel(app_handle: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 让主 panel 放弃 key 状态，但保持可见——用于固定窗口下的粘贴：
-/// panel 仍是 key window 时 CGEvent ⌘V 会被 panel 自身吞掉，resign 后键焦点回到前台 App 的窗口。
 pub fn resign_clipboard_panel_key(app_handle: &AppHandle) -> Result<()> {
     let handle = app_handle.clone();
     app_handle
@@ -191,7 +183,6 @@ pub fn resign_clipboard_panel_key(app_handle: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 粘贴完成后把 key 状态拿回来：固定窗口模式下用户还要继续用键盘 / 列表操作。
 pub fn make_clipboard_panel_key(app_handle: &AppHandle) -> Result<()> {
     let handle = app_handle.clone();
     app_handle

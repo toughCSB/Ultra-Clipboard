@@ -1,15 +1,3 @@
-//! macOS drag-out 实现（vendor 自 `drag` v2.1.1 的 macOS 路径，做两点改造）：
-//!
-//! 1. **预览图 DPI 解耦**：固定调 `NSImage::setSize(POINT_SIZE × POINT_SIZE)`，
-//!    把高分辨率 PNG（如 256px）当作 Retina @2x 渲染到 [`POINT_SIZE`] pt 的显示框里——
-//!    跟随光标的视觉大小由 `POINT_SIZE` 决定，清晰度由源 PNG 像素决定，互相独立。
-//!    `drag` crate 用 `img.size()` 原样作为显示尺寸（pixels == points），
-//!    256px PNG 飞起来就有 256pt 那么大，无法兼顾「清晰 + 不过大」。
-//! 2. **直接用 `WebviewWindow::ns_view`**，不再依赖 `raw-window-handle`，减少一个外部 crate。
-//!
-//! 其余（NSDraggingItem / NSPasteboardItem / DragRsSource 等）一比一照搬，
-//! 仅做 use 路径整理。
-
 use std::ffi::c_void;
 use std::path::PathBuf;
 
@@ -29,15 +17,12 @@ use tauri::WebviewWindow;
 
 use crate::core::{AppError, Result};
 
-/// 拖拽预览图的显示尺寸（pt）。给到的源 PNG 像素 = `POINT_SIZE * scale`（Retina 屏 scale=2）
-/// 才能保证不模糊；目前上层固定传 256px PNG，对应 @2x 下 128pt 显示框。
 const POINT_SIZE: f64 = 128.0;
 
-/// `public.utf8-plain-text` UTI；NSPasteboard 自带的 UTF-8 文本类型。
 const UTI_UTF8_PLAIN_TEXT: &str = "public.utf8-plain-text";
-/// `public.html` UTI；NSPasteboard 自带的 HTML 类型。
+
 const UTI_HTML: &str = "public.html";
-/// `public.rtf` UTI；NSPasteboard 自带的 RTF 类型。
+
 const UTI_RTF: &str = "public.rtf";
 
 type OnDropCallback = Box<dyn Fn(DragResult) + Send>;
@@ -100,13 +85,6 @@ impl DragSource {
     }
 }
 
-/// 在 `window` 上启动一次文件 drag-out。
-///
-/// `preview_png` 是高分辨率源图字节（推荐 256px），会被 [`POINT_SIZE`] 归一为显示框；
-/// 为 `None` 时退回用首个路径让 `NSImage` 自己 referencingFile（图片 / PDF 能出 QuickLook 缩略图，
-/// 其余文件类型可能为空白）。
-///
-/// **必须在主线程调用**。调用方（命令层）用 `app.run_on_main_thread` 派发。
 pub fn start_drag_files<F: Fn(DragResult) + Send + 'static>(
     window: &WebviewWindow,
     paths: Vec<PathBuf>,
@@ -137,12 +115,6 @@ pub fn start_drag_files<F: Fn(DragResult) + Send + 'static>(
     }
 }
 
-/// 在 `window` 上启动一次文本 drag-out（plain + 可选 html / rtf）。
-///
-/// 同一个 `NSPasteboardItem` 多次 `setString:forType:`，AppKit 会让接收方按偏好选格式：
-/// Word / Pages 优先 RTF，浏览器 / 富文本编辑器优先 HTML，纯文本 app 退回 plain。
-///
-/// **必须在主线程调用**。
 pub fn start_drag_text<F: Fn(DragResult) + Send + 'static>(
     window: &WebviewWindow,
     plain: String,
@@ -156,8 +128,6 @@ pub fn start_drag_text<F: Fn(DragResult) + Send + 'static>(
     }
 
     unsafe {
-        // 优先用上层传入的 PNG；缺失或解码失败时用 plain 现场渲染一张文本卡，
-        // 比通用 app 图标更有辨识度（参考 Safari 拖文字的预览）。
         let img = build_preview_image(preview_png, None)
             .unwrap_or_else(|_| render_text_preview_image(&plain));
 
@@ -186,8 +156,6 @@ pub fn start_drag_text<F: Fn(DragResult) + Send + 'static>(
     }
 }
 
-/// 统一的 dragging session 启动：取 ns_view / contentView，构造 mouseDragged NSEvent，
-/// 给所有 dragging item 设同一张预览图（居中于光标），调 `beginDraggingSession`。
 unsafe fn begin_drag_session<F: Fn(DragResult) + Send + 'static>(
     window: &WebviewWindow,
     dragging_items: &NSMutableArray<NSDraggingItem>,
@@ -210,9 +178,6 @@ unsafe fn begin_drag_session<F: Fn(DragResult) + Send + 'static>(
 
     let cursor: NSPoint = ns_window.mouseLocationOutsideOfEventStream();
 
-    // 关键：把 NSImage 的逻辑 size 归一化——长边固定为 POINT_SIZE pt，短边按原 PNG 比例缩放，
-    // 与源 PNG 像素解耦。对正方形源图（如 OS 文件图标）就是 POINT_SIZE×POINT_SIZE；
-    // 对长矩形（如卡片截图）保持原比例不压扁。
     let raw = img.size();
     let (disp_w, disp_h) = if raw.width > 0.0 && raw.height > 0.0 {
         let longest = raw.width.max(raw.height);
@@ -259,7 +224,6 @@ unsafe fn begin_drag_session<F: Fn(DragResult) + Send + 'static>(
     Ok(())
 }
 
-/// 优先用传入的 PNG 字节；为空或解码失败时退回用首个路径 `initByReferencingFile`。
 unsafe fn build_preview_image(
     preview_png: Option<Vec<u8>>,
     fallback_path: Option<&PathBuf>,
@@ -280,18 +244,11 @@ unsafe fn build_preview_image(
     .ok_or_else(|| AppError::Clipboard("NSImage init failed".to_string()))
 }
 
-/// 文本预览图边长（pt，正方形）。外层 `begin_drag_session` 会按比例缩到 `POINT_SIZE`；
-/// 这里画在 2× `POINT_SIZE` 的 NSImage 上，让光标跟随预览保持 Retina 清晰度。
 const TEXT_PREVIEW_PT: f64 = POINT_SIZE * 2.0;
-/// 文本预览中最多显示的字符数；超出截断 + 加省略号，避免极长内容拖慢 layout。
+
 const TEXT_PREVIEW_MAX_CHARS: usize = 280;
 
-/// 把 `text` 现场渲染成一张文本卡片 NSImage 用作 drag 预览，
-/// 视觉模仿 Safari 拖选中文字（白底圆角 + 黑色正文 + 边距）。
-///
-/// 实现路径：`NSImage::lockFocus` → 填白底 → `NSAttributedString::drawInRect`。
-/// 必须在主线程（`begin_drag_session` 同侧）调用。
-#[allow(deprecated)] // lockFocus/unlockFocus 仍可用；block API（imageWithSize:flipped:drawingHandler:）在 Rust 侧写起来过重。
+#[allow(deprecated)]
 unsafe fn render_text_preview_image(text: &str) -> Retained<NSImage> {
     let size = NSSize::new(TEXT_PREVIEW_PT, TEXT_PREVIEW_PT);
     let img = NSImage::initWithSize(NSImage::alloc(), size);
@@ -299,7 +256,6 @@ unsafe fn render_text_preview_image(text: &str) -> Retained<NSImage> {
     let snippet = clamp_text(text, TEXT_PREVIEW_MAX_CHARS);
     let ns_text = NSString::from_str(&snippet);
 
-    // 字号按预览框估算：约 7 行可见，留点呼吸感。
     let font = NSFont::systemFontOfSize(20.0);
     let color = NSColor::labelColor();
     let para = NSMutableParagraphStyle::new();
@@ -325,9 +281,6 @@ unsafe fn render_text_preview_image(text: &str) -> Retained<NSImage> {
 
     img.lockFocus();
 
-    // 圆角白卡：先按圆角路径裁剪，再填背景色，文字绘制自然落在圆角内。
-    // 颜色用 NSColor 的语义色（textBackgroundColor / labelColor），
-    // 跟随系统外观自动深浅，与 app 内主题切换的视觉一致。
     let full_rect = NSRect::new(NSPoint::ZERO, size);
     let corner_radius = 20.0;
     let clip_path = NSBezierPath::bezierPathWithRoundedRect_xRadius_yRadius(
@@ -341,7 +294,6 @@ unsafe fn render_text_preview_image(text: &str) -> Retained<NSImage> {
     bg.setFill();
     clip_path.fill();
 
-    // 文本绘制区域：四周留 16pt 边距
     let padding = 16.0;
     let text_rect = NSRect::new(
         NSPoint::new(padding, padding),
@@ -354,7 +306,6 @@ unsafe fn render_text_preview_image(text: &str) -> Retained<NSImage> {
     img
 }
 
-/// 截断 + 折行规整：超长的添省略号；连续空行压成单个换行，避免预览全是空白。
 fn clamp_text(text: &str, max_chars: usize) -> String {
     let mut out = String::new();
     let mut last_was_newline = false;

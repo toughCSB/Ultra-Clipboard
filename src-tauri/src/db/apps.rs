@@ -1,7 +1,3 @@
-//! 来源应用仓储：以 macOS bundle id / Windows exe 路径作主键去重，
-//! 同 id 二次入库走「保留 created_at、刷新 name/icon_file/updated_at」语义——
-//! 应用改名或换图标时无需重建条目，引用方（`clipboard_items.source_app_id`）天然跟着更新。
-
 use anyhow::Context;
 use chrono::Utc;
 use sqlx::{QueryBuilder, Sqlite, SqlitePool};
@@ -12,7 +8,6 @@ use crate::db::models::ClipboardApp;
 const SELECT_APP: &str = "SELECT id, name, icon_file, platform, created_at, updated_at \
      FROM clipboard_apps";
 
-/// 按 id 查单条记录。
 #[allow(dead_code)]
 pub async fn find_app_by_id(pool: &SqlitePool, id: &str) -> Result<Option<ClipboardApp>> {
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT_APP);
@@ -25,8 +20,6 @@ pub async fn find_app_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Clipbo
     Ok(row)
 }
 
-/// 按 id 列表批量取——给前端渲染卡片时一次性补齐 icon/name 用。
-/// 空列表直接返回空结果，避免拼出 `IN ()` 这种非法 SQL。
 pub async fn list_apps_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<Vec<ClipboardApp>> {
     if ids.is_empty() {
         return Ok(Vec::new());
@@ -46,8 +39,6 @@ pub async fn list_apps_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<Vec<C
     Ok(rows)
 }
 
-/// 列出全部已知应用（监听过程中捕获、手动添加或默认忽略物化的应用）。
-/// 名称按大小写不敏感升序，给前端过滤选择 UI 一个稳定顺序。
 pub async fn list_all_apps(pool: &SqlitePool) -> Result<Vec<ClipboardApp>> {
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT_APP);
     qb.push(" ORDER BY name COLLATE NOCASE ASC, id ASC");
@@ -59,7 +50,6 @@ pub async fn list_all_apps(pool: &SqlitePool) -> Result<Vec<ClipboardApp>> {
     Ok(rows)
 }
 
-/// 删除未被历史记录引用的来源应用，返回实际删除的应用 id。
 pub async fn delete_unreferenced_apps(pool: &SqlitePool, ids: &[String]) -> Result<Vec<String>> {
     let mut deleted = Vec::new();
 
@@ -83,8 +73,6 @@ pub async fn delete_unreferenced_apps(pool: &SqlitePool, ids: &[String]) -> Resu
     Ok(deleted)
 }
 
-/// upsert：id 已存在则只刷新 name / icon_file / updated_at；不存在则全量插入。
-/// 显式分两路而非依赖 `INSERT OR REPLACE`：后者会重置 created_at 与（潜在的）外键级联。
 pub async fn upsert_app(pool: &SqlitePool, app: &ClipboardApp) -> Result<()> {
     let now = Utc::now();
     let updated = sqlx::query(
@@ -156,7 +144,6 @@ mod tests {
         upsert_app(&pool, &app).await.unwrap();
         let first = find_app_by_id(&pool, &app.id).await.unwrap().unwrap();
 
-        // 同 id 再写：改名、换图标。
         app.name = "renamed".to_owned();
         app.icon_file = Some("other.png".to_owned());
         upsert_app(&pool, &app).await.unwrap();
@@ -164,7 +151,7 @@ mod tests {
         let after = find_app_by_id(&pool, &app.id).await.unwrap().unwrap();
         assert_eq!(after.name, "renamed");
         assert_eq!(after.icon_file.as_deref(), Some("other.png"));
-        // created_at 不变；updated_at 刷新（>= 原值，避免时间精度抖动）。
+
         assert_eq!(after.created_at, first.created_at);
         assert!(after.updated_at >= first.updated_at);
     }

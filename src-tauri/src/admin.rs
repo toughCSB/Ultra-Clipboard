@@ -1,5 +1,4 @@
 //! Windows administrator launch support.
-//!
 //! The persistent setting records intent. The current process token remains the
 //! source of truth for whether the app is actually elevated.
 

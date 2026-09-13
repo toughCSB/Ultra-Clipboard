@@ -4,7 +4,6 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::core::{AppError, Result};
 
-/// 打开经过白名单校验的外部网页 URL。
 #[tauri::command]
 pub async fn open_external_url(app: AppHandle, url: String) -> Result<()> {
     let normalized = url.trim();

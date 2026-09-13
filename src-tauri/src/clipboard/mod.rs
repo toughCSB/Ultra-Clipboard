@@ -38,12 +38,8 @@ pub use write::write_to_clipboard;
 pub(crate) mod test_lock {
     use std::sync::{Mutex, MutexGuard};
 
-    /// 系统剪贴板是单一全局资源，触碰它的测试不能并行（否则相互覆盖内容而 flaky）。
-    /// 这些测试统一持有此锁串行执行，即使用默认多线程 runner 也稳定。
     static LOCK: Mutex<()> = Mutex::new(());
 
-    /// 获取串行锁。即便上一个持锁测试 panic 导致锁中毒，也恢复使用——
-    /// 锁仅用于串行化，内部 `()` 无状态可破坏。
     pub fn serial() -> MutexGuard<'static, ()> {
         LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }

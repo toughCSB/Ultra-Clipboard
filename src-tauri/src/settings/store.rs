@@ -1,8 +1,5 @@
-//! 设置持久化。
-//!
-//! - 落盘位置：`<app_data_dir>/config/settings.json`（dev/prod 由 `core::paths` 的环境子目录隔离）。
-//! - 写入流程：先写到 `settings.json.tmp`，再原子替换主文件，避免中途断电留下半截 JSON。
-//! - 缺字段兼容：`Settings` 各结构体都 `#[serde(default)]`，新版本新增字段不影响旧文件。
+//! Persists settings with a temporary file followed by an atomic rename.
+//! Serde defaults preserve compatibility with older configuration files.
 
 use std::fs;
 use std::io::Write;
@@ -36,7 +33,6 @@ impl SettingsStore {
         let current = match load_from_disk(&path) {
             Some(settings) => settings,
             None => {
-                // 真·首次启动：用系统 locale 推导默认语言并落盘，之后所有读取都走常规分支。
                 let settings = default_settings_with_system_locale();
                 if let Err(err) = write_atomic(&path, &settings) {
                     log::warn!("persist first-run settings failed: {err}");
@@ -56,7 +52,6 @@ impl SettingsStore {
         self.current.read().expect("settings poisoned").clone()
     }
 
-    /// 恢复默认设置并落盘，返回新的完整快照。
     pub fn reset(&self) -> Result<Settings> {
         let next = default_settings_with_system_locale();
 
@@ -66,8 +61,6 @@ impl SettingsStore {
         Ok(next)
     }
 
-    /// 用 JSON patch 深度合并到当前设置，落盘后返回新快照。
-    /// patch 必须是 object；非 object 视为「整个替换」语义不友好，直接报错。
     pub fn update(&self, patch: serde_json::Value) -> Result<Settings> {
         if !patch.is_object() {
             return Err(AppError::Other(anyhow::anyhow!(
@@ -92,7 +85,6 @@ impl SettingsStore {
         Ok(next)
     }
 
-    /// 用完整设置文件替换当前设置；覆盖导入专用。
     pub fn replace_from_file(&self, path: &Path) -> Result<Settings> {
         let content =
             fs::read_to_string(path).with_context(|| format!("failed to read {path:?}"))?;
@@ -107,7 +99,6 @@ impl SettingsStore {
         Ok(next)
     }
 
-    /// 数据目录热切换后重新绑定设置文件，并把新路径里的设置加载进内存。
     pub fn rebase(&self, app: &AppHandle) -> Result<Settings> {
         let dir = crate::core::paths::config_dir(app)?;
         fs::create_dir_all(&dir).with_context(|| format!("failed to create dir at {dir:?}"))?;
@@ -131,7 +122,6 @@ impl SettingsStore {
     }
 }
 
-/// 生成默认设置，并沿用首次启动的系统语言推导规则。
 fn default_settings_with_system_locale() -> Settings {
     let mut settings = Settings::default();
     if let Some(tag) = tauri_plugin_os::locale() {
@@ -144,9 +134,6 @@ fn default_settings_with_system_locale() -> Settings {
     settings
 }
 
-/// 返回 `None` 表示主文件不存在（首次启动），调用方据此走「初始化默认」分支；
-/// 读取过程中遇到 IO/解析错误会打 warn，并返回 `Settings::default()` 包装在 `Some` 里——
-/// 这条路径表示「文件存在但坏了」，不要当成首次启动覆盖系统 locale。
 fn load_from_disk(path: &Path) -> Option<Settings> {
     if !path.exists() {
         return None;
@@ -164,7 +151,6 @@ fn load_from_disk(path: &Path) -> Option<Settings> {
     }
 }
 
-/// 写入策略：把新内容写到 tmp 后 rename 成主文件；rename 在同一文件系统下是原子的。
 fn write_atomic(path: &Path, settings: &Settings) -> Result<()> {
     let json = serde_json::to_string_pretty(settings).context("failed to serialize settings")?;
 
@@ -181,7 +167,6 @@ fn write_atomic(path: &Path, settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-/// 校验设置之间的跨字段约束，避免非法配置写入磁盘。
 fn validate_settings(settings: &Settings) -> Result<()> {
     validate_window_open_group(&settings.clipboard.window.select_group_on_open)?;
 
@@ -201,7 +186,6 @@ fn validate_settings(settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-/// 校验打开剪贴板窗口时选中分组的字符串编码，避免非法设置值落盘。
 fn validate_window_open_group(value: &str) -> Result<()> {
     if value == WINDOW_OPEN_SELECTION_PRESERVE || value == WINDOW_OPEN_SELECTION_ALL {
         return Ok(());
@@ -222,7 +206,6 @@ fn validate_window_open_group(value: &str) -> Result<()> {
     Ok(())
 }
 
-/// 归一化快捷键字面量，供跨字段校验忽略大小写和多余空白。
 fn normalize_shortcut_value(value: &str) -> String {
     value
         .split('+')
@@ -351,6 +334,18 @@ mod tests {
             parsed.clipboard.window.select_group_on_open,
             crate::settings::WINDOW_OPEN_SELECTION_PRESERVE
         );
+    }
+
+    #[test]
+    fn legacy_chinese_language_deserializes_and_serializes_as_korean() {
+        let parsed: Settings =
+            serde_json::from_str(r#"{"appearance":{"language":"zh-CN"}}"#).unwrap();
+
+        assert_eq!(parsed.appearance.language, Language::KoKR);
+
+        let serialized = serde_json::to_string(&parsed).unwrap();
+        assert!(serialized.contains(r#""language":"ko-KR""#));
+        assert!(!serialized.contains("zh-CN"));
     }
 
     #[test]

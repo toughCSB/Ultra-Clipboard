@@ -1,8 +1,3 @@
-//! 历史清理后台任务：按 `clipboard.history.retention` + `maxCount` 定期裁剪。
-//!
-//! 启动即跑一次；之后按用户设置的清理周期触发，每次都从 `SettingsStore` 取最新配置——
-//! 用户在偏好里调时长 / 上限后不必重启即可生效。置顶与收藏项一律保留（由 [`cleanup_history`] 保证）。
-
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
@@ -14,10 +9,8 @@ use super::watcher::CLIPBOARD_UPDATED_EVENT;
 use crate::db::items::cleanup_history;
 use crate::settings::{Retention, RetentionUnit, SettingsStore};
 
-/// 调度器检查设置与到期状态的频率；真正清理只在用户设置周期到期后执行。
 const SCHEDULER_TICK_INTERVAL: Duration = Duration::from_secs(60);
 
-/// 启动历史清理后台任务：启动立即清理一次，之后按设置周期到点清理。
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         run_once(&app).await;
@@ -71,7 +64,6 @@ async fn run_once(app: &AppHandle) {
     }
 }
 
-/// 读取当前清理周期。`0` 表示关闭周期性清理。
 fn cleanup_interval(app: &AppHandle) -> Option<Duration> {
     let store = app.try_state::<SettingsStore>()?;
     let hours = store.snapshot().clipboard.history.cleanup_interval_hours;
@@ -83,8 +75,6 @@ fn cleanup_interval(app: &AppHandle) -> Option<Duration> {
     Some(Duration::from_secs(u64::from(hours) * 60 * 60))
 }
 
-/// 删除被清理图片记录的落盘文件（原图 + 缩略图）。`ImageStore` 未注册或单个文件删除失败
-/// 都只记日志、不阻断——清理本身已成功，残留文件最坏只是占用磁盘，不影响功能。
 fn remove_images(app: &AppHandle, file_names: &[String]) {
     if file_names.is_empty() {
         return;
@@ -103,8 +93,6 @@ fn remove_images(app: &AppHandle, file_names: &[String]) {
     }
 }
 
-/// `Retention` → 绝对截止时间。`Forever` 或 `value == 0` 表示禁用。
-/// 月份近似按 30 天处理（与前端展示口径一致，不引日历库）。
 fn retention_cutoff(r: &Retention, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
     if r.value == 0 {
         return None;

@@ -1,7 +1,5 @@
-//! 全局快捷键：注册由 Rust 主导，前端在偏好设置里改完通过 `update_settings` 触发重注册。
-//!
-//! 配置来自 `settings::Shortcuts`。本模块只负责 OS 级注册——`paste_plain`
-//! 是窗口内交互（前端 `useKeyPress`），不在这里处理。
+//! Rust owns global shortcut registration. Frontend shortcut editing suspends
+//! registration and applies the latest settings when editing finishes.
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -40,7 +38,6 @@ struct ShortcutPause {
 }
 
 impl ShortcutPause {
-    /// 记录一次暂停请求，并返回是否需要实际注销已注册快捷键。
     fn suspend(&mut self) -> bool {
         self.resume_epoch += 1;
         self.suspend_count += 1;
@@ -48,7 +45,6 @@ impl ShortcutPause {
         self.suspend_count == 1
     }
 
-    /// 释放一次暂停请求；返回 `None` 表示没有对应的暂停可释放。
     fn resume(&mut self) -> Option<bool> {
         if self.suspend_count == 0 {
             return None;
@@ -59,18 +55,15 @@ impl ShortcutPause {
         Some(self.suspend_count == 0)
     }
 
-    /// 开启新的恢复世代，用于让更早的延迟恢复任务失效。
     fn next_resume_epoch(&mut self) -> u64 {
         self.resume_epoch += 1;
         self.resume_epoch
     }
 
-    /// 判断延迟恢复任务是否仍对当前暂停状态有效。
     fn allows_resume(&self, epoch: u64) -> bool {
         self.resume_epoch == epoch && self.suspend_count == 0
     }
 
-    /// 判断全局快捷键是否处于暂停态。
     fn suspended(&self) -> bool {
         self.suspend_count > 0
     }
@@ -81,7 +74,6 @@ pub fn init(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
     apply(app, shortcuts)
 }
 
-/// 暂停所有已注册的全局快捷键；用于前端录入快捷键期间避免旧绑定被触发。
 pub fn suspend(app: &AppHandle) -> Result<()> {
     let manager = app.state::<ShortcutManager>();
     let should_unregister = {
@@ -96,7 +88,6 @@ pub fn suspend(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 释放一次全局快捷键暂停；只有所有录入器都结束后才按最新设置恢复注册。
 pub fn resume(app: &AppHandle) -> Result<()> {
     let manager = app.state::<ShortcutManager>();
     let should_schedule = {
@@ -119,7 +110,6 @@ pub fn resume(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 全量替换：先取消上一轮注册，再逐个注册新项。注册失败仅 emit 不中断其它项。
 pub fn apply(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
     unregister_active(app)?;
 
@@ -163,7 +153,6 @@ pub fn apply(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
     Ok(())
 }
 
-/// 判断是否仍有录入器持有全局快捷键暂停。
 fn is_suspended(app: &AppHandle) -> bool {
     app.state::<ShortcutManager>()
         .pause
@@ -172,7 +161,6 @@ fn is_suspended(app: &AppHandle) -> bool {
         .suspended()
 }
 
-/// 延迟恢复全局快捷键；若用户立即切到另一个录入器，新 suspend 会让本次恢复失效。
 fn schedule_resume(app: &AppHandle) {
     let app = app.clone();
     let epoch = {
@@ -195,7 +183,6 @@ fn schedule_resume(app: &AppHandle) {
     });
 }
 
-/// 只有仍处于同一恢复世代且暂停计数为 0 时，延迟恢复任务才允许执行。
 fn should_run_scheduled_resume(app: &AppHandle, epoch: u64) -> bool {
     let manager = app.state::<ShortcutManager>();
     let pause = manager.pause.lock().expect("shortcut state poisoned");
@@ -203,7 +190,6 @@ fn should_run_scheduled_resume(app: &AppHandle, epoch: u64) -> bool {
     pause.allows_resume(epoch)
 }
 
-/// 取消当前轮所有已注册快捷键，并清空内部 active 状态。
 fn unregister_active(app: &AppHandle) -> Result<()> {
     let plugin = app.global_shortcut();
     let manager = app.state::<ShortcutManager>();
@@ -242,7 +228,6 @@ fn register_one(app: &AppHandle, action: &'static str, binding: &str) -> Result<
 }
 
 fn handle_event(app: &AppHandle, action: &'static str, event: ShortcutEvent) {
-    // Pressed 触发一次即可（Released 是按键松开），避免 toggle 在按下/松开各执行一次回弹。
     if !matches!(event.state(), ShortcutState::Pressed) {
         return;
     }

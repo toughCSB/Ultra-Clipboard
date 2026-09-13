@@ -1,12 +1,3 @@
-//! 应用 icon 落盘：按 PNG 字节 blake3 命名，平铺在单层目录下。
-//!
-//! 目录：`<app_local_data>/resources/app-icons/<hash>.png`。
-//! 同 icon（同字节）天然去重：不同应用若指向相同 icon 二进制只占一份。
-//! `clipboard_apps.icon_file` 存「`<hash>.png`」纯文件名，不入库目录前缀。
-//!
-//! 不像剪贴板图片那样按 hash 前缀分片：icon 数量受「用户从多少个不同应用复制过」约束，
-//! 撑死几十到低几百个，单层目录足够，分片只是徒增复杂度。
-
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -16,7 +7,6 @@ use tauri::AppHandle;
 
 use crate::core::Result;
 
-/// 应用 icon 目录名，挂在 `core::paths::resources_dir` 下（与 `clipboard-images` 并列）。
 const APP_ICONS_DIR: &str = "app-icons";
 
 #[derive(Clone)]
@@ -40,7 +30,6 @@ impl AppIconStore {
         }
     }
 
-    /// 重新绑定到当前真实数据根；数据目录热迁移后由存储命令调用。
     pub fn rebase(&self, app: &AppHandle) -> Result<()> {
         let next = crate::core::paths::resources_dir(app)?.join(APP_ICONS_DIR);
         *self
@@ -50,7 +39,6 @@ impl AppIconStore {
         Ok(())
     }
 
-    /// 落盘 PNG 字节，返回入库用文件名 `<hash>.png`。已存在则跳过写入（幂等）。
     pub fn store(&self, png_bytes: &[u8]) -> Result<String> {
         let digest = blake3_hex(png_bytes);
         let file_name = format!("{digest}.png");
@@ -111,7 +99,7 @@ mod tests {
         let path = store.icon_path(&a);
         assert!(path.exists());
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
-        // 平铺：文件直接落在 root 下，无分片子目录。
+
         assert_eq!(path, store.root().join(&a));
     }
 

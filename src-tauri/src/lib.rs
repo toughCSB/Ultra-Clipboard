@@ -26,8 +26,6 @@ use tauri::{Manager, WindowEvent};
 pub fn run() {
     admin::handle_startup_auto_elevation();
 
-    // Webview target 把日志回灌到前端 devtools console，只在 dev 启用；
-    // 生产环境只落 LogDir 文件；Stdout 仅在 debug 启用，避免 Windows Release stdout 缓冲区阻塞，也避免向用户的 webview console 喷日志。
     let mut log_targets = vec![tauri_plugin_log::Target::new(
         tauri_plugin_log::TargetKind::LogDir { file_name: None },
     )];
@@ -63,8 +61,6 @@ pub fn run() {
                     return;
                 }
 
-                // 登录时历史遗留的多个启动项可能并发拉起实例。第二实例只负责退出，
-                // 不应按用户手动重复打开处理，否则会意外显示偏好设置窗口。
                 if autostart::is_autostart_launch(&argv) {
                     return;
                 }
@@ -181,7 +177,6 @@ pub fn run() {
         .setup(move |app| {
             let handle = app.handle().clone();
 
-            // macOS：plugin 必须在 to_panel 前注册。
             #[cfg(target_os = "macos")]
             window::macos::register_plugin(&handle);
 
@@ -227,7 +222,6 @@ pub fn run() {
                 log::error!("tray initialization failed: {err:?}");
             }
 
-            // 平台剪贴板窗口初始化：macOS 转 NSPanel
             #[cfg(target_os = "macos")]
             if let Err(err) = window::macos::setup_clipboard_panel(&handle) {
                 log::error!("setup clipboard NSPanel failed: {err:?}");
@@ -246,9 +240,6 @@ pub fn run() {
 
             update::schedule_auto_check(&handle);
 
-            // Windows 冷启动文件关联：第一个实例从自身启动参数里取 `.ecopastebak` 路径。
-            // 已运行时双击由 `single_instance` 回调处理；此处覆盖应用未启动时双击的冷启动场景，
-            // 否则路径会被丢弃——程序被唤起但偏好窗口不弹。macOS 走 `RunEvent::Opened`，不经此路。
             #[cfg(target_os = "windows")]
             if let Some(path) = backup::backup_path_from_args(&std::env::args().collect::<Vec<_>>())
             {
@@ -273,8 +264,6 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app_handle, event| {
-            // macOS 冷启动文件关联：`RunEvent::Ready` 早于系统投递的 `Opened`（多数情况），
-            // 但二者顺序不保证。两端都经 backup 模块的就绪闸协调，谁先到都不会在未就绪时建窗。
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Ready = &event {
                 backup::mark_app_ready(app_handle);
@@ -291,9 +280,6 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = &event {
-                // 处理体整体包 catch_unwind：本回调由 tao 从 ObjC `application:openURLs:`
-                // 经 `extern "C"` 边界同步调用，任何 panic 都无法 unwind（`panic_cannot_unwind`）
-                // 而直接 abort。即便就绪闸已规避主要 panic 源，这里仍兜底杜绝进程崩溃。
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     for url in urls {
                         if url.scheme() != "file" {
@@ -319,7 +305,6 @@ pub fn run() {
                 }
             }
 
-            // 退出前保存所有窗口几何，兜住「调整大小后不关窗直接退出」的场景。
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 window::save_all_window_states(app_handle);
             }

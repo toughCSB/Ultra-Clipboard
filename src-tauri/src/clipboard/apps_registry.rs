@@ -1,7 +1,3 @@
-//! 应用注册表：把「运行中应用」「监听过程中捕获的前台应用」「用户手动添加的应用」
-//! 统一物化为可展示的应用记录，并维护一份 id → 应用的内存缓存。
-//! 运行中应用只进缓存；复制捕获、手动添加和默认忽略物化的应用才写入 `clipboard_apps` 表。
-
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -24,7 +20,6 @@ pub struct AppsRegistry {
 }
 
 impl AppsRegistry {
-    /// 创建来源应用注册表，共享 App 句柄、图标仓库和内存缓存。
     pub fn new(app: AppHandle, icon_store: AppIconStore) -> Self {
         Self {
             app,
@@ -33,12 +28,10 @@ impl AppsRegistry {
         }
     }
 
-    /// 读取当前热替换后的数据库连接池。
     async fn pool(&self) -> SqlitePool {
         self.app.state::<crate::db::DatabaseState>().pool().await
     }
 
-    /// 把 DB 中已有的应用全部装进缓存。启动期调用一次，覆盖任何旧缓存内容。
     pub async fn load_from_db(&self) -> Result<()> {
         let pool = self.pool().await;
         let all = apps::list_all_apps(&pool).await?;
@@ -50,7 +43,6 @@ impl AppsRegistry {
         Ok(())
     }
 
-    /// 按 id 从内存缓存读取来源应用记录。
     pub fn get(&self, id: &str) -> Option<ClipboardApp> {
         self.cache
             .read()
@@ -59,7 +51,6 @@ impl AppsRegistry {
             .cloned()
     }
 
-    /// 写入或替换内存缓存中的来源应用记录。
     pub fn insert_into_cache(&self, app: ClipboardApp) {
         self.cache
             .write()
@@ -67,7 +58,6 @@ impl AppsRegistry {
             .insert(app.id.clone(), app);
     }
 
-    /// 从内存缓存移除来源应用记录。
     pub fn remove_from_cache(&self, id: &str) {
         self.cache
             .write()
@@ -76,7 +66,6 @@ impl AppsRegistry {
     }
 }
 
-/// 刷新当前运行中的用户应用，并返回本次枚举到的应用列表。
 pub async fn refresh_running_apps(registry: AppsRegistry) -> Result<Vec<ClipboardApp>> {
     let metas = tauri::async_runtime::spawn_blocking(running_app_metas)
         .await
@@ -85,7 +74,6 @@ pub async fn refresh_running_apps(registry: AppsRegistry) -> Result<Vec<Clipboar
     Ok(materialize_metas(&registry, metas))
 }
 
-/// 从用户选择的应用路径构建来源应用并写入注册表。
 pub async fn add_app_from_path(registry: AppsRegistry, path: String) -> Result<ClipboardApp> {
     let meta =
         tauri::async_runtime::spawn_blocking(move || app_meta_from_path(PathBuf::from(path)))
@@ -97,7 +85,6 @@ pub async fn add_app_from_path(registry: AppsRegistry, path: String) -> Result<C
         .ok_or_else(|| AppError::Clipboard("app metadata is empty".to_owned()))
 }
 
-/// 按应用 id 批量补全应用信息，返回成功物化的应用。
 pub async fn add_apps_from_ids(
     registry: AppsRegistry,
     ids: Vec<String>,
@@ -113,7 +100,6 @@ pub async fn add_apps_from_ids(
     upsert_metas(&registry, metas).await
 }
 
-/// 删除未被历史记录引用的来源应用，并同步移除注册表缓存。
 pub async fn delete_unreferenced_apps(
     registry: AppsRegistry,
     ids: Vec<String>,
@@ -128,7 +114,6 @@ pub async fn delete_unreferenced_apps(
     Ok(deleted)
 }
 
-/// 将元数据列表物化为应用记录，写入内存缓存并同步抽取图标。
 fn materialize_metas(registry: &AppsRegistry, metas: Vec<ScannedAppMeta>) -> Vec<ClipboardApp> {
     let now = Utc::now();
     let mut apps_out = Vec::with_capacity(metas.len());
@@ -165,7 +150,6 @@ fn materialize_metas(registry: &AppsRegistry, metas: Vec<ScannedAppMeta>) -> Vec
     apps_out
 }
 
-/// 将元数据列表写入 DB 与缓存。
 async fn upsert_metas(
     registry: &AppsRegistry,
     metas: Vec<ScannedAppMeta>,
@@ -345,7 +329,6 @@ mod macos {
         })
     }
 
-    /// 通过 NSRunningApplication.bundleURL 拿到 .app 路径。
     unsafe fn bundle_path(app: &NSRunningApplication) -> Option<PathBuf> {
         let url: Option<Retained<NSURL>> = msg_send![app, bundleURL];
         let url = url?;
@@ -353,7 +336,6 @@ mod macos {
         Some(PathBuf::from(path?.to_string()))
     }
 
-    /// 取 Finder 展示的本地化名称，拿不到时返回 None。
     fn localized_bundle_name(path: &Path) -> Option<String> {
         let output = std::process::Command::new("/usr/bin/mdls")
             .args(["-name", "kMDItemDisplayName", "-raw"])

@@ -1,14 +1,5 @@
-//! Windows 自定义右键菜单窗（webview）。
-//!
-//! 用 `focusable: false` 的 webview 窗替代 muda：muda 的 `TrackPopupMenu` 必须把
-//! 菜单 owner 拉到前台，会把用户原本聚焦的目标 App（资源管理器重命名编辑框、
-//! 浏览器地址栏 IME 等）挤掉焦点。本窗口不抢焦，跟剪贴板窗口一样隐形挂在桌面上。
-//!
-//! - 首次右键 / 悬停二级菜单时按需建窗；右键时 `set_size + set_position + emit + show`。
-//! - 外部点击关闭：复用 [`crate::mouse`] 的全局鼠标钩子，菜单可见且光标在矩形外
-//!   即 hide（不用轮询）。
-//! - 菜单项点击：前端直接 emit `clipboard://menu-action` 给剪贴板窗口，业务派发与
-//!   macOS 路径走同一套。
+//! Windows context-menu WebViews stay non-focusable so opening a menu does not
+//! steal focus from the application where the user was working.
 
 use std::sync::{LazyLock, Mutex};
 
@@ -31,17 +22,14 @@ use super::clipboard_item::{
 pub const CONTEXT_MENU_WINDOW_LABEL: &str = "context-menu";
 pub const CONTEXT_SUBMENU_WINDOW_LABEL: &str = "context-submenu";
 
-/// 前端订阅事件：菜单窗收到后渲染并 `show`。
 const CONTEXT_MENU_SHOW_EVENT: &str = "context-menu://show";
 const CONTEXT_SUBMENU_SHOW_EVENT: &str = "context-submenu://show";
 
-// 几何常量（logical px）：跟前端 `ContextMenu` 的 CSS 必须一致，否则 hit-test
-// 与裁切会错位。前端那侧用同名 token 写在 `ContextMenu/index.tsx` 头部。
 const MENU_WIDTH: u32 = 220;
 const SUBMENU_WIDTH: u32 = 220;
 const ITEM_HEIGHT: u32 = 32;
 const SEPARATOR_HEIGHT: u32 = 9;
-const MENU_PADDING_Y: u32 = 8; // 上下各 4
+const MENU_PADDING_Y: u32 = 8;
 const SURFACE_BORDER: u32 = 2;
 const SUBMENU_GAP: u32 = 4;
 
@@ -51,14 +39,10 @@ static CONTEXT_MENU_PAYLOAD: LazyLock<Mutex<Option<ContextMenuShowPayload>>> =
 static CONTEXT_SUBMENU_PAYLOAD: LazyLock<Mutex<Option<ShowContextSubmenuInput>>> =
     LazyLock::new(|| Mutex::new(None));
 
-/// setup 阶段初始化 Windows 自定义右键菜单模块。
-///
-/// 菜单窗口改为按需创建，避免应用启动时加载隐藏 WebView。
 pub fn init(app: &AppHandle) {
     let _ = app;
 }
 
-/// 按需重建一级右键菜单窗口。
 pub fn build_context_menu_window(app: &AppHandle) -> Result<()> {
     build_menu_window(
         app,
@@ -71,7 +55,6 @@ pub fn build_context_menu_window(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 按需重建二级右键菜单窗口。
 pub fn build_context_submenu_window(app: &AppHandle) -> Result<()> {
     build_menu_window(
         app,
@@ -116,8 +99,6 @@ fn build_menu_window(
     Ok(())
 }
 
-/// 在当前光标处弹出列表项右键菜单。算好 size + position → `set_size`
-/// → `set_position` → emit 数据 → `show`。
 pub(super) fn show_for_clipboard_item(
     app: &AppHandle,
     request: &ClipboardItemMenuRequest,
@@ -172,7 +153,6 @@ pub(super) fn show_for_clipboard_item(
     Ok(())
 }
 
-/// 根据一级菜单项矩形显示二级菜单窗口。
 pub fn show_submenu(app: &AppHandle, input: ShowContextSubmenuInput) -> Result<()> {
     if input.groups.is_empty() {
         hide_submenu(app);
@@ -282,8 +262,6 @@ fn add_surface_border(width: u32, height: u32) -> (u32, u32) {
     (width, height + SURFACE_BORDER)
 }
 
-/// 取光标所在显示器，把菜单矩形 clamp 在显示器内（鼠标处尽量为菜单左上角，
-/// 右 / 下越界时翻到屏幕另一边）。返回 logical 坐标。
 fn compute_position(window: &tauri::WebviewWindow, width: u32, height: u32) -> Result<(i32, i32)> {
     let cursor = window
         .cursor_position()
@@ -306,7 +284,6 @@ fn compute_position(window: &tauri::WebviewWindow, width: u32, height: u32) -> R
     let max_x = mon_x + mon_w - width as i32;
     let max_y = mon_y + mon_h - height as i32;
 
-    // 右 / 下越界时翻到光标左 / 上侧，避免菜单贴边裁切。
     let x = if cx > max_x { cx - width as i32 } else { cx }.clamp(mon_x, max_x.max(mon_x));
     let y = if cy > max_y { cy - height as i32 } else { cy }.clamp(mon_y, max_y.max(mon_y));
 
@@ -397,7 +374,6 @@ fn compute_submenu_position_in_monitor(
     )
 }
 
-/// 返回最近一次一级右键菜单 show 请求的 payload，供重建后的 WebView 首屏补拉。
 pub fn context_menu_payload() -> Option<ContextMenuShowPayload> {
     CONTEXT_MENU_PAYLOAD
         .lock()
@@ -408,7 +384,6 @@ pub fn context_menu_payload() -> Option<ContextMenuShowPayload> {
         .clone()
 }
 
-/// 返回最近一次二级右键菜单 show 请求的 payload，供重建后的 WebView 首屏补拉。
 pub fn context_submenu_payload() -> Option<ShowContextSubmenuInput> {
     CONTEXT_SUBMENU_PAYLOAD
         .lock()
@@ -419,7 +394,6 @@ pub fn context_submenu_payload() -> Option<ShowContextSubmenuInput> {
         .clone()
 }
 
-/// 更新一级右键菜单首屏补拉 payload。
 fn set_context_menu_payload(payload: Option<ContextMenuShowPayload>) {
     let mut guard = CONTEXT_MENU_PAYLOAD.lock().unwrap_or_else(|poisoned| {
         log::error!("context menu payload mutex poisoned on set, recovering");
@@ -428,7 +402,6 @@ fn set_context_menu_payload(payload: Option<ContextMenuShowPayload>) {
     *guard = payload;
 }
 
-/// 更新二级右键菜单首屏补拉 payload。
 fn set_context_submenu_payload(payload: Option<ShowContextSubmenuInput>) {
     let mut guard = CONTEXT_SUBMENU_PAYLOAD.lock().unwrap_or_else(|poisoned| {
         log::error!("context submenu payload mutex poisoned on set, recovering");
@@ -437,7 +410,6 @@ fn set_context_submenu_payload(payload: Option<ShowContextSubmenuInput>) {
     *guard = payload;
 }
 
-/// 隐藏菜单窗。给鼠标钩子 / 剪贴板窗口隐藏等外部触发处用。
 pub fn hide(app: &AppHandle) {
     set_context_menu_payload(None);
     set_context_submenu_payload(None);
@@ -454,7 +426,6 @@ pub fn hide(app: &AppHandle) {
     }
 }
 
-/// 隐藏二级菜单窗。
 pub fn hide_submenu(app: &AppHandle) {
     set_context_submenu_payload(None);
 
@@ -468,7 +439,6 @@ pub fn hide_submenu(app: &AppHandle) {
     lifecycle::on_hidden(app, CONTEXT_SUBMENU_WINDOW_LABEL, "context-submenu-hide");
 }
 
-/// 菜单窗当前是否可见。给鼠标钩子判断「是否需要做外部点击关闭」。
 pub fn is_visible(app: &AppHandle) -> bool {
     [CONTEXT_MENU_WINDOW_LABEL, CONTEXT_SUBMENU_WINDOW_LABEL]
         .iter()
@@ -479,7 +449,6 @@ pub fn is_visible(app: &AppHandle) -> bool {
         })
 }
 
-/// 判断 physical 坐标是否落在任一菜单窗口矩形内。
 pub fn contains_physical_point(app: &AppHandle, x: i32, y: i32) -> bool {
     [CONTEXT_MENU_WINDOW_LABEL, CONTEXT_SUBMENU_WINDOW_LABEL]
         .iter()

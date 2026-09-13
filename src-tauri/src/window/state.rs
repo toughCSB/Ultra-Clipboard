@@ -76,7 +76,6 @@ impl WindowStateStore {
         states.get(label).cloned()
     }
 
-    /// 数据目录热切换后重新绑定窗口状态文件，并重新读取新目录里的状态。
     pub fn rebase(&self, app: &AppHandle) -> Result<()> {
         let dir = crate::core::paths::state_dir(app)?;
         fs::create_dir_all(&dir).with_context(|| format!("failed to create dir at {dir:?}"))?;
@@ -116,8 +115,6 @@ fn load_states(path: &PathBuf) -> HashMap<String, WindowState> {
     }
 }
 
-/// 读取窗口当前的实时几何（`outer_position` + `inner_size`）并落盘。
-/// 在隐藏 / 关闭 / 退出等可靠生命周期点调用即可捕获用户的移动与缩放。
 pub fn save_window_state(app: &AppHandle, label: &str) -> Result<()> {
     let window = app
         .get_webview_window(label)
@@ -138,11 +135,6 @@ pub fn save_window_state(app: &AppHandle, label: &str) -> Result<()> {
     )
 }
 
-/// 恢复窗口的尺寸 + 位置。无存档返回 `Ok(false)`。
-///
-/// 始终恢复存档尺寸；位置在恢复前校验是否仍位于可用显示器范围内：
-/// 若上次所在显示器已被拔出，则 fallback 到当前光标所在屏幕的中心，
-/// 避免窗口出现在不可见的虚拟坐标区域。
 pub fn restore_window_state(app: &AppHandle, label: &str) -> Result<bool> {
     let store = app.state::<WindowStateStore>();
     let Some(state) = store.get(label) else {

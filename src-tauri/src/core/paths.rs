@@ -1,16 +1,4 @@
-//! app data 目录解析的单一入口。
-//!
-//! 所有持久化位置都从这里取根，集中三件本来散落各模块的事：
-//! - `app_local_data_dir().context(...)` 这段解析样板（原先在 settings/window/db/storage/app_store 各写一份）；
-//! - `db/`、`resources/`、`config/`、`state/` 这些语义目录名；
-//! - 开发 / 生产环境的数据隔离：dev 数据落 `dev/`、release 数据落 `prod/`，互不污染，
-//!   便于后续导入导出 / 备份 / 迁移按环境整目录操作。
-//! - 自定义数据目录：`<app_local_data>/<env>/storage.json` 始终作为启动锚点，
-//!   真实数据根由该 bootstrap manifest 指向。
-//!
-//! 只解析路径、不建目录：创建行为是各调用方特化的（settings/window/db 建自己的目录、
-//! 图片/图标写时懒建），塞进这里会改掉懒建语义。叶子文件名（`clipboard.db` /
-//! `settings.json` 等）仍由各模块自己拥有——要统一的是「根在哪」。
+//! Resolves the environment-specific data directories and validates custom storage locations.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,30 +10,26 @@ use tauri::{AppHandle, Manager};
 
 use crate::core::Result;
 
-/// SQLite 主库与 WAL / SHM sidecar 所在目录名，挂在 [`app_data_dir`] 下。
 const DB_DIR: &str = "db";
-/// 资源文件（图片、应用图标）的公共父目录名，挂在 [`app_data_dir`] 下。
+
 const RESOURCES_DIR: &str = "resources";
-/// 用户配置目录名，挂在 [`app_data_dir`] 下。
+
 const CONFIG_DIR: &str = "config";
-/// 本机运行状态目录名，挂在 [`app_data_dir`] 下。
+
 const STATE_DIR: &str = "state";
-/// 固定留在 `<app_local_data>/<env>` 的 bootstrap manifest 文件名。
+
 const STORAGE_MANIFEST_FILENAME: &str = "storage.json";
-/// 写入真实数据根的 identity manifest 文件名，用于识别 Ultra Clipboard 数据目录。
+
 const STORAGE_IDENTITY_FILENAME: &str = ".ultra-clipboard-storage.json";
-/// 用户选择父目录后创建的数据子目录名。
+
 const CUSTOM_DATA_DIR_NAME: &str = "UltraClipboardData";
-/// 存储 manifest 格式版本。
+
 const STORAGE_MANIFEST_VERSION: u16 = 1;
 
-/// 开发环境数据子目录名（`tauri dev`）。
 const DEV_ENV_DIR: &str = "dev";
-/// 生产环境数据子目录名（`tauri build`）。
+
 const PROD_ENV_DIR: &str = "prod";
 
-/// 当前环境的数据子目录名：dev 构建走 `dev/`，release 构建走 `prod/`。
-/// `cfg!(dev)` 是 Tauri 在 `tauri dev` 时注入的 cfg，与各模块原先选文件名后缀用的判定同源。
 const fn env_dir() -> &'static str {
     if cfg!(dev) {
         DEV_ENV_DIR
@@ -79,8 +63,6 @@ struct StorageIdentity {
     created_at: DateTime<Utc>,
 }
 
-/// `<app_local_data>/<env>`：固定启动锚点。自定义数据目录启用后，这里仍保留
-/// `storage.json` 用于解析真实数据根。
 pub fn bootstrap_dir(app: &AppHandle) -> Result<PathBuf> {
     let dir = app
         .path()
@@ -89,17 +71,14 @@ pub fn bootstrap_dir(app: &AppHandle) -> Result<PathBuf> {
     Ok(dir.join(env_dir()))
 }
 
-/// 默认数据根。未启用自定义数据目录时，真实数据仍落在 `<app_local_data>/<env>`。
 pub fn default_data_dir(app: &AppHandle) -> Result<PathBuf> {
     bootstrap_dir(app)
 }
 
-/// 用户选择父目录后创建 Ultra Clipboard 自有数据子目录。
 pub fn custom_data_dir(parent: &Path) -> PathBuf {
     parent.join(CUSTOM_DATA_DIR_NAME).join(env_dir())
 }
 
-/// 返回当前真实数据根、默认数据根，以及是否处于自定义目录。
 pub fn storage_location(app: &AppHandle) -> Result<StorageLocation> {
     let current = app_data_dir(app)?;
     let default = default_data_dir(app)?;
@@ -110,8 +89,6 @@ pub fn storage_location(app: &AppHandle) -> Result<StorageLocation> {
     })
 }
 
-/// `<data_root>`：当前环境所有持久化位置的根；其下按语义拆分为 db、resources、
-/// config 与 state。真实根由 bootstrap manifest 决定。
 pub fn app_data_dir(app: &AppHandle) -> Result<PathBuf> {
     let bootstrap = bootstrap_dir(app)?;
     let default = default_data_dir(app)?;
@@ -179,7 +156,6 @@ pub fn app_data_dir(app: &AppHandle) -> Result<PathBuf> {
     Ok(manifest.data_dir)
 }
 
-/// 将当前真实数据根切换到指定目录。调用方负责在写入前完成数据迁移。
 pub fn set_app_data_dir(app: &AppHandle, data_dir: PathBuf) -> Result<()> {
     let bootstrap = bootstrap_dir(app)?;
     fs::create_dir_all(&bootstrap)
@@ -192,7 +168,6 @@ pub fn set_app_data_dir(app: &AppHandle, data_dir: PathBuf) -> Result<()> {
     )
 }
 
-/// 写入真实数据根 identity manifest，供迁移目标目录校验。
 pub fn write_storage_identity(data_dir: &Path) -> Result<()> {
     fs::create_dir_all(data_dir)
         .with_context(|| format!("failed to create storage dir at {data_dir:?}"))?;
@@ -209,7 +184,6 @@ pub fn write_storage_identity(data_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 校验目标目录是否可作为 Ultra Clipboard 数据根：空目录允许使用，已有 identity 时必须匹配。
 pub fn validate_storage_target(data_dir: &Path) -> Result<()> {
     let identity_path = data_dir.join(STORAGE_IDENTITY_FILENAME);
     if identity_path.exists() {
@@ -221,7 +195,10 @@ pub fn validate_storage_target(data_dir: &Path) -> Result<()> {
             return Ok(());
         }
 
-        return Err(anyhow::anyhow!("目标目录不是当前环境的 Ultra Clipboard 数据目录").into());
+        return Err(anyhow::anyhow!(
+            "대상 폴더는 현재 환경의 Ultra Clipboard 데이터 폴더가 아닙니다"
+        )
+        .into());
     }
 
     if data_dir.exists()
@@ -230,30 +207,27 @@ pub fn validate_storage_target(data_dir: &Path) -> Result<()> {
             .next()
             .is_some()
     {
-        return Err(
-            anyhow::anyhow!("目标 Ultra Clipboard 数据目录已存在且不是有效数据目录").into(),
-        );
+        return Err(anyhow::anyhow!(
+            "대상 Ultra Clipboard 데이터 폴더가 이미 존재하며 올바른 데이터 폴더가 아닙니다"
+        )
+        .into());
     }
 
     Ok(())
 }
 
-/// `<app_data_dir>/db`：SQLite 主库与 sidecar 的目录。
 pub fn db_dir(app: &AppHandle) -> Result<PathBuf> {
     Ok(app_data_dir(app)?.join(DB_DIR))
 }
 
-/// `<app_data_dir>/resources`：图片、应用图标等资源文件的公共父目录。
 pub fn resources_dir(app: &AppHandle) -> Result<PathBuf> {
     Ok(app_data_dir(app)?.join(RESOURCES_DIR))
 }
 
-/// `<app_data_dir>/config`：用户偏好配置目录。
 pub fn config_dir(app: &AppHandle) -> Result<PathBuf> {
     Ok(app_data_dir(app)?.join(CONFIG_DIR))
 }
 
-/// `<app_data_dir>/state`：窗口位置等本机运行状态目录。
 pub fn state_dir(app: &AppHandle) -> Result<PathBuf> {
     Ok(app_data_dir(app)?.join(STATE_DIR))
 }

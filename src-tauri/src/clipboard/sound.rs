@@ -1,7 +1,3 @@
-//! 复制成功提示音。音频字节直接 `include_bytes!` 打入二进制，避免运行时文件 IO。
-//! Windows 使用同步 `PlaySoundW` 播放内存 WAV；其他平台由 rodio 解码 MP3。
-//! 自动提示音在短命线程中播放，不阻塞剪贴板监听和入库。
-
 use tauri::{AppHandle, Manager};
 
 #[cfg(not(target_os = "windows"))]
@@ -23,8 +19,6 @@ const COPY_SOUND_BYTES: &[u8] = include_bytes!("../../assets/sounds/copy.wav");
 #[cfg(not(target_os = "windows"))]
 const COPY_SOUND_BYTES: &[u8] = include_bytes!("../../assets/sounds/copy.mp3");
 
-/// 若设置启用了 `feedback.copy_sound`，异步播放一次提示音。
-/// 失败仅 warn——提示音不应阻断剪贴板入库主流程。
 pub fn maybe_play_copy(app: &AppHandle) {
     let enabled = app
         .try_state::<SettingsStore>()

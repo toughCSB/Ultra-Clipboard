@@ -8,7 +8,6 @@ const LIST_GROUPS_SQL: &str =
     "SELECT id, name, icon, is_hidden, sort_order, created_at, updated_at FROM clipboard_groups \
      ORDER BY sort_order ASC, created_at ASC";
 
-/// 列出全部分组，按 `sort_order` 升序（同序时按 `created_at` 兜底，保证顺序稳定）。
 pub async fn list_groups(pool: &SqlitePool) -> Result<Vec<ClipboardGroup>> {
     let groups = sqlx::query_as::<_, ClipboardGroup>(LIST_GROUPS_SQL)
         .fetch_all(pool)
@@ -17,7 +16,6 @@ pub async fn list_groups(pool: &SqlitePool) -> Result<Vec<ClipboardGroup>> {
     Ok(groups)
 }
 
-/// 读取下一条自定义分组的排序值。
 pub async fn next_group_sort_order(pool: &SqlitePool) -> Result<i64> {
     let row: (Option<i64>,) = sqlx::query_as("SELECT MAX(sort_order) FROM clipboard_groups")
         .fetch_one(pool)
@@ -27,7 +25,6 @@ pub async fn next_group_sort_order(pool: &SqlitePool) -> Result<i64> {
     Ok(row.0.unwrap_or(-1) + 1)
 }
 
-/// 新建分组。
 pub async fn insert_group(pool: &SqlitePool, group: &ClipboardGroup) -> Result<()> {
     sqlx::query(
         "INSERT INTO clipboard_groups (id, name, icon, is_hidden, sort_order, created_at, updated_at) \
@@ -46,7 +43,6 @@ pub async fn insert_group(pool: &SqlitePool, group: &ClipboardGroup) -> Result<(
     Ok(())
 }
 
-/// 更新分组基础信息。
 pub async fn update_group(
     pool: &SqlitePool,
     id: &str,
@@ -69,7 +65,6 @@ pub async fn update_group(
     Ok(())
 }
 
-/// 批量更新分组排序和隐藏状态。
 pub async fn update_group_layout(
     pool: &SqlitePool,
     ordered_ids: &[String],
@@ -95,7 +90,6 @@ pub async fn update_group_layout(
     Ok(())
 }
 
-/// 删除分组；其下记录的 `group_id` 由外键 `ON DELETE SET NULL` 自动置空（已启用 `foreign_keys`）。
 pub async fn delete_group(pool: &SqlitePool, id: &str) -> Result<()> {
     sqlx::query("DELETE FROM clipboard_groups WHERE id = ?")
         .bind(id)
@@ -233,7 +227,7 @@ mod tests {
         delete_group(&pool, "g").await.unwrap();
 
         assert!(list_groups(&pool).await.unwrap().is_empty());
-        // 外键 ON DELETE SET NULL：分组删除后记录仍在，但 group_id 被置空。
+
         let item = find_item_by_id(&pool, "i").await.unwrap().unwrap();
         assert_eq!(item.group_id, None);
     }

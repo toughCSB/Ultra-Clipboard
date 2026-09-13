@@ -1,9 +1,5 @@
-//! 系统级剪贴板预览窗口骨架。
-//!
-//! 预览窗口是透明的 full-screen overlay：Rust 负责按需建窗、复用窗口、
-//! 收集坐标上下文并广播，前端在该窗口内渲染预览内容与连接曲线。
-//! 窗口接入生命周期管理（`DestroyWhenIdle`）：隐藏空闲后销毁 WebView 释放内存，
-//! 仅在预览请求到达时按需建窗，不随剪贴板窗口显示预热。
+//! Transparent full-screen clipboard preview overlay. Rust owns window setup,
+//! geometry, lifecycle, and state broadcasts; the frontend renders the content.
 
 #![allow(clippy::unused_unit)]
 
@@ -45,9 +41,7 @@ static PREVIEW_SESSION_ID: AtomicU64 = AtomicU64::new(0);
 static PREVIEW_SUPPRESSED: AtomicBool = AtomicBool::new(false);
 static PREVIEW_STATE: LazyLock<Mutex<Option<ClipboardPreviewState>>> =
     LazyLock::new(|| Mutex::new(None));
-/// 串行化建窗：多个预览请求（如连续 hover）可能并发走到「检查不存在 → 建窗」，
-/// 都过了存在性检查会触发重复 label 建窗报错。建窗都来自命令/后台线程、主线程从不持锁，
-/// 不会与 builder 内部的主线程派发互锁。
+
 static PREVIEW_BUILD_LOCK: Mutex<()> = Mutex::new(());
 
 #[cfg(target_os = "macos")]
@@ -129,7 +123,6 @@ pub struct ClipboardPreviewState {
     pub layout: PreviewLayout,
 }
 
-/// 打开或重定向预览窗口，并把最新预览状态广播到预览 webview。
 pub fn show_clipboard_preview(
     app: &AppHandle,
     item_id: String,
@@ -178,7 +171,6 @@ pub fn show_clipboard_preview(
     Ok(Some(state))
 }
 
-/// 隐藏预览窗口并清空当前预览状态。
 pub fn close_clipboard_preview(app: &AppHandle) -> Result<()> {
     let request_id = PREVIEW_REQUEST_ID.fetch_add(1, Ordering::SeqCst) + 1;
     set_preview_state(None);
@@ -193,7 +185,6 @@ pub fn close_clipboard_preview(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 立即隐藏预览窗口并清空状态；用于剪贴板窗口隐藏等不需要退出动画的路径。
 pub fn close_clipboard_preview_now(app: &AppHandle) -> Result<()> {
     PREVIEW_REQUEST_ID.fetch_add(1, Ordering::SeqCst);
     set_preview_state(None);
@@ -208,7 +199,6 @@ pub fn close_clipboard_preview_now(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 剪贴板窗口开始隐藏时压制后续过期 show 请求，并立即收起预览窗口。
 pub fn suppress_for_clipboard_hide(app: &AppHandle) {
     PREVIEW_SUPPRESSED.store(true, Ordering::SeqCst);
     if let Err(error) = close_clipboard_preview_now(app) {
@@ -216,13 +206,10 @@ pub fn suppress_for_clipboard_hide(app: &AppHandle) {
     }
 }
 
-/// 剪贴板窗口重新显示后允许新的预览请求进入。预览窗口不随剪贴板窗口预创建，
-/// 由首次 [`show_clipboard_preview`] 经 `ensure_preview_window` 按需建窗。
 pub fn resume_after_clipboard_show() {
     PREVIEW_SUPPRESSED.store(false, Ordering::SeqCst);
 }
 
-/// 返回预览窗口最近一次收到的状态，供预览页首屏补拉。
 pub fn get_clipboard_preview_state() -> Result<Option<ClipboardPreviewState>> {
     let guard = PREVIEW_STATE.lock().unwrap_or_else(|poisoned| {
         log::error!("preview state mutex poisoned on get, recovering");
@@ -232,11 +219,6 @@ pub fn get_clipboard_preview_state() -> Result<Option<ClipboardPreviewState>> {
     Ok(guard.clone())
 }
 
-/// 按需重建预览窗口。预览窗口不再由 Tauri 配置预创建（改为空闲销毁 + 按需重建），
-/// 所有选项必须在此用 builder 完整复刻原 `tauri.conf.json` 声明，否则重建后行为漂移。
-///
-/// 建窗后保持 `visible: false`：定位与显示由预览 show 流程统一处理；
-/// macOS 的 NSPanel 转换由 [`ensure_preview_window`] 在每次取窗时兜底执行。
 pub fn build_clipboard_preview_window(app: &AppHandle) -> Result<()> {
     let _guard = PREVIEW_BUILD_LOCK.lock().unwrap_or_else(|poisoned| {
         log::error!("preview build mutex poisoned, recovering");
@@ -283,14 +265,12 @@ fn set_preview_state(state: Option<ClipboardPreviewState>) {
     *guard = state;
 }
 
-/// 判断剪贴板窗口是否仍处于可见状态，防止过期 hover 请求在剪贴板窗口隐藏后唤起预览。
 fn is_clipboard_window_visible(app: &AppHandle) -> bool {
     app.get_webview_window(CLIPBOARD_WINDOW_LABEL)
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false)
 }
 
-/// 延迟隐藏真实窗口，为前端退出动画留出一小段可见时间。
 fn schedule_preview_window_hide(app: AppHandle, window: WebviewWindow, request_id: u64) {
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(PREVIEW_HIDE_DELAY_MS));
@@ -308,7 +288,6 @@ fn schedule_preview_window_hide(app: AppHandle, window: WebviewWindow, request_i
     });
 }
 
-/// 返回本次 show 所属的可见会话 id；隐藏后再次 show 会开启新会话。
 fn preview_session_id_for_show() -> u64 {
     let guard = PREVIEW_STATE.lock().unwrap_or_else(|poisoned| {
         log::error!("preview state mutex poisoned on session, recovering");
@@ -337,8 +316,6 @@ fn validate_anchor(anchor: &PreviewAnchorRect) -> Result<()> {
     Ok(())
 }
 
-/// 取预览窗口；已被空闲销毁（或尚未创建）时按需重建。
-/// macOS 下每次都兜底确保 NSPanel 转换完成，覆盖重建后的全新窗口。
 fn ensure_preview_window(app: &AppHandle) -> Result<WebviewWindow> {
     if app
         .get_webview_window(CLIPBOARD_PREVIEW_WINDOW_LABEL)
@@ -386,7 +363,6 @@ fn prepare_preview_window_for_show(
     raise_preview_window(app, window)
 }
 
-/// 平台 show 收口点；成功后推进生命周期到 `Visible`，使未触发的空闲销毁计时器过期。
 fn show_preview_window(
     app: &AppHandle,
     window: &WebviewWindow,
@@ -410,9 +386,6 @@ fn show_preview_window(
     Ok(())
 }
 
-/// 平台 hide 收口点；成功后推进生命周期到 `HiddenWarm`，启动空闲销毁计时。
-/// 对已隐藏窗口的重复 hide（如剪贴板窗口隐藏时的压制路径）也会走到这里，
-/// 由生命周期管理器对重复进入 `HiddenWarm` 去重计时。
 fn hide_preview_window(app: &AppHandle, window: &WebviewWindow) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -514,7 +487,6 @@ fn hide_macos_preview_panel(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// 将预览窗口重新压到 Windows topmost 栈顶，避免被同为 always-on-top 的剪贴板窗口盖住。
 #[cfg(target_os = "windows")]
 fn raise_windows_preview_window(window: &WebviewWindow, show: bool) -> Result<()> {
     let raw_hwnd = window.hwnd().map_err(|e| anyhow::anyhow!(e))?;
@@ -547,7 +519,6 @@ fn resolve_preview_monitor(app: &AppHandle) -> Result<tauri::Monitor> {
         .ok_or_else(|| anyhow::anyhow!("primary monitor not found").into())
 }
 
-/// 用完整显示器区域作为预览 overlay 边界，避免 macOS Dock 压缩 `work_area` 后截断连线。
 fn preview_overlay_bounds(monitor: &tauri::Monitor) -> PhysicalRect<i32, u32> {
     PhysicalRect {
         position: *monitor.position(),
@@ -571,7 +542,6 @@ fn apply_preview_window_bounds(
     Ok(())
 }
 
-/// 返回实际预览窗口尺寸；Windows 避免精确全屏触发系统勿扰模式。
 fn preview_window_size(work_area: &PhysicalRect<i32, u32>) -> PhysicalSize<u32> {
     #[cfg(target_os = "windows")]
     {
@@ -784,7 +754,6 @@ fn inset_rect(rect: PreviewRect, amount: f64) -> PreviewRect {
     }
 }
 
-/// 返回剪贴板窗口内容区的屏幕几何，用于映射 WebView DOM rect 到预览 overlay 坐标。
 fn clipboard_window_rect(app: &AppHandle) -> Option<PreviewClipboardWindowRect> {
     let window = app.get_webview_window(CLIPBOARD_WINDOW_LABEL)?;
     let pos = window.inner_position().ok()?;

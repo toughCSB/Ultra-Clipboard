@@ -1,6 +1,5 @@
-//! 设置数据模型。
-//!
-//! 每个字段都 `#[serde(default)]`，缺字段时回落到 `Default`，这样新增字段不破坏旧配置文件。
+//! Settings data model. `#[serde(default)]` keeps newly added fields
+//! compatible with existing configuration files.
 
 use serde::{Deserialize, Serialize};
 
@@ -28,9 +27,11 @@ pub struct General {
     pub auto_start: bool,
     /// Windows: persist the user's intent to run Ultra Clipboard with administrator privileges.
     pub run_as_admin: bool,
-    /// macOS 菜单栏 / Windows 系统托盘图标。
+
+    /// macOS menu bar or Windows system tray icon.
     pub tray_icon: bool,
-    /// macOS Dock / Windows 任务栏图标。
+
+    /// macOS Dock or Windows taskbar icon.
     pub dock_icon: bool,
 }
 
@@ -45,19 +46,19 @@ impl Default for General {
     }
 }
 
-/// 首次启动引导状态。业务数据仍由各自设置项持久化，本结构只记录引导进度。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Onboarding {
+    /// First-run progress; business data remains persisted by its own settings.
     pub completed: bool,
     pub last_step: u32,
     pub legacy_import: OnboardingLegacyImport,
 }
 
-/// 旧版数据导入的轻量状态记录；真实历史数据导入由 onboarding 导入流程负责。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct OnboardingLegacyImport {
+    /// Lightweight status for legacy-data import; the onboarding flow owns the actual import.
     pub checked: bool,
     pub imported: bool,
     pub import_types: Vec<OnboardingLegacyImportType>,
@@ -99,23 +100,18 @@ pub enum Theme {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Language {
     #[default]
-    #[serde(rename = "ko-KR")]
+    #[serde(rename = "ko-KR", alias = "zh-CN")]
     KoKR,
-    #[serde(rename = "zh-CN")]
-    ZhCN,
     #[serde(rename = "en-US")]
     EnUS,
 }
 
 impl Language {
-    /// 시스템 locale을 지원 언어로 매핑한다.
-    /// ko-* → ko-KR, zh-* → zh-CN, 그 외 → en-US.
+    /// Maps the system locale to a supported language.
     pub fn from_system_locale(tag: &str) -> Self {
         let lower = tag.to_ascii_lowercase();
-        if lower.starts_with("ko") {
+        if lower.starts_with("ko") || lower.starts_with("zh") {
             Self::KoKR
-        } else if lower.starts_with("zh") {
-            Self::ZhCN
         } else {
             Self::EnUS
         }
@@ -125,11 +121,13 @@ impl Language {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Shortcuts {
-    /// 全局：唤起剪贴板窗口。
+    /// Global shortcut that opens the clipboard window.
     pub open_clipboard: String,
-    /// 全局：打开偏好设置窗口。
+
+    /// Global shortcut that opens preferences.
     pub open_preference: String,
-    /// 仅 Windows：用 Win+V 唤起剪贴板窗口，替代系统剪贴板历史面板。默认关闭。
+
+    /// Windows-only Win+V replacement for the system clipboard history panel.
     pub win_v: bool,
 }
 
@@ -158,7 +156,6 @@ pub struct Clipboard {
     pub filters: Filters,
 }
 
-/// 剪贴板内容类型采集开关。关闭后监听与手动读取都不入库对应类型。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Capture {
@@ -167,11 +164,14 @@ pub struct Capture {
     pub rtf: bool,
     pub image: bool,
     pub files: bool,
-    /// 文本最大收录大小，单位 MB。`0` = 不限制。
+
+    /// Maximum collected text size in MB. `0` means unlimited.
     pub max_text_mb: u32,
-    /// 图片最大收录大小，单位 MB。`0` = 不限制。
+
+    /// Maximum collected image size in MB. `0` means unlimited.
     pub max_image_mb: u32,
-    /// 剪贴板同时提供多种表示时的采集优先级。
+
+    /// Priority when the clipboard provides multiple representations.
     pub order: Vec<CaptureKind>,
 }
 
@@ -191,17 +191,16 @@ impl Default for Capture {
 }
 
 impl Capture {
-    /// 返回文本最大收录字节数；`None` 表示不限制。
+    /// Returns the text byte limit; `None` means unlimited.
     pub fn max_text_bytes(&self) -> Option<u64> {
         mb_to_bytes(self.max_text_mb)
     }
 
-    /// 返回图片最大收录字节数；`None` 表示不限制。
     pub fn max_image_bytes(&self) -> Option<u64> {
         mb_to_bytes(self.max_image_mb)
     }
 
-    /// 返回去重且补齐缺失项后的采集顺序，避免配置文件里手改出重复项后影响读取。
+    /// Returns a deduplicated order with missing kinds appended.
     pub fn ordered_kinds(&self) -> Vec<CaptureKind> {
         let mut order = Vec::new();
         for kind in self
@@ -218,7 +217,6 @@ impl Capture {
         order
     }
 
-    /// 判断某个采集类型当前是否开启。
     pub fn is_enabled(&self, kind: CaptureKind) -> bool {
         match kind {
             CaptureKind::Text => self.text,
@@ -230,7 +228,6 @@ impl Capture {
     }
 }
 
-/// 把用户设置的 MB 值转换为字节阈值；`0` 表示不限。
 fn mb_to_bytes(mb: u32) -> Option<u64> {
     if mb == 0 {
         return None;
@@ -250,19 +247,19 @@ pub enum CaptureKind {
 }
 
 impl CaptureKind {
-    /// 默认顺序保持历史硬编码语义：文件 > 图片 > HTML > RTF > 纯文本。
+    /// Preserves the default priority: files, image, HTML, RTF, then plain text.
     pub fn default_order() -> Vec<Self> {
         vec![Self::Files, Self::Image, Self::Html, Self::Rtf, Self::Text]
     }
 }
 
-/// 隐私保护设置。命中规则的内容可分别控制是否收录、是否脱敏展示。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Sensitive {
-    /// 命中高置信密钥 / Token 时是否保存到历史记录。
+    /// Whether high-confidence keys and tokens are stored in history.
     pub collect_secrets: bool,
-    /// 已保存的敏感内容是否在列表与预览中脱敏展示。
+
+    /// Whether stored sensitive content is redacted in lists and previews.
     pub redact_secrets: bool,
 }
 
@@ -275,11 +272,10 @@ impl Default for Sensitive {
     }
 }
 
-/// 应用过滤规则。
-/// `excluded_app_ids` 命中复制来源时，对应剪贴板内容不入库。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Filters {
+    /// Clipboard content from matching source application ids is not stored.
     pub excluded_app_ids: Vec<String>,
 }
 
@@ -294,9 +290,6 @@ impl Default for Filters {
 fn default_excluded_app_ids() -> Vec<String> {
     #[cfg(target_os = "macos")]
     {
-        // 系统级密码 / 密钥工具：用户从这里复制的几乎都是敏感凭据，默认不入库。
-        // - com.apple.keychainaccess：钥匙串访问
-        // - com.apple.Passwords：macOS 15 起的「密码」App
         vec![
             "com.apple.keychainaccess".to_owned(),
             "com.apple.Passwords".to_owned(),
@@ -304,8 +297,6 @@ fn default_excluded_app_ids() -> Vec<String> {
     }
     #[cfg(target_os = "windows")]
     {
-        // Windows 无系统内置的密码管理 App（凭据管理器是 Control Panel 子项，不会作为复制来源）。
-        // 第三方密码管理器（1Password / Bitwarden / KeePass 等）因人而异，留给用户在 UI 勾选。
         Vec::new()
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -330,40 +321,41 @@ mod tests {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Content {
-    /// 点击列表项时的自动粘贴行为。
+    /// Action performed when a list item is clicked.
     pub auto_paste: AutoPaste,
-    /// 中键点击列表项时执行的动作。
+
     pub middle_click: MiddleClickAction,
-    /// 复制（写回剪贴板）时去除格式。
+
     pub copy_plain: bool,
-    /// 从历史复制后隐藏剪贴板窗口。
+
     pub copy_then_hide_window: bool,
-    /// 粘贴时去除格式。
+
     pub paste_plain: bool,
-    /// 粘贴文件记录时，默认写入路径文本而不是文件本身。
+
     pub paste_files_as_path: bool,
-    /// 鼠标悬停时显示原始内容预览（HTML/RTF 渲染前的原文）。
+
     pub show_original_preview: bool,
-    /// 删除普通条目前是否需要二次确认；收藏 / 置顶条目由各自确认开关单独控制。
+
     pub delete_confirm: bool,
-    /// 是否允许删除收藏条目；关闭时收藏条目不显示删除入口。
+
     pub delete_favorite_items: bool,
-    /// 删除收藏条目前是否需要二次确认。
+
     pub delete_favorite_confirm: bool,
-    /// 是否允许删除置顶条目；关闭时置顶条目不显示删除入口。
+
     pub delete_pinned_items: bool,
-    /// 删除置顶条目前是否需要二次确认。
+
     pub delete_pinned_confirm: bool,
-    /// 开启后已收藏条目仅能在收藏分组删除，普通条目不受影响。
+
     pub delete_favorite_items_only_in_favorite_group: bool,
     pub auto_favorite: bool,
-    /// 从历史中复制 / 粘贴时，是否刷新使用次数与 `updated_at`。
+
+    /// Whether copying or pasting from history refreshes use count and `updated_at`.
     pub update_on_reuse: bool,
-    /// 历史列表默认排序，和 `ClipboardItemQuery.sort` 使用同一套契约字面量。
+
     pub sort: ClipboardItemSort,
-    /// 列表项悬停操作按钮（仅保存已启用项，顺序按 `item_action_order` 过滤）。
+
     pub item_actions: Vec<ItemAction>,
-    /// 列表项悬停操作按钮的完整排序，包含未启用项，供偏好弹框下次打开时恢复位置。
+
     pub item_action_order: Vec<ItemAction>,
 }
 
@@ -410,15 +402,16 @@ impl Default for Content {
     }
 }
 
-/// 历史列表里不同内容类型的展示上限。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Display {
-    /// 文本摘要最多显示行数。
+    /// Maximum lines shown for text summaries.
     pub text_max_lines: u8,
-    /// 图片缩略图显示高度，单位 px。
+
+    /// Image thumbnail height in px.
     pub image_max_height: u16,
-    /// 文件列表最多返回并显示的条目数。
+
+    /// Maximum number of file entries returned and displayed.
     pub file_max_count: u8,
 }
 
@@ -433,7 +426,7 @@ impl Default for Display {
 }
 
 impl Display {
-    /// 返回主列表文件条目上限，并夹在 UI 支持的范围内控制 IPC 与 icon 抽取成本。
+    /// Clamps the file-entry limit to the range supported by the UI.
     pub fn file_entry_limit(self) -> usize {
         usize::from(self.file_max_count.clamp(1, 5))
     }
@@ -442,7 +435,7 @@ impl Display {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AutoPaste {
-    /// 点击只选中，不自动执行动作。
+    /// Select only; do not perform an automatic action.
     Disabled,
     SingleClickPaste,
     #[default]
@@ -454,7 +447,7 @@ pub enum AutoPaste {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum MiddleClickAction {
-    /// 中键点击仅选中，不自动执行动作。
+    /// Select only; do not perform an automatic action.
     #[default]
     Disabled,
     SingleClickPaste,
@@ -511,9 +504,11 @@ pub enum PreviewHoverDelayMs {
 #[serde(default, rename_all = "camelCase")]
 pub struct History {
     pub retention: Retention,
-    /// 最多保留条数。`0` = 不限。
+
+    /// Maximum retained item count. `0` means unlimited.
     pub max_count: u32,
-    /// 自动清理周期（小时）。`0` = 关闭周期清理，但启动时仍清理一次。
+
+    /// Automatic cleanup interval in hours. `0` disables periodic cleanup.
     pub cleanup_interval_hours: u32,
 }
 
@@ -530,10 +525,10 @@ impl Default for History {
     }
 }
 
-/// 历史保留时长。`unit = Forever` 时忽略 `value`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Retention {
+    /// Retention value; ignored when `unit` is `Forever`.
     pub value: u32,
     pub unit: RetentionUnit,
 }
@@ -561,9 +556,10 @@ pub enum RetentionUnit {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Search {
-    /// 剪贴板窗口每次显示时自动聚焦搜索框。
+    /// Focus the search field whenever the clipboard window is shown.
     pub default_focus: bool,
-    /// 剪贴板窗口隐藏时清空搜索关键词。
+
+    /// Clear the search keyword when the clipboard window is hidden.
     pub clear_on_hide: bool,
 }
 
@@ -580,17 +576,20 @@ impl Default for Search {
 #[serde(default, rename_all = "camelCase")]
 pub struct Window {
     pub position: WindowPosition,
-    /// 打开剪贴板窗口时把历史列表回到顶部。
+
+    /// Return the history list to the top when opening the clipboard window.
     pub scroll_to_top_on_open: bool,
-    /// 打开剪贴板窗口时切换到指定范围；`Preserve` 表示保持上次状态。
+
     pub select_range_on_open: WindowOpenRangeSelection,
-    /// 打开剪贴板窗口时切换到指定分类；`Preserve` 表示保持上次状态。
+
     pub select_category_on_open: WindowOpenCategorySelection,
-    /// 打开剪贴板窗口时切换到指定自定义分组；可为 preserve / all / group:<id>。
+
     pub select_group_on_open: String,
-    /// 隐藏窗口轻量化：剪贴板窗口隐藏后进入 dormant，非剪贴板窗口空闲后释放 WebView。
+
+    /// Dormant clipboard window and idle destruction for other WebViews when hidden.
     pub lightweight_mode: bool,
-    /// 非剪贴板窗口隐藏后释放 WebView 的空闲秒数。
+
+    /// Idle seconds before a non-clipboard WebView is destroyed.
     pub idle_destroy_seconds: u32,
 }
 

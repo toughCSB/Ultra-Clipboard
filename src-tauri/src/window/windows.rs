@@ -1,5 +1,3 @@
-//! Windows 窗口管理：剪贴板窗口默认不可聚焦，输入控件编辑期间临时恢复可聚焦。
-
 use std::sync::Mutex;
 
 use tauri::AppHandle;

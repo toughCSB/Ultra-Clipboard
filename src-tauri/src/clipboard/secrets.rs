@@ -1,12 +1,6 @@
-//! 高置信密钥 / token 检测。
-//!
-//! 规则刻意保守：只拦截带固定前缀、标准结构或明确私钥边界的内容，
-//! 避免把普通长文本、颜色值、文件路径等误判为敏感凭据。
-
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// 判断文本是否包含高置信 secret/token，命中时整条剪贴板内容不入库。
 pub fn contains_secret(text: &str) -> bool {
     let value = text.trim();
     if value.is_empty() {
@@ -20,7 +14,6 @@ pub fn contains_secret(text: &str) -> bool {
         || has_labeled_secret(value)
 }
 
-/// 识别 PEM/OpenSSH 私钥块，避免保存整段私钥。
 fn has_private_key_block(text: &str) -> bool {
     static PRIVATE_KEY_RE: OnceLock<Regex> = OnceLock::new();
     PRIVATE_KEY_RE
@@ -30,7 +23,6 @@ fn has_private_key_block(text: &str) -> bool {
         .is_match(text)
 }
 
-/// 识别常见服务商自带前缀的 token。
 fn has_known_prefixed_token(text: &str) -> bool {
     static PREFIXED_TOKEN_RE: OnceLock<Regex> = OnceLock::new();
     PREFIXED_TOKEN_RE
@@ -52,7 +44,6 @@ fn has_known_prefixed_token(text: &str) -> bool {
         .is_match(text)
 }
 
-/// 识别 AWS access key id。Secret access key 无固定前缀，单独识别会误伤，暂不拦截。
 fn has_aws_access_key(text: &str) -> bool {
     static AWS_KEY_RE: OnceLock<Regex> = OnceLock::new();
     AWS_KEY_RE
@@ -60,7 +51,6 @@ fn has_aws_access_key(text: &str) -> bool {
         .is_match(text)
 }
 
-/// 识别结构完整的 JWT：三段 base64url，header 解码后包含 typ/alg 常见字段。
 fn has_jwt(text: &str) -> bool {
     static JWT_RE: OnceLock<Regex> = OnceLock::new();
     JWT_RE
@@ -71,8 +61,6 @@ fn has_jwt(text: &str) -> bool {
         .is_match(text)
 }
 
-/// 识别带明确字段名的 secret 赋值。字段名与分隔符之间允许一个可选的闭合引号，
-/// 以覆盖 JSON / 引号包裹的配置（`"api_key": "..."`、`'secret_key': '...'`）。
 fn has_labeled_secret(text: &str) -> bool {
     static LABELED_SECRET_RE: OnceLock<Regex> = OnceLock::new();
     LABELED_SECRET_RE
@@ -140,15 +128,12 @@ mod tests {
 
     #[test]
     fn detects_labeled_secrets_with_quoted_keys() {
-        // JSON / 引号包裹的字段名：label 与分隔符之间的闭合引号此前断开了正则，导致漏判。
-        // 值用明显的假串（无任何服务商前缀），仅用于驱动 has_labeled_secret 命中。
         let json_double = r#"{"api_key": "dummy_secret_value_abcdefghijklmnopqr"}"#;
         assert!(contains_secret(json_double));
 
         let single_quoted_key = r#"'secret_key': "abcdefghijklmnopqrstuvwxyz12345678""#;
         assert!(contains_secret(single_quoted_key));
 
-        // 单引号 key + 单引号 value（部分 shell / dotenv 风格）。
         let single_quoted_both = r#"'access_token': 'abcdefghijklmnopqrstuvwxyz123456'"#;
         assert!(contains_secret(single_quoted_both));
     }
@@ -156,9 +141,9 @@ mod tests {
     #[test]
     fn ignores_ordinary_text_and_short_codes() {
         assert!(!contains_secret(
-            "这是一个普通剪贴板文本，包含 token 这个单词。"
+            "token이라는 단어가 포함된 일반 클립보드 텍스트입니다."
         ));
-        assert!(!contains_secret("验证码 123456"));
+        assert!(!contains_secret("인증번호 123456"));
         assert!(!contains_secret("https://example.com/path/to/resource"));
         assert!(!contains_secret(
             "AKIA is just a word without enough characters"

@@ -1,19 +1,5 @@
-//! Windows drag-out 实现。
-//!
-//! - **文件**（`start_drag_files`）：直接复用 `drag` crate v2.1.1
-//!   （`IDataObject(CF_HDROP)` + `DoDragDrop`），稳定且自带 `IDragSourceHelper` 预览。
-//! - **文本 / 富文本**（`start_drag_text`）：自实现 `IDataObject`，支持
-//!   `CF_UNICODETEXT` + `CF_HTML`（注册名 "HTML Format"）+ `Rich Text Format`，
-//!   接收方按偏好选格式（Word 优先 RTF，浏览器优先 HTML，纯文本退回 plain）。
-//!
-//! `CF_HTML` / `Rich Text Format` 不是系统常量，需 `RegisterClipboardFormatW` 注册
-//! 拿 cfid；用 `OnceLock` 进程级缓存。CF_HTML 的 payload 必须带 Microsoft 定义的
-//! header（`Version:0.9\r\nStartHTML:...`），否则 Word / Outlook 不识别。
-//!
-//! 通用约束：所有入口**必须在拥有窗口的线程上调用**（= Tauri 主线程），否则
-//! `IDropSource::QueryContinueDrag` 会立刻返回 `DRAGDROP_S_CANCEL`，拖拽秒取消。
-//!
-//! `OleInitialize` 用进程级 `Once` 兜底，全程不 Uninitialize。
+//! Windows drag-out uses the `drag` crate for files and a custom `IDataObject`
+//! for plain text, HTML, and RTF.
 
 use std::iter::once;
 use std::os::windows::ffi::OsStrExt;
@@ -48,13 +34,10 @@ static CF_RTF: OnceLock<u16> = OnceLock::new();
 
 fn ensure_ole_init() {
     OLE_INIT.call_once(|| unsafe {
-        // 与 drag-rs 一致：传 Some(null_mut)。windows v0.52 的 OleInitialize 签名为
-        // Option<*mut c_void>；进程级一次性初始化，全程不 Uninitialize。
         let _ = OleInitialize(Some(std::ptr::null_mut()));
     });
 }
 
-/// 注册（或返回已缓存的）剪贴板自定义格式 id。同名格式在进程间共享 id。
 fn register_format(name: &str, slot: &'static OnceLock<u16>) -> u16 {
     *slot.get_or_init(|| {
         let wide: Vec<u16> = std::ffi::OsStr::new(name)
@@ -62,7 +45,7 @@ fn register_format(name: &str, slot: &'static OnceLock<u16>) -> u16 {
             .chain(once(0))
             .collect();
         let id = unsafe { RegisterClipboardFormatW(PCWSTR(wide.as_ptr())) };
-        // 返回 0 表示注册失败；正常情况下不会发生。
+
         id as u16
     })
 }
@@ -75,10 +58,6 @@ fn cf_rtf() -> u16 {
     register_format("Rich Text Format", &CF_RTF)
 }
 
-/// 按 Microsoft CF_HTML spec 构造 payload（UTF-8 字节流，含 header + 片段标记）。
-///
-/// header 字段是 ASCII 十进制偏移、固定 10 位宽，先写占位再回填实际偏移。
-/// 包裹 `<!--StartFragment-->` / `<!--EndFragment-->` 注释，让接收方知道粘贴范围。
 fn build_cf_html_payload(html: &str) -> Vec<u8> {
     const HEADER_TMPL: &str = "Version:0.9\r\n\
         StartHTML:0000000000\r\n\
@@ -115,7 +94,6 @@ fn build_cf_html_payload(html: &str) -> Vec<u8> {
     buf.into_bytes()
 }
 
-/// 把字节缓冲拷到新的 HGLOBAL，包装成 STGMEDIUM 返回。
 fn bytes_to_stgmedium(bytes: &[u8]) -> windows::core::Result<STGMEDIUM> {
     unsafe {
         let handle = GlobalAlloc(GMEM_FIXED, bytes.len())?;
@@ -131,8 +109,6 @@ fn bytes_to_stgmedium(bytes: &[u8]) -> windows::core::Result<STGMEDIUM> {
     }
 }
 
-/// 深拷贝一份 TYMED_HGLOBAL 的 STGMEDIUM：新建 HGLOBAL 并 memcpy。
-/// 调用方拿到独立的句柄，释放它时不会影响我们持有的原始 medium。
 unsafe fn clone_hglobal_medium(src: &STGMEDIUM) -> windows::core::Result<STGMEDIUM> {
     let src_handle = src.u.hGlobal;
     let size = GlobalSize(src_handle);
@@ -162,16 +138,11 @@ unsafe fn clone_hglobal_medium(src: &STGMEDIUM) -> windows::core::Result<STGMEDI
     })
 }
 
-/// `IDragSourceHelper::InitializeFromBitmap` 内部会用 `SetData` 把若干私有格式
-/// （`DragImageBits` / `DragWindow` / `IsShowingLayered` 等）塞回 data object，
-/// `IDropTargetHelper` 在接收方一侧再 `GetData` 取出来渲染 ghost。所以我们必须
-/// 支持任意 `SetData` 并在 `GetData` / `QueryGetData` 时回放——否则光标下没有预览图。
 struct StoredEntry {
     format: FORMATETC,
     medium: STGMEDIUM,
 }
 
-// COM 单线程公寓里 Shell 同线程回调；这里只是为了让 `Mutex` 满足类型约束。
 unsafe impl Send for StoredEntry {}
 unsafe impl Sync for StoredEntry {}
 
@@ -185,13 +156,12 @@ impl Drop for StoredEntry {
 
 #[implement(IDataObject)]
 struct RichDataObject {
-    /// UTF-16 with trailing NUL，CF_UNICODETEXT 用。
     text_utf16: Vec<u16>,
-    /// 已带 Microsoft CF_HTML header 的 UTF-8 字节流，None 表示不提供 HTML。
+
     html_bytes: Option<Vec<u8>>,
-    /// 原样的 RTF 字节流（ASCII），None 表示不提供 RTF。
+
     rtf_bytes: Option<Vec<u8>>,
-    /// Shell `IDragSourceHelper` 通过 `SetData` 注入的私有格式存储。
+
     extras: std::sync::Mutex<Vec<StoredEntry>>,
 }
 
@@ -209,7 +179,6 @@ impl RichDataObject {
         }
     }
 
-    /// 判定 FORMATETC 是否落在我们支持的某个格式上。
     fn supported_format(&self, format: *const FORMATETC) -> Option<u16> {
         let fmt = unsafe { format.as_ref()? };
         if fmt.tymed as i32 != TYMED_HGLOBAL.0 || fmt.dwAspect != DVASPECT_CONTENT.0 {
@@ -258,9 +227,6 @@ impl IDataObject_Impl for RichDataObject {
             return self.alloc_for(cf);
         }
 
-        // Shell 注入的私有格式（DragImageBits 等）：按 cfFormat + tymed 匹配存储项。
-        // 必须**深拷贝** HGLOBAL 后返回：pUnkForRelease=None 时接收方会 GlobalFree 该句柄，
-        // 浅拷贝会导致接收方释放后我们 StoredEntry::drop 再 ReleaseStgMedium，堆双重释放 → 崩溃。
         let req = unsafe {
             match pformatetc.as_ref() {
                 Some(f) => *f,
@@ -325,8 +291,6 @@ impl IDataObject_Impl for RichDataObject {
         pmedium: *const STGMEDIUM,
         frelease: BOOL,
     ) -> windows::core::Result<()> {
-        // Shell helper 总是 fRelease=TRUE：把 medium 所有权转给我们，由 StoredEntry::drop 释放。
-        // fRelease=FALSE 极少见，简单起见拒绝（Shell helper 不会走这条）。
         if !frelease.as_bool() {
             return Err(WinError::new(E_NOTIMPL, HSTRING::new()));
         }
@@ -346,7 +310,7 @@ impl IDataObject_Impl for RichDataObject {
             .extras
             .lock()
             .map_err(|_| WinError::new(E_NOTIMPL, HSTRING::new()))?;
-        // 同格式覆盖：先删旧的（Drop 会 ReleaseStgMedium）。
+
         extras.retain(|e| {
             !(e.format.cfFormat == format.cfFormat && e.format.dwAspect == format.dwAspect)
         });
@@ -355,7 +319,6 @@ impl IDataObject_Impl for RichDataObject {
     }
 
     fn EnumFormatEtc(&self, _dwdirection: u32) -> windows::core::Result<IEnumFORMATETC> {
-        // 不实现枚举：多数接收方先 QueryGetData 探测，不依赖 enumerator。
         Err(WinError::new(E_NOTIMPL, HSTRING::new()))
     }
 
@@ -397,8 +360,6 @@ impl IDropSource_Impl for DropSource {
     }
 }
 
-/// 启动一次文本 drag-out（plain + 可选 html / rtf）。阻塞至 drop 完成；
-/// 调用方必须在 Tauri 主线程上跑。
 pub fn start_drag_text(
     window: &WebviewWindow,
     plain: &str,
@@ -428,8 +389,6 @@ pub fn start_drag_text(
     Ok(())
 }
 
-/// 启动一次文件 drag-out。直接转发到 `drag` crate（其 `CF_HDROP` 实现稳定），
-/// 仅做参数适配与错误包装。
 pub fn start_drag_files(
     window: &WebviewWindow,
     paths: Vec<PathBuf>,

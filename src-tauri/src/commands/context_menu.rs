@@ -33,7 +33,8 @@ pub struct ContextMenuShowPayload {
     pub item_id: String,
     pub is_favorite: bool,
     pub is_pinned: bool,
-    /// 已按后端动作分组过滤排序；前端按二维结构渲染并自动插入分隔符。
+
+    /// Actions grouped and ordered by the backend for frontend rendering.
     pub groups: Vec<Vec<ContextMenuItemPayload>>,
 }
 

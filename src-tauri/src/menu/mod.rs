@@ -1,6 +1,5 @@
-//! 列表项右键菜单（Rust 侧）：macOS 走原生 muda（[`clipboard_item::native`]），
-//! Windows 走自定义 webview 窗（[`context_window`]，避免 muda `TrackPopupMenu`
-//! 抢前台焦点）。
+//! Clipboard item context menus use native muda on macOS and a non-focusable
+//! custom WebView on Windows.
 
 pub mod clipboard_item;
 

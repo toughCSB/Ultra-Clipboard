@@ -1,14 +1,3 @@
-//! 把读取到的 [`ClipboardPayload`] 转换为可入库的 [`ClipboardItem`]：
-//! 编排子类型识别（[`super::detect`]）与图片落盘（[`super::storage`]）。
-//!
-//! 文本存储语义（按用户采集顺序在 HTML / RTF / plain 之间择一）：
-//! - `content` 存**源表示**（HTML/RTF 原文、或纯文本），供前端渲染与写回；
-//! - `search_text` 存**纯文本**（HTML 去标签 / RTF 用 OS 提供的 plain 文本），供 FTS 检索与纯文本粘贴；
-//! - 纯文本无富文本时 `sub_kind` 走 url/email/color/path 识别。
-//!
-//! 图片：落盘原图 + 缩略图，`content` 存文件名 `<sha256>.png`，`content_hash` 仍走
-//! [`content_hash(Image, file_name)`]，而 `file_name` 源自 PNG 字节哈希 → 去重对字节敏感。
-
 use chrono::Utc;
 
 use super::detect::detect_text_sub_kind;
@@ -20,12 +9,8 @@ use crate::db::items::content_hash;
 use crate::db::models::{ClipboardItem, ClipboardKind, ClipboardSubKind, Platform};
 use crate::settings::{Capture, CaptureKind, Sensitive};
 
-/// 列表渲染用摘要的最大字符数（按 Unicode 标量计，不是字节）。
-/// 超过此长度的文本会被截断，前端列表只渲染摘要，预览/写回时再读完整 `content`。
 pub const SUMMARY_MAX_CHARS: usize = 256;
 
-/// 从纯文本生成列表摘要：trim 后按 [`SUMMARY_MAX_CHARS`] 字符截断。
-/// 输入空串返回 `None`。HTML/RTF 也用这个，输入是 OS 同时提供的纯文本，不解析富文本。
 fn make_summary(plain: &str) -> Option<String> {
     let trimmed = plain.trim();
     if trimmed.is_empty() {
@@ -34,7 +19,6 @@ fn make_summary(plain: &str) -> Option<String> {
     Some(trimmed.chars().take(SUMMARY_MAX_CHARS).collect())
 }
 
-/// 当前平台标记。仅 macOS / Windows 双平台（见 AGENTS.md），其余 target 不应被编译进来。
 fn current_platform() -> Platform {
     #[cfg(target_os = "macos")]
     {
@@ -50,7 +34,6 @@ fn current_platform() -> Platform {
     }
 }
 
-/// 转换中间产物：决定一条记录的核心字段，其余字段由 [`build_item`] 补齐。
 struct Draft {
     kind: ClipboardKind,
     sub_kind: Option<ClipboardSubKind>,
@@ -63,21 +46,10 @@ struct Draft {
     size: Option<i64>,
 }
 
-/// files 列表入库时的 `content`：换行连接的路径串（与去重哈希、FTS 检索单一来源）。
 fn files_to_content(files: &[String]) -> String {
     files.join("\n")
 }
 
-/// 文本载荷 → 草稿。优先级来自用户配置：
-/// - html：`content` = HTML 源（`get_html()` 原文，前端 DOMPurify 后渲染），`sub_kind` = Html；
-/// - rtf：`content` = RTF 源（`get_rich_text()` 原文），`sub_kind` = Rtf；
-/// - 两者的 `search_text` 都直接用 OS 同时提供的纯文本（`get_text()`）——
-///   复制富文本时剪贴板本就并存纯文本表示，无需自己解析 HTML/RTF；
-/// - plain：被顺序选中时，`content` = 纯文本，`sub_kind` = url/email/color/path 识别，
-///   `search_text` 与 content 同串（统一由 FTS 索引 search_text）。
-///
-/// 一律以 trim 后的纯文本作为「是否有可展示内容」的判据：纯文本为空就直接 `None`，
-/// 不管 HTML/RTF 源是否存在（只有样式/空白节点的源对用户没意义，列表也渲染不出来）。
 fn draft_from_text(text: &TextPayload, capture: &Capture, plain_only: bool) -> Option<Draft> {
     if !capture.text && !capture.html && !capture.rtf {
         return None;
@@ -148,7 +120,6 @@ fn draft_from_text(text: &TextPayload, capture: &Capture, plain_only: bool) -> O
     Some(draft_plain_text(plain, plain_search, summary))
 }
 
-/// 根据纯文本表示生成文本草稿，并执行 URL / 邮箱 / 色值 / 路径子类型识别。
 fn draft_plain_text(plain: &str, plain_search: Option<String>, summary: Option<String>) -> Draft {
     Draft {
         kind: ClipboardKind::Text,
@@ -167,17 +138,14 @@ fn non_empty(value: &Option<String>) -> Option<&String> {
     value.as_ref().filter(|s| !s.trim().is_empty())
 }
 
-/// 文本 size 统一按最终入库内容的 UTF-8 字节数计算。
 fn count_text_bytes(text: &str) -> i64 {
     text.len() as i64
 }
 
-/// 判断字节数是否超过 MB 设置换算出的限制；`None` 表示不限。
 fn exceeds_limit(size: usize, limit: Option<u64>) -> bool {
     limit.is_some_and(|limit| size as u64 > limit)
 }
 
-/// 使用默认采集开关把载荷转换为待入库记录。
 #[cfg(test)]
 pub fn build_item(store: &ImageStore, payload: &ClipboardPayload) -> Result<Option<ClipboardItem>> {
     build_item_with_settings(
@@ -189,7 +157,6 @@ pub fn build_item(store: &ImageStore, payload: &ClipboardPayload) -> Result<Opti
     )
 }
 
-/// 把载荷转换为待入库记录，同时应用内容类型与隐私过滤设置。
 pub fn build_item_with_settings(
     store: &ImageStore,
     payload: &ClipboardPayload,
@@ -219,7 +186,6 @@ pub fn build_item_with_settings(
             if content.trim().is_empty() {
                 None
             } else {
-                // 记录每个路径的类型：d=directory, f=file
                 let file_types: Vec<&str> = files
                     .iter()
                     .map(|p| {
@@ -232,7 +198,6 @@ pub fn build_item_with_settings(
                     .collect();
                 let file_types_str = file_types.join(",");
 
-                // 文件名写入 search_text 供 FTS 命中；列表名由命令层从 content 路径现算，summary 保持为空。
                 let basenames = files
                     .iter()
                     .map(|p| {
@@ -347,7 +312,6 @@ mod tests {
         })
     }
 
-    /// build_item 需要 ImageStore；非图片用例不触图，故指向临时目录即可。
     fn store() -> (TempDir, ImageStore) {
         let dir = TempDir::new();
         let store = ImageStore::for_test(dir.path().join("resources").join("clipboard-images"));
@@ -378,7 +342,7 @@ mod tests {
         .unwrap();
         assert_eq!(item.sub_kind, Some(ClipboardSubKind::Html));
         assert_eq!(item.content, "<b>Hello</b> World");
-        // OS 提供的 plain 文本优先作为检索文本。
+
         assert_eq!(item.search_text.as_deref(), Some("Hello World"));
         assert_eq!(item.size, Some(18));
     }
@@ -404,8 +368,6 @@ mod tests {
 
     #[test]
     fn html_without_os_plain_is_skipped() {
-        // 无 OS 纯文本时整条丢弃：列表只能渲染 summary（基于 plain 文本），
-        // plain 为空意味着卡片渲染不出有效内容，不入库。
         let (_d, s) = store();
         let item = build_item(&s, &text_payload("", Some("<p>only html</p>"), None)).unwrap();
         assert!(item.is_none());
@@ -429,7 +391,7 @@ mod tests {
     #[test]
     fn text_size_uses_utf8_bytes() {
         let (_d, s) = store();
-        let item = build_item(&s, &text_payload("你好", None, None))
+        let item = build_item(&s, &text_payload("안녕", None, None))
             .unwrap()
             .unwrap();
 
@@ -777,7 +739,7 @@ mod tests {
             item.content_hash,
             content_hash(ClipboardKind::Image, &item.content)
         );
-        // 原图确实落盘。
+
         assert!(s.origin_path(&item.content).exists());
     }
 
@@ -840,8 +802,6 @@ mod tests {
             .unwrap()
             .is_none());
     }
-
-    // ---- 测试辅助 ----
 
     fn sample_png(w: u32, h: u32) -> Vec<u8> {
         use std::io::Cursor;

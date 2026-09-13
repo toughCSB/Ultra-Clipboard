@@ -1,26 +1,15 @@
-//! 「这次剪贴板变更来自哪个应用」的探测：在剪贴板事件回调里调用，
-//! 返回稳定 id（macOS bundle id / Windows exe 绝对路径）、显示名、可选的 icon PNG 字节。
-//!
-//! 必须**同步**在监听回调一发生时立即抓——延后到 await 之后再问，前台应用很可能已经切走。
-//! 探测失败（无前台应用 / 自身复制 / 平台 API 错误）一律返回 `None`，不阻断入库。
-//!
-//! 平台 API：macOS 走 `NSWorkspace.frontmostApplication`，Windows 走 `GetForegroundWindow`
-//! + `QueryFullProcessImageNameW`。图标统一交给 `crate::clipboard::icon` 跨平台抽取。
-
 use crate::db::models::Platform;
 
 #[derive(Debug, Clone)]
 pub struct FrontmostApp {
-    /// 稳定主键。macOS = bundle id（如 `com.apple.Safari`），Windows = exe 绝对路径。
     pub id: String,
-    /// 显示名（localizedName / FileDescription / exe stem 的优先回落）。
+
     pub name: String,
     pub platform: Platform,
-    /// 应用图标的 PNG 字节；提取失败则 `None`。
+
     pub icon_png: Option<Vec<u8>>,
 }
 
-/// 探测当前前台应用。失败不报错，只在 trace 级别记日志（监听回调高频，避免噪声）。
 pub fn detect_frontmost() -> Option<FrontmostApp> {
     #[cfg(target_os = "macos")]
     {
@@ -53,7 +42,6 @@ mod macos {
             let workspace = NSWorkspace::sharedWorkspace();
             let app = workspace.frontmostApplication()?;
 
-            // 没 bundle id 的进程（命令行子进程等）不入表，避免主键不稳定。
             let id = app.bundleIdentifier().map(|s| s.to_string())?;
             let name = app
                 .localizedName()
@@ -72,8 +60,6 @@ mod macos {
         })
     }
 
-    /// 通过 NSRunningApplication.bundleURL 拿到 .app 路径。objc2-app-kit 当前 feature 没生成
-    /// 该 getter，只能 msg_send!；返回 NSURL 后用 path 取 NSString → Rust String。
     unsafe fn bundle_path(app: &NSRunningApplication) -> Option<PathBuf> {
         let url: Option<Retained<NSURL>> = msg_send![app, bundleURL];
         let url = url?;
@@ -99,8 +85,7 @@ mod windows {
 
     pub(super) fn detect() -> Option<FrontmostApp> {
         let exe_path = unsafe { foreground_exe_path() }?;
-        // 自身写回事件依赖 WritebackGuard 的 content_hash 判定，这里不过滤自身——
-        // 与 macOS 行为一致：哪怕拿到的是 Ultra Clipboard 自己，guard 也会在下游 short-circuit。
+
         let name = Path::new(&exe_path)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -126,7 +111,7 @@ mod windows {
         if pid == 0 {
             return None;
         }
-        // PROCESS_QUERY_LIMITED_INFORMATION 足够 QueryFullProcessImageNameW，且不需要管理员权限。
+
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
         if handle.is_null() {
             return None;
