@@ -1,6 +1,6 @@
 # Contributing to Ultra Clipboard
 
-English | [简体中文](./CONTRIBUTING.zh-CN.md)
+English
 
 Thank you for helping improve Ultra Clipboard. This guide covers the project scope,
 development setup, architecture boundaries, quality checks, and contribution
@@ -135,7 +135,7 @@ src/
   components/    # shared React components
   constants/     # mirrored cross-layer constants
   hooks/         # shared hooks
-  locales/       # ko-KR, en-US, and zh-CN translations
+  locales/       # ko-KR and en-US translations
   pages/         # Clipboard, Preference, Preview, ContextMenu
   stores/        # Valtio UI state and settings mirrors
   types/         # TypeScript contract mirrors
@@ -152,7 +152,7 @@ src/
   names, event names, channels, or storage keys are reused across layers.
 - Add migrations for released schema changes. Do not edit released migrations in
   place.
-- Update `ko-KR`, `en-US`, and `zh-CN` locale resources for user-facing frontend
+- Update `ko-KR` and `en-US` locale resources for user-facing frontend
   text.
 - Use Rust-side `i18n/` for short user-visible native strings such as tray
   labels, native menus, and command-returned toast text.

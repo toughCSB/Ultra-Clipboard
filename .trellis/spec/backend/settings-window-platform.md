@@ -20,7 +20,7 @@ When adding a setting, update:
 - TypeScript `src/types/settings.ts`.
 - Preference schema in `src/pages/Preference/config/preferenceSchema.ts` if the
   setting is user-visible.
-- zh-CN and en-US locale entries.
+- ko-KR and en-US locale entries.
 - Side effects in `commands/settings.rs` or
   `src/pages/Preference/services/preferenceSettings.ts` when OS state changes
   immediately.
@@ -150,8 +150,8 @@ and preview payloads. Treat it as a cross-layer contract change.
 
 - User-visible copy should say clipboard window, not main window.
 - User-visible names for concrete window entities should include the window
-  suffix, for example `剪贴板窗口` / `Clipboard Window` and
-  `偏好设置窗口` / `Preferences Window`.
+  suffix, for example `클립보드 창` / `Clipboard Window` and
+  `환경설정 창` / `Preferences Window`.
 - Do not use raw `"clipboard"` in React components; compare with
   `WINDOW_LABEL.CLIPBOARD`.
 - Keep platform terms such as Rust `main()`, `run_on_main_thread`, and Cocoa

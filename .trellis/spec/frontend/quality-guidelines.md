@@ -38,7 +38,7 @@ rather than hand-sorting in a different style.
 - Use `async`/`await` and `try`/`catch`; avoid `.then()` chains in new code.
 - Use `void 0` for intentionally absent optional fields when matching local
   style, as in `Clipboard/List.tsx`.
-- Keep i18n in both `src/locales/zh-CN/` and `src/locales/en-US/`.
+- Keep i18n in both `src/locales/ko-KR/` and `src/locales/en-US/`.
 - Use `getCurrentWebviewWindow()` for the current window.
 - Use `cn` for conditional classes.
 - Sanitize user-provided HTML/SVG with DOMPurify at the rendering boundary.

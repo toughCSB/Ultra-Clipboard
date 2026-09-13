@@ -12,7 +12,7 @@ Replace the current single "select all on open" preference with three independen
   * select group on open: keep last selection / all / one custom group
 * When the main clipboard window becomes visible, apply only dimensions whose Select value is not `preserve`.
 * Keep the existing default behavior equivalent to the current default: all three new Select values default to `preserve`.
-* Surface all three settings in Preferences > Interface > Main Window with zh-CN and en-US labels, descriptions, and option labels.
+* Surface all three settings in Preferences > Interface > Main Window with ko-KR and en-US labels, descriptions, and option labels.
 * Update TypeScript setting mirrors, preference schema, setting icons, Rust settings model, and settings default/missing-field tests.
 
 ## Acceptance Criteria
@@ -28,7 +28,7 @@ Replace the current single "select all on open" preference with three independen
 * Tests added/updated where appropriate.
 * Lint / typecheck green for touched frontend code.
 * Rust format/checks green for touched backend code.
-* User-visible text exists in both zh-CN and en-US.
+* User-visible text exists in both ko-KR and en-US.
 * No compatibility layer for `selectAllGroupOnOpen`, because the project is still pre-release per AGENTS.md.
 
 ## Technical Approach
@@ -55,12 +55,12 @@ Rename the old single Rust/TypeScript setting into three selection fields under 
 * Previous frontend mirror: `src/types/settings.ts` had `Window.selectAllGroupOnOpen`.
 * Previous behavior: `src/pages/Clipboard/components/List.tsx` reset `range`, `category`, and `groupId` together when `selectAllGroupOnOpen` was true.
 * Previous preferences entry: `src/pages/Preference/config/preferenceSchema.ts` rendered one switch at `clipboard.window.selectAllGroupOnOpen`.
-* Previous i18n keys: `src/locales/zh-CN/preferences.json` and `src/locales/en-US/preferences.json` defined `selectAllGroupOnOpen`.
+* Previous i18n keys: `src/locales/ko-KR/preferences.json` and `src/locales/en-US/preferences.json` defined `selectAllGroupOnOpen`.
 * Corrected user clarification: the three settings should be Select controls, not switches.
 
 ## Verification
 
-* `pnpm exec biome check src/constants/windowOpenSelection.ts src/types/settings.ts src/pages/Clipboard/components/List.tsx src/pages/Preference/config/preferenceSchema.ts src/pages/Preference/types/preferences.ts src/pages/Preference/components/PreferenceSettingRow.tsx src/pages/Preference/components/settingControls/ClipboardGroupSelectControl.tsx src/pages/Preference/components/settingControls/settingVisual.ts src/locales/zh-CN/preferences.json src/locales/en-US/preferences.json`
+* `pnpm exec biome check src/constants/windowOpenSelection.ts src/types/settings.ts src/pages/Clipboard/components/List.tsx src/pages/Preference/config/preferenceSchema.ts src/pages/Preference/types/preferences.ts src/pages/Preference/components/PreferenceSettingRow.tsx src/pages/Preference/components/settingControls/ClipboardGroupSelectControl.tsx src/pages/Preference/components/settingControls/settingVisual.ts src/locales/ko-KR/preferences.json src/locales/en-US/preferences.json`
 * `pnpm tsc`
 * `pnpm build`
 * `cd src-tauri && cargo fmt --check`

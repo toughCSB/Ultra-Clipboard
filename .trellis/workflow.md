@@ -603,7 +603,7 @@ The AI drives a batched commit of this task's code changes so `/finish-work` can
    ```bash
    git log --oneline -5
    ```
-   Note the prefix convention (`feat:` / `fix:` / `chore:` / `docs:` ...), language (中文/English), and length style.
+   Note the prefix convention (`feat:` / `fix:` / `chore:` / `docs:` ...), language (Korean/English), and length style.
 
 3. **Classify dirty files into two groups**:
    - **AI-edited this session** — files you wrote/edited via Edit/Write/Bash tool calls in this session. You know what changed and why.
@@ -624,12 +624,12 @@ The AI drives a batched commit of this task's code changes so `/finish-work` can
      - <file>
      - <file>
 
-   Reply 'ok' / '行' to execute. Reply with edits, or '我自己来' / 'manual' to abort.
+   Reply 'ok' / '확인' to execute. Reply with edits, or '직접 할게' / 'manual' to abort.
    ```
 
 6. **On confirmation**: run `git add <files>` + `git commit -m "<msg>"` for each batch in order. Do not amend. Do not push.
 
-7. **On rejection** (user replies "不行" / "我自己来" / "manual" / any pushback on the plan): stop. Do not attempt a second plan. The user will commit by hand; you skip ahead to 3.5 once they confirm.
+7. **On rejection** (user replies "안 돼" / "직접 할게" / "manual" / any pushback on the plan): stop. Do not attempt a second plan. The user will commit by hand; you skip ahead to 3.5 once they confirm.
 
 **Rules**:
 - No `git commit --amend` anywhere — three-stage three-commit flow (work commits → archive commit → journal commit).

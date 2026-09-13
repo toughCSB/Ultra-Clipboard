@@ -5,7 +5,7 @@
 
 **macOS와 Windows를 위한 로컬 우선 클립보드 관리자**
 
-한국어 | [English](./README.en.md) | [简体中文](./README.zh-CN.md)
+한국어 | [English](./README.en.md)
 
   <br />
 
@@ -18,7 +18,7 @@
 
 ## 소개
 
-Ultra Clipboard는 복사한 내용을 기기에 저장하고 빠르게 다시 찾는 오픈 소스 데스크톱 클립보드 관리자입니다. Rust 중심의 Tauri 구조와 React UI로 구성되어 있으며, 기본 UI 언어는 한국어입니다.
+Ultra Clipboard는 복사한 내용을 기기에 저장하고 빠르게 다시 찾는 오픈 소스 데스크톱 클립보드 관리자입니다. Rust 중심의 Tauri 구조와 React UI로 구성되어 있으며, 한국어와 영어 UI를 지원하고 기본 언어는 한국어입니다.
 
 이 프로젝트는 [EcoPasteHub의 EcoPaste](https://github.com/EcoPasteHub/EcoPaste)를 기반으로 한 독립 유지보수 fork입니다. EcoPasteHub와 공식적으로 제휴하거나 소속된 프로젝트가 아니며, Ultra Clipboard의 개발과 배포는 `toughCSB`가 독립적으로 관리합니다.
 
@@ -49,13 +49,13 @@ Ultra Clipboard는 EcoPaste와 별도의 데이터 namespace를 사용합니다.
 - Windows
 - macOS
 
-Linux는 지원하지 않습니다. `v1.1.1`은 Windows와 macOS용 안정 릴리스입니다. macOS 패키지는 CI에서 빌드되지만 실제 macOS runtime QA는 아직 완료되지 않았습니다.
+Linux는 지원하지 않습니다. `v1.1.2`는 Windows와 macOS용 안정 릴리스입니다. macOS 패키지는 CI에서 빌드되지만 실제 macOS runtime QA는 아직 완료되지 않았습니다.
 
 ## 다운로드 및 설치
 
 최신 빌드는 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases)에서 받을 수 있습니다.
 
-현재 `v1.1.1`은 서명되지 않은 빌드입니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로, 출처와 파일을 확인한 뒤 사용하세요. 이 릴리스는 코드 서명이나 notarization이 완료됐다고 주장하지 않습니다.
+현재 `v1.1.2`는 서명되지 않은 빌드입니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로, 출처와 파일을 확인한 뒤 사용하세요. 이 릴리스는 코드 서명이나 notarization이 완료됐다고 주장하지 않습니다.
 
 ## 개발
 

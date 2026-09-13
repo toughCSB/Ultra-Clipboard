@@ -16,7 +16,7 @@ src/
   constants/     # Rust-mirrored command, event, window, action constants
   hooks/         # reusable React hooks for Tauri events, theme, keyboard, data
   i18n/          # react-i18next setup
-  locales/       # zh-CN and en-US JSON namespaces
+  locales/       # ko-KR and en-US JSON namespaces
   pages/         # route-level features: Clipboard, Preference, Preview, ContextMenu
   router/        # React Router definitions
   stores/        # Valtio UI state and settings/window mirrors

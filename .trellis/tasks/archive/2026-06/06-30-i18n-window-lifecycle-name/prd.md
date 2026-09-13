@@ -19,12 +19,12 @@ Fix the Preferences diagnostics window lifecycle table so the onboarding window 
 ## Requirements
 
 - Add onboarding to the known lifecycle window label mapping.
-- Add matching `windows.onboarding` entries in both `zh-CN` and `en-US` preferences locale files.
+- Add matching `windows.onboarding` entries in both `ko-KR` and `en-US` preferences locale files.
 - Keep the existing fallback behavior for unknown labels.
 
 ## Acceptance Criteria
 
-- [ ] The lifecycle snapshot row for label `onboarding` renders as Chinese in `zh-CN`.
+- [ ] The lifecycle snapshot row for label `onboarding` renders as Korean in `ko-KR`.
 - [ ] The lifecycle snapshot row for label `onboarding` renders as English in `en-US`.
 - [ ] No raw `onboarding` text is shown for the known onboarding window in the diagnostics modal.
 - [ ] Frontend lint/type checks pass for the touched files.
@@ -44,5 +44,5 @@ Fix the Preferences diagnostics window lifecycle table so the onboarding window 
 ## Technical Notes
 
 - Relevant component: `src/pages/Preference/components/settingControls/ActionControl.tsx`.
-- Relevant locales: `src/locales/zh-CN/preferences.json`, `src/locales/en-US/preferences.json`.
+- Relevant locales: `src/locales/ko-KR/preferences.json`, `src/locales/en-US/preferences.json`.
 - Relevant specs: frontend component, quality, type-safety, and code reuse guides.

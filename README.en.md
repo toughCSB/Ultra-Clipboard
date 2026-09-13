@@ -5,7 +5,7 @@
 
 **A local-first clipboard manager for macOS and Windows.**
 
-[한국어](./README.md) | English | [简体中文](./README.zh-CN.md)
+[한국어](./README.md) | English
 
   <br />
 
@@ -18,7 +18,7 @@
 
 ## About
 
-Ultra Clipboard is an open source desktop clipboard manager that stores copied content on your device so you can find and reuse it quickly. It uses a Rust-first Tauri architecture with a React UI. Korean is the default UI language.
+Ultra Clipboard is an open source desktop clipboard manager that stores copied content on your device so you can find and reuse it quickly. It uses a Rust-first Tauri architecture with a React UI. The interface supports Korean and English, with Korean as the default.
 
 This project is an independently maintained fork based on [EcoPaste by EcoPasteHub](https://github.com/EcoPasteHub/EcoPaste). Ultra Clipboard is not affiliated with or officially endorsed by EcoPasteHub. Development and releases are maintained independently by `toughCSB`.
 
@@ -49,13 +49,13 @@ Ultra Clipboard uses a separate data namespace from EcoPaste. To bring data from
 - Windows
 - macOS
 
-Linux is not supported. `v1.1.1` is the stable release for Windows and macOS. The macOS packages are built in CI, but macOS runtime QA has not yet been completed.
+Linux is not supported. `v1.1.2` is the stable release for Windows and macOS. The macOS packages are built in CI, but macOS runtime QA has not yet been completed.
 
 ## Download and Installation
 
 Download the latest builds from [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases).
 
-`v1.1.1` is currently unsigned. Windows SmartScreen or macOS Gatekeeper may show a warning. Verify the source and file before using it. This release does not claim code signing or notarization.
+`v1.1.2` is currently unsigned. Windows SmartScreen or macOS Gatekeeper may show a warning. Verify the source and file before using it. This release does not claim code signing or notarization.
 
 ## Development
 

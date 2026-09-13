@@ -2,23 +2,23 @@
 
 ## Goal
 
-配置统一版本发布命令，支持正式版、RC 和 beta，保证 `package.json`、Tauri 配置和发布 tag 一致。
+Configure a unified version-release command for stable, RC, and beta releases while keeping `package.json`, Tauri configuration, and release tags aligned.
 
 ## Scope
 
-- 接入 `release-it` 或等价发布工具。
-- 提供 `release`、`release-rc`、`release-beta` 命令。
-- 使用 Conventional Commits 驱动版本号与 changelog。
-- 保持 tag 命名与 CI 触发规则一致。
+- Integrate `release-it` or an equivalent release tool.
+- Provide `release`, `release-rc`, and `release-beta` commands.
+- Drive versions and the changelog from Conventional Commits.
+- Keep tag naming aligned with CI trigger rules.
 
 ## Implementation Notes
 
-- 当前 `package.json` 版本 `0.6.0-beta.3` 是项目未发版开发期边界。
-- 一旦改成其他版本，数据兼容策略也要随之改变。
-- 版本变更前要确认数据库 schema 与迁移策略。
+- The current `package.json` version, `0.6.0-beta.3`, marks the unreleased development boundary.
+- Changing to another version also changes the data-compatibility policy.
+- Confirm the database schema and migration strategy before changing versions.
 
 ## Acceptance Criteria
 
-- dry-run 能输出正确版本、tag 和 changelog。
-- 正式版、RC、beta 的 package metadata 与 Tauri bundle version 一致。
-- CI 能被生成 tag 正确触发。
+- A dry run outputs the correct version, tag, and changelog.
+- Package metadata and the Tauri bundle version match for stable, RC, and beta releases.
+- Generated tags trigger CI correctly.

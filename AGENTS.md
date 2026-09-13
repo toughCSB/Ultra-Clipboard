@@ -1,80 +1,80 @@
 # AGENTS.md
 
-> 本文件是本项目 AI 编码工具的**单一真相源**。其它工具入口若存在，只应引用本文件，不要重复维护规则。
-> 分阶段 backlog 已迁移到 `.trellis/tasks/`，每个任务的 PRD 与研究资料以 Trellis task 为准。
+> This file is the single source of truth for AI coding tools in this project. Other tool entry points should reference it instead of duplicating these rules.
+> Staged backlog work lives in `.trellis/tasks/`; each task's PRD and research are authoritative for that task.
 
-Ultra Clipboard 是基于 EcoPaste 的跨平台剪贴板管理器，采用 Rust-First 的 Tauri 架构。
+Ultra Clipboard is a cross-platform clipboard manager based on EcoPaste and uses a Rust-first Tauri architecture.
 
-## 快速原则
+## Core Principles
 
-- **Rust-First**：业务、系统能力、数据库与持久化优先放 Rust；前端只做展示与交互。
-- **仅支持 macOS + Windows**：不要新增 Linux 代码、依赖、构建产物或文档承诺。
-- **已发布版本按发布数据处理**：数据结构、配置格式、默认值和 migration 变更必须有明确迁移策略，不再直接覆盖已发布数据契约。
-- **主动演进当前项目**：实现新能力时以当前代码、产品需求和平台约束为准，把当前仓库作为唯一实现基线。
-- **尊重 dirty worktree**：不要回滚或覆盖非本轮改动；需要动到已修改文件时先读清楚。
-- **提交与推送分支策略**：需要推送代码且当前分支是 `master` 时，自动新建工作分支，在新分支提交并推送；当前分支不是 `master` 时，先询问用户是在当前分支提交并推送，还是新建分支后提交并推送。
+- **Rust first**: Put business logic, system capabilities, database access, and persistence in Rust. Keep the frontend focused on presentation and interaction.
+- **macOS and Windows only**: Do not add Linux code, dependencies, build artifacts, or documentation promises.
+- **Treat released data as public contracts**: Schema, settings, defaults, and migrations require an explicit upgrade path.
+- **Evolve the current project directly**: Treat this repository as the implementation baseline and follow its current product and platform constraints.
+- **Respect a dirty worktree**: Never overwrite or revert changes you did not make. Read modified files before touching them.
+- **Branch policy**: When a push is required from `master`, create a work branch first. On another branch, ask whether to push that branch or create a new one.
 
-## 技术栈
+## Stack
 
-| 维度 | 选型                                            |
-| ---- | ----------------------------------------------- |
-| 桌面 | Tauri v2                                        |
-| 前端 | React 19 + Ant Design v6 + UnoCSS `presetWind4` |
-| 状态 | Valtio（仅 UI 状态与设置镜像）                  |
-| 后端 | Rust + sqlx + SQLite                            |
-| 构建 | Vite + pnpm                                     |
-| 质量 | Biome、rustfmt、clippy、cargo test              |
+| Area | Choice |
+| --- | --- |
+| Desktop | Tauri v2 |
+| Frontend | React 19 + Ant Design v6 + UnoCSS `presetWind4` |
+| State | Valtio for UI state and settings mirrors only |
+| Backend | Rust + sqlx + SQLite |
+| Build | Vite + pnpm |
+| Quality | Biome, rustfmt, clippy, cargo test |
 
-## 架构边界
+## Architecture Boundaries
 
-**必须在 Rust 实现**
+**Implement in Rust**
 
-- 剪贴板监听、写回剪贴板、模拟粘贴，以及监听回环抑制。
-- 所有数据库读写、SQLite FTS5 搜索、历史记录清理。
-- 内容类型识别：URL、email、color、path。
-- 窗口定位计算、OS 级键盘钩子、全局快捷键、托盘、自启。
-- 图片落盘、缩略图、文件元信息读取、设置项持久化。
-- Rust 侧直接展示给用户的短文案（托盘、原生右键菜单、命令返回 toast）走 `i18n/` 模块；日志与内部错误上下文不走这里。
+- Clipboard monitoring, clipboard writeback, simulated paste, and feedback-loop suppression.
+- All database reads and writes, SQLite FTS5 search, and history cleanup.
+- Content detection for URLs, email addresses, colors, and paths.
+- Window positioning, OS-level keyboard hooks, global shortcuts, tray behavior, and autostart.
+- Image persistence, thumbnails, file metadata, and settings persistence.
+- Short Rust-owned user-visible labels for the tray, native context menus, and command toasts belong in `i18n/`. Logs and internal error context do not.
 
-**保留在前端**
+**Keep in the frontend**
 
-- 组件渲染、虚拟滚动、瀑布流、动画、列表选中态。
-- 主题视觉应用、CSS 变量注入、前端 i18n 文案渲染（Rust 侧文案见上）。
-- HTML sanitize 与预览、RTF 渲染、Markdown 渲染。
-- 普通键盘交互；Windows 主窗口收不到键时走 Rust `keyboard/` 事件。
+- Component rendering, virtual scrolling, masonry layout, animation, and list selection state.
+- Theme visuals, CSS variable injection, and frontend i18n rendering.
+- Sanitized HTML preview, RTF rendering, and Markdown rendering.
+- Normal keyboard interaction. Use Rust `keyboard/` events when the Windows main window cannot receive keys.
 
-**跨端契约**
+**Cross-layer contracts**
 
-- 前端通过 `#[tauri::command]` 调 Rust，Rust 用 `emit` 通知刷新。
-- 事件名用 `domain://action`，如 `clipboard://updated`、`settings://updated`、`window://visibility`、`keyboard://nav`。
-- 命令名、事件名、channel/storage key 等跨端或多处复用字面量必须集中维护：Rust 模块常量 + `src/constants/` 同步更新。
+- The frontend calls Rust through `#[tauri::command]`; Rust emits refresh events.
+- Event names use `domain://action`, such as `clipboard://updated`, `settings://updated`, `window://visibility`, and `keyboard://nav`.
+- Reused command names, event names, channels, and storage keys must be centralized as Rust module constants with matching values in `src/constants/`.
 
-## 目录约定
+## Directory Conventions
 
 ```text
 src-tauri/
   src/
-    commands/   # tauri command 入口，只做校验与转发
-    db/         # sqlx 仓储、连接池、模型
-    clipboard/  # 剪贴板读写、监听、内容识别
-    window/     # 窗口管理、定位、平台特化
-    keystroke/  # 模拟粘贴按键注入
-    keyboard/   # OS 级键盘钩子（仅 windows）
-    mouse/      # 全局鼠标钩子，主窗口失焦隐藏（仅 windows）
-    shortcut/   # 全局快捷键
-    tray/       # 托盘菜单
-    menu/       # 列表项右键菜单（macOS muda / Windows webview 窗）
-    drag_out/   # OS 级拖出（文件/图片/文本拖到外部应用）
-    backup/     # 兼容 .ecopastebak 的历史备份导出与接收
-    i18n/       # Rust 侧用户可见文案（托盘、菜单、命令 toast）
-    autostart/  # 开机自启
-    settings/   # 设置模型与持久化
-    core/       # 错误类型、路径、prevent_default（setup 在 lib.rs）
+    commands/   # thin Tauri command validation and dispatch
+    db/         # sqlx repositories, connection pool, models
+    clipboard/  # clipboard I/O, monitoring, content detection
+    window/     # window management, positioning, platform code
+    keystroke/  # simulated paste input
+    keyboard/   # OS-level keyboard hook on Windows
+    mouse/      # global mouse hook and focus-loss hiding on Windows
+    shortcut/   # global shortcuts
+    tray/       # tray menu
+    menu/       # clipboard context menus
+    drag_out/   # native drag-out for files, images, and text
+    backup/     # `.ecopastebak` import and export
+    i18n/       # Rust-owned user-visible labels
+    autostart/  # startup registration
+    settings/   # settings model and persistence
+    core/       # errors, paths, prevent_default
   migrations/
-src/            # 前端 components/pages/stores/hooks/locales/utils
+src/            # frontend components, pages, stores, hooks, locales, utilities
 ```
 
-## 常用命令
+## Common Commands
 
 ```bash
 pnpm install
@@ -89,73 +89,73 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
-## Rust 约定
+## Rust Conventions
 
-- 命令与仓储函数使用 `async`，返回 `Result<T, AppError>`；`AppError` 序列化为 `{ kind, message }`。
-- `message` 写用户可读根因，不加 `"xxx failed: {err}"` 动作前缀；动作上下文由前端 toast label 拼接，技术上下文写日志。
-- 错误处理用 `thiserror` 定义错误类型、`anyhow` 做内部传播、`tauri-plugin-log` 记录上下文。
-- 数据库使用 Tauri `State<SqlitePool>`；不要每次新建连接。
-- Cargo 依赖版本不要写 patch 级完整版本；所有依赖优先写主版本号，如 `"2"`，确需收窄时最多写到 minor，如 `"0.9"`，除非有明确锁定原因。
-- SQL 用 `sqlx::query` / `query_as`，不用 `query!` 宏，避免维护离线缓存。
-- 已发布版本的 schema 变更必须新增 migration；已发布 migration 不回改。
-- 改 schema 时同步检查所有 `SELECT`、`INSERT`、`UPDATE`、`bind`、测试结构体字面量；`query_as` 字段不匹配可能表现为 UI 空结果。
-- 表必须有 `created_at` / `updated_at`，类型 `TEXT NOT NULL`；剪贴板 `updated_at` 表示内容重新使用时间，收藏、置顶、备注等元数据更新不要刷新它。
-- `commands/` 保持薄层：参数校验 + 调用下层模块，不写业务逻辑。
-- 平台代码用 `#[cfg(target_os = "macos")]` / `#[cfg(target_os = "windows")]` 隔离；新增能力两端同步实现，或显式标注 TODO。
+- Commands and repositories use `async` and return `Result<T, AppError>`. `AppError` serializes as `{ kind, message }`.
+- `message` contains a user-readable cause without an action prefix such as `"xxx failed: {err}"`. The frontend toast supplies action context; logs carry technical context.
+- Use `thiserror` for error types, `anyhow` for internal propagation, and `tauri-plugin-log` for context.
+- Database code uses Tauri `State<SqlitePool>` rather than opening a new connection per call.
+- Prefer major dependency versions in Cargo, or minor versions only when narrowing is necessary. Pin a patch version only with a documented reason.
+- Use `sqlx::query` and `query_as`, not `query!`, to avoid offline cache maintenance.
+- Add a migration for every released schema change. Never edit a released migration.
+- When schema changes, update every matching `SELECT`, `INSERT`, `UPDATE`, `bind`, and test struct literal.
+- Tables require `created_at` and `updated_at` as `TEXT NOT NULL`. Clipboard `updated_at` tracks content reuse; metadata changes must not refresh it.
+- Keep `commands/` thin: parameter validation followed by lower-layer calls.
+- Isolate platform code with `#[cfg(target_os = "macos")]` and `#[cfg(target_os = "windows")]`. Implement both supported platforms or mark the missing platform explicitly.
 
-## 前端约定
+## Frontend Conventions
 
-**React 与组件**
+**React and components**
 
-- 组件用 `FC<Props>`；函数体内解构 `props`，不要在参数处解构。
-- 解构时需要透传剩余字段就用 `...rest` 收尾。
-- React 19 优先用 Actions、`use`、`useOptimistic`、ref as prop；不要新增 `forwardRef`。
-- JSX 事件回调提取为命名函数；单一动作用动词名，通用事件用 `handleXxx`。
-- 箭头函数一律使用 `{}` 和显式 `return`；不要单表达式隐式返回。
-- `useEffect` 只写同步副作用；异步初始化用 `useMount` + `useUnmount`，清理句柄用 `useRef`。
+- Use `FC<Props>` and destructure `props` inside the function body.
+- End destructuring with `...rest` when forwarding remaining properties.
+- Prefer React 19 Actions, `use`, `useOptimistic`, and ref as a prop. Do not add `forwardRef`.
+- Extract JSX event callbacks into named functions. Use verbs for single actions and `handleXxx` for general events.
+- Arrow functions always use braces and explicit `return`.
+- Keep `useEffect` synchronous. Use `useMount` and `useUnmount` for asynchronous initialization and `useRef` for cleanup handles.
 
-**状态、数据与平台 API**
+**State, data, and platform APIs**
 
-- Valtio 只存 UI 状态和设置镜像；业务数据从 Rust command 拉取，不在前端建数据库副本。
-- 异步统一 `async` / `await` + `try` / `catch`；不要 `.then()` / `.catch()` / `.finally()` 链式写法。
-- 表达未定义用 `void 0`，不要写 `undefined`。
-- 日志统一走 `@/utils/log`，禁止裸 `console.*`。
-- 平台与环境判断统一从 `@/utils/is` 引入。
-- 当前窗口统一用 `getCurrentWebviewWindow()`，不要用 `getCurrentWindow()`。
+- Valtio stores only UI state and settings mirrors. Load business data through Rust commands.
+- Use `async`/`await` with `try`/`catch`, not chained `.then()`, `.catch()`, or `.finally()`.
+- Express an undefined value as `void 0`.
+- Use `@/utils/log`; never call bare `console.*`.
+- Import platform and environment checks from `@/utils/is`.
+- Use `getCurrentWebviewWindow()`, not `getCurrentWindow()`.
 
-**样式与 UI**
+**Style and UI**
 
-- 优先使用 Ant Design v6 组件；prop 命名用 `open` / `checked` / `disabled` / `onClick`。
-- 自定义 antd 内部结构优先用组件 `classNames` / `styles` 语义槽位；谨慎使用 `.ant-*` 全局覆盖。
-- 样式使用 UnoCSS；条件 className 统一用 `cn from "@/utils/cn"` + 对象语法，不拼模板字符串或 `+`。
-- 颜色只能用 antd token 映射类，如 `text-ant-secondary`、`bg-ant-container`、`border-ant-border`；需要新颜色先扩 `src/unocss/presetAntdColors.ts`。
-- 普通文本继承全局 `text-ant-text`；次级信息优先 `text-ant-secondary`，更浅层级需有明确设计理由。
-- 字号用标准语义字号：`text-xs`、`text-sm`、`text-base`、`text-lg`；不要用 `text-3` / `text-3.5`。
-- 尺寸走 wind4 数字制（1 = 4px），如 `p-1.5`、`gap-2`、`rounded-2.5`、`w-36`；不要写任意 px 类或 inline px。
-- 主题通过根部 `ConfigProvider` 的 `theme.algorithm` 切换，同时把 `light` / `dark` 类同步到 `<html>`。
+- Prefer Ant Design v6 components and standard props such as `open`, `checked`, `disabled`, and `onClick`.
+- Customize Ant Design internals through semantic `classNames` and `styles` slots before global `.ant-*` overrides.
+- Use UnoCSS. Compose conditional classes with `cn` from `@/utils/cn` and object syntax.
+- Use Ant Design token classes for colors. Extend `src/unocss/presetAntdColors.ts` before adding a color.
+- Let normal text inherit `text-ant-text`; use `text-ant-secondary` for secondary information.
+- Use semantic text sizes: `text-xs`, `text-sm`, `text-base`, and `text-lg`.
+- Use Wind4 numeric spacing and sizing, where `1 = 4px`; avoid arbitrary pixel classes and inline pixels.
+- Switch the theme through the root `ConfigProvider` algorithm and synchronize `light` or `dark` on `<html>`.
 
-**内容与列表**
+**Content and lists**
 
-- i18n 文案必须同步补齐 `zh-CN`（默认）和 `en-US`。
-- 列表使用 `react-virtuoso` 虚拟滚动。
-- HTML 内容必须经 DOMPurify sanitize 再渲染。
+- Keep `ko-KR` and `en-US` i18n resources complete and synchronized.
+- Use `react-virtuoso` for lists.
+- Sanitize HTML with DOMPurify before rendering.
 
-## 通用代码规范
+## General Code Rules
 
-- 非显然函数 / 方法上方写文档注释：TS/JS 用多行 JSDoc，Rust 用连续 `///`；getter/setter、显然一行包装、纯字面量常量可省。
-- 优先早返回，避免把主流程包进嵌套 `if`。
-- hooks、变量声明、副作用、不同语义阶段和 `return` 前用空行分组。
-- 函数体内少写注释；只解释隐藏约束、反直觉行为或规避原因。
-- 不写历史残留注释，不引用 TODO 阶段号或外部行号。
-- 不做超出当前需求的抽象、兼容垫片或提前优化；React hook / 工具函数遇到真实复杂度再抽象。
-- 提交信息用单行 Conventional Commits，如 `feat:`、`fix:`、`refactor:`、`docs:`。
-- 改 UI 后必须实际操作验证主路径与边界，不只靠类型检查。
+- Add documentation only for non-obvious functions or methods. Use multiline JSDoc in TypeScript and consecutive `///` lines in Rust.
+- Prefer early returns over nesting the main flow.
+- Separate hooks, declarations, effects, semantic phases, and the final `return` with blank lines.
+- Comments inside functions explain only hidden constraints, counterintuitive behavior, or workarounds.
+- Do not add historical comments, phase-number TODOs, or external line references.
+- Do not add abstractions, compatibility shims, or speculative optimization outside the current requirement.
+- Use single-line Conventional Commits such as `feat:`, `fix:`, `refactor:`, and `docs:`.
+- After UI changes, operate the real path and boundary cases rather than relying only on type checks.
 
-## 外部文档
+## External Documentation
 
-- Ant Design v6：<https://ant.design/components/overview-cn> · <https://ant.design/docs/react/customize-theme-cn>
-- UnoCSS：<https://unocss.dev/> · <https://unocss.dev/presets/wind4>
-- Tauri v2：<https://tauri.app/llms-full.txt>
+- Ant Design v6: <https://ant.design/components/overview> and <https://ant.design/docs/react/customize-theme>
+- UnoCSS: <https://unocss.dev/> and <https://unocss.dev/presets/wind4>
+- Tauri v2: <https://tauri.app/llms-full.txt>
 
 <!-- TRELLIS:START -->
 

@@ -2,44 +2,44 @@
 
 ## Goal
 
-首次启动时显示独立引导窗口，分步完成关键设置：欢迎、权限、快捷键、忽略应用、旧版数据导入和完成页。
+Show a separate first-run onboarding window with steps for welcome, permissions, shortcuts, ignored applications, legacy-data import, and completion.
 
 ## Scope
 
-- 引导 UI 参考 HapiGo 的深色无边框设置向导：大标题、中心化内容、底部主按钮、权限截图式说明、完成页。
-- 引导窗口始终使用 dark 模式，不跟随全局主题。
-- 引导窗口设置 `decorations: false`，固定尺寸并在打开时居中显示。
-- macOS 引导窗口用 CSS `rounded-4` 做圆角；Windows 保持普通无边框矩形。
-- 右上角语言切换使用下拉菜单，不使用分段按钮。
-- 引导未完成前不提供关闭按钮，并拦截原生关闭请求，属于强制引导。
-- 新增 `Settings.onboarding.completed: bool`，默认 false。
-- 新增 `Settings.onboarding.lastStep: number`，用于中途关闭后恢复。
-- 旧版导入状态可放在 `Settings.onboarding.legacyImport` 下，记录是否检测、是否导入、导入类型和时间。
-- 新窗口 label 为 `onboarding`，URL 为 `/#/onboarding`。
-- 启动时根据 `SettingsStore.snapshot().onboarding.completed` 决定是否创建。
-- 新增 `pages/Onboarding`。
-- 引导步骤拆分为独立组件，步骤数组集中定义；能用 Ant Design 组件实现的交互优先使用 Ant Design，不重复造基础控件。
+- Model the onboarding UI after HapiGo's dark borderless setup wizard: large titles, centered content, a primary bottom button, screenshot-style permission guidance, and a completion page.
+- Always use dark mode in onboarding, independent of the global theme.
+- Set `decorations: false`, use a fixed size, and center the window when opened.
+- Use CSS `rounded-4` corners on macOS; keep a regular borderless rectangle on Windows.
+- Use a dropdown language switcher in the upper-right corner rather than segmented controls.
+- Do not provide a close button before completion, and intercept native close requests for mandatory onboarding.
+- Add `Settings.onboarding.completed: bool`, defaulting to false.
+- Add `Settings.onboarding.lastStep: number` to resume after interruption.
+- Store lightweight legacy-import state under `Settings.onboarding.legacyImport`, including detection, import status, selected types, and time.
+- Use the `onboarding` window label and `/#/onboarding` URL.
+- Create the window at startup according to `SettingsStore.snapshot().onboarding.completed`.
+- Add `pages/Onboarding`.
+- Implement each step as a separate component with a central step array. Prefer Ant Design interactions over duplicate primitives.
 
 ## Implementation Notes
 
-- Rust 命令包括 `open_onboarding()`、`set_onboarding_step(step)`、`finish_onboarding()`、`check_permissions()`、`detect_legacy_data()`、`import_legacy_data(types)`、`cancel_legacy_import(task_id)`。
-- macOS 权限检测至少覆盖辅助功能；屏幕录制、输入监控可按真实需求决定是否展示。
-- 旧版数据路径实现前先核对本地 `EcoPaste_bak` 与旧版 identifier。
-- 使用 Ant Design 组件或项目内现有基础控件实现 stepper。
-- 每一步独立组件，步骤数组集中定义，便于后续追加步骤。
-- 快捷键步骤复用设置页快捷键录入控件。
-- 忽略应用步骤复用近期来源应用和设置写回能力。
-- 旧版导入步骤显示类型数量、总大小、进度和取消按钮。
-- 旧版导入用只读连接打开旧 DB，不触发迁移。
-- 按用户选择类型转换为新 schema；图片复制到当前资源目录并重算 hash。
-- 导入走现有入库和去重逻辑。
-- 长任务用后台 task + 进度事件，不阻塞窗口。
+- Rust commands include `open_onboarding()`, `set_onboarding_step(step)`, `finish_onboarding()`, `check_permissions()`, `detect_legacy_data()`, `import_legacy_data(types)`, and `cancel_legacy_import(task_id)`.
+- macOS permission checks cover Accessibility at minimum; show Screen Recording and Input Monitoring only when required.
+- Verify local `EcoPaste_bak` data and the legacy identifier before implementing legacy paths.
+- Implement the stepper with Ant Design or existing project primitives.
+- Keep every step in a separate component and define the step array centrally for extension.
+- Reuse the preferences shortcut recorder in the shortcut step.
+- Reuse recent source applications and settings writeback in the ignored-applications step.
+- Show type counts, total size, progress, and cancellation in the legacy-import step.
+- Open the legacy database read-only without running migrations.
+- Convert selected types to the new schema; copy images to the current resource directory and recalculate hashes.
+- Reuse existing insertion and deduplication logic.
+- Run long work as background tasks with progress events so the window is not blocked.
 
 ## Acceptance Criteria
 
-- 首次启动自动弹出，引导完成后不再自动弹。
-- 引导未完成时不能通过关闭按钮或原生关闭请求隐藏/销毁窗口。
-- 中途异常退出后下次从上次步骤继续。
-- 设置页可重新打开引导。
-- 旧版导入可取消，失败不会留下半截数据。
-- macOS 与 Windows 都有合理降级路径。
+- Onboarding opens automatically on first launch and does not reopen automatically after completion.
+- The window cannot be hidden or destroyed through a close button or native close request before completion.
+- After an unexpected exit, onboarding resumes from the previous step.
+- Preferences can reopen onboarding.
+- Legacy import can be cancelled and leaves no partial data on failure.
+- macOS and Windows both have reasonable fallback paths.

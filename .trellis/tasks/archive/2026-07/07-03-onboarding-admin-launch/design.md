@@ -81,7 +81,7 @@ The scheduled task action should include the current executable and the internal
 - Command constants and labels must be mirrored in:
   - `src/constants/commands.ts`
   - `src/commands/index.ts`
-  - `src/locales/zh-CN/commands.json`
+  - `src/locales/ko-KR/commands.json`
   - `src/locales/en-US/commands.json`
 
 ## Platform Behavior

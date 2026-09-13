@@ -12,7 +12,7 @@ Make the final onboarding step feel complete and consistent with the first welco
 - Add concise completion content:
   - Brand/logo and "ready" title area.
   - Three cards matching the Welcome page layout and density.
-- Keep strings localized in both `zh-CN` and `en-US`.
+- Keep strings localized in both `ko-KR` and `en-US`.
 - Avoid changing onboarding persistence, step order, permissions, shortcut recording, import behavior, or finish command semantics.
 
 ## Acceptance Criteria
@@ -34,7 +34,7 @@ Make the final onboarding step feel complete and consistent with the first welco
 
 ## Technical Approach
 
-Implement the Done step in `src/pages/Onboarding/components/DoneStep.tsx` by mirroring `WelcomeStep`'s `OnboardingStepLayout` and `OnboardingCard` composition. Update `src/locales/zh-CN/onboarding.json` and `src/locales/en-US/onboarding.json` for the new copy.
+Implement the Done step in `src/pages/Onboarding/components/DoneStep.tsx` by mirroring `WelcomeStep`'s `OnboardingStepLayout` and `OnboardingCard` composition. Update `src/locales/ko-KR/onboarding.json` and `src/locales/en-US/onboarding.json` for the new copy.
 
 ## Decision (ADR-lite)
 

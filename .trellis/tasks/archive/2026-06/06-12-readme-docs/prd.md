@@ -7,7 +7,7 @@ Replace the default Tauri template README with project-specific documentation fo
 ## What I already know
 
 * The current `README.md` is still the default Tauri + React + TypeScript template.
-* `README.zh-CN.md` does not exist yet.
+* A Korean README does not exist yet.
 * The project is EcoPaste, a Rust-first Tauri v2 clipboard manager refactor.
 * The supported platforms for this refactor are macOS and Windows only.
 * The refactor has dropped legacy Linux support and there are no current plans to support Linux again.
@@ -18,7 +18,7 @@ Replace the default Tauri template README with project-specific documentation fo
 ## Requirements
 
 * Write `README.md` in English.
-* Write `README.zh-CN.md` in Simplified Chinese.
+* Write `README.md` in Korean.
 * Document the current Rust-first refactor accurately:
   * Tauri v2 desktop app.
   * React 19 + Ant Design 6 + UnoCSS frontend.
@@ -40,7 +40,7 @@ Replace the default Tauri template README with project-specific documentation fo
 ## Acceptance Criteria
 
 * [ ] `README.md` no longer contains the default Tauri template text.
-* [ ] `README.zh-CN.md` exists and mirrors the English README's structure and meaning.
+* [ ] `README.md` exists in Korean and mirrors the English README's structure and meaning.
 * [ ] Both READMEs mention only macOS and Windows as supported platforms.
 * [ ] Both READMEs explicitly state that Linux support was dropped in the refactor and is not currently planned.
 * [ ] Both READMEs include accurate development and quality commands from `package.json` and project instructions.
@@ -62,7 +62,7 @@ Draft both README files directly from current repo facts: `package.json`, `src-t
 
 **Context**: The old README advertises the released legacy app and includes Linux/download/community details that are no longer true for this refactor.
 
-**Decision**: Make `README.md` the English default and `README.zh-CN.md` the Simplified Chinese translation. Present the repo as a beta Rust-first refactor for developers/testers, not as a stable release landing page.
+**Decision**: Make `README.md` the Korean default and `README.en.md` the English translation. Present the repo as a beta Rust-first refactor for developers/testers, not as a stable release landing page.
 
 **Consequences**: The docs are accurate for this repository today and avoid over-promising. Future release/download/community details can be added once the refactor has a real release channel.
 

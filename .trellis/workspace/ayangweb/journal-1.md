@@ -249,7 +249,7 @@ Implemented Tauri updater integration, Sparkle-style update window, update setti
 
 ### Summary
 
-Localized the onboarding window name in the Preferences diagnostics lifecycle table, added zh-CN/en-US strings, synced the window-label spec, verified frontend checks, then pushed the fix branch.
+Localized the onboarding window name in the Preferences diagnostics lifecycle table, added Korean/English strings, synced the window-label spec, verified frontend checks, then pushed the fix branch.
 
 ### Main Changes
 

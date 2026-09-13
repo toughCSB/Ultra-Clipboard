@@ -42,7 +42,7 @@ Check all mirrors instead of adding local one-offs:
 - Preference schema/control in `src/pages/Preference/config/preferenceSchema.ts`.
 - Commit behavior in `Preference/services/preferenceSettings.ts` for immediate
   OS side effects.
-- zh-CN and en-US locale JSON.
+- ko-KR and en-US locale JSON.
 
 ## When Adding a Clipboard Field
 

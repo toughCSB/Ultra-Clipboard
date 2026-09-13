@@ -84,7 +84,7 @@ When adding or renaming a command:
 - Export it from `src-tauri/src/commands/mod.rs`.
 - Add `TAURI_COMMAND` in `src/constants/commands.ts`.
 - Add one wrapper in `src/commands/index.ts` with a command label key.
-- Add `commands:labels.*` entries in both `src/locales/zh-CN/commands.json` and
+- Add `commands:labels.*` entries in both `src/locales/ko-KR/commands.json` and
   `src/locales/en-US/commands.json`.
 - Update TypeScript types when Rust returns a new shape.
 
