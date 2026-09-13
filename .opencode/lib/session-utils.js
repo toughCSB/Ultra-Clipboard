@@ -9,8 +9,8 @@ import { debugLog } from "./trellis-context.js";
 const PYTHON_CMD = platform() === "win32" ? "python" : "python3";
 
 const FIRST_REPLY_NOTICE = `<first-reply-notice>
-On the first visible assistant reply in this session, begin with exactly one short Chinese sentence:
-Trellis SessionStart 已注入：workflow、当前任务状态、开发者身份、git 状态、active tasks、spec 索引已加载。
+On the first visible assistant reply in this session, begin with exactly one short English sentence:
+Trellis SessionStart loaded the workflow, current task status, developer identity, git status, active tasks, and spec index.
 Then continue directly with the user's request. This notice is one-shot: do not repeat it after the first assistant reply in the same session.
 </first-reply-notice>`;
 
@@ -97,8 +97,8 @@ function getTaskStatus(ctx, platformInput = null) {
     "For agent-capable platforms, the default is to NOT edit code in the main session. " +
     "After implementation, dispatch `trellis-check` per Phase 2.2 before reporting completion.\n" +
     "User override (per-turn escape hatch): if the user's CURRENT message explicitly tells the " +
-    'main session to handle it directly ("你直接改" / "别派 sub-agent" / "main session 写就行" / ' +
-    '"do it inline" / "不用 sub-agent"), honor it for this turn and edit code directly. ' +
+    'main session to handle it directly ("직접 수정해" / "sub-agent를 보내지 마" / ' +
+    '"main session에서 처리해" / "do it inline"), honor it for this turn and edit code directly. ' +
     "Per-turn only; do NOT invent an override the user did not say."
   );
 }

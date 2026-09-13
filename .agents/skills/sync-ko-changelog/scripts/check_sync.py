@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate structural parity between English and Chinese release sections."""
+"""Validate structural parity between English and Korean release sections."""
 
 from __future__ import annotations
 
@@ -18,11 +18,13 @@ LIST_ITEM = re.compile(r"^(?:[-*+] |\d+\. )")
 MARKDOWN_LINK = re.compile(r"\[([^]]+)]\(([^)]+)\)")
 
 HEADING_TRANSLATIONS = {
-    "✨ Features": "✨ 新功能",
-    "🐛 Bug Fixes": "🐛 问题修复",
-    "⚡️ Performance": "⚡️ 性能优化",
-    "⏪ Reverts": "⏪ 回退",
-    "⚠️ Upgrade Notice": "⚠️ 升级说明",
+    "✨ Features": "✨ 기능",
+    "🐛 Bug Fixes": "🐛 버그 수정",
+    "⚡️ Performance": "⚡️ 성능 개선",
+    "⏪ Reverts": "⏪ 되돌리기",
+    "⚠️ Upgrade Notice": "⚠️ 업그레이드 안내",
+    "Changed": "변경",
+    "Release Notes": "릴리즈 안내",
 }
 
 
@@ -226,7 +228,7 @@ def validate(source: Release, target: Release) -> list[str]:
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Validate EcoPaste English/Chinese changelog parity."
+        description="Validate Ultra Clipboard English/Korean changelog parity."
     )
     parser.add_argument(
         "--root",
@@ -248,14 +250,14 @@ def main() -> int:
 
     try:
         source_releases = parse_releases(root / "CHANGELOG.md")
-        target_releases = parse_releases(root / "CHANGELOG.zh-CN.md")
+        target_releases = parse_releases(root / "CHANGELOG.ko-KR.md")
         version = args.version or source_releases[0].version
         source = find_release(source_releases, version)
         target = find_release(target_releases, version)
         errors = validate(source, target)
         if args.version is None and target_releases[0].version != version:
             errors.insert(
-                0, f"latest release {version} is not the first Chinese section"
+                0, f"latest release {version} is not the first Korean section"
             )
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -266,7 +268,7 @@ def main() -> int:
             print(f"error: {version}: {error}", file=sys.stderr)
         return 1
 
-    print(f"CHANGELOG.zh-CN.md is synchronized for {version}.")
+    print(f"CHANGELOG.ko-KR.md is synchronized for {version}.")
     return 0
 
 

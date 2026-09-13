@@ -1,0 +1,4 @@
+interface:
+  display_name: "한국어 변경 기록 동기화"
+  short_description: "영문 CHANGELOG에서 한국어 release section을 생성하고 검증합니다"
+  default_prompt: "$sync-ko-changelog로 최신 버전의 한국어 변경 기록을 동기화합니다."

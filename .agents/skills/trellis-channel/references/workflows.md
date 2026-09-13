@@ -5,8 +5,8 @@ Use these patterns by intent. Prefer durable channels for multi-round work and
 
 ## Pattern A: Multi-round Brainstorm
 
-Use when the user says "和 codex/claude 讨论一下", "brainstorm", or "拉一个 agent
-进来一起看".
+Use when the user says "discuss with codex/claude", "brainstorm", or "bring in
+another agent to review this".
 
 ```bash
 trellis channel create brainstorm-storage-layer --by main \
