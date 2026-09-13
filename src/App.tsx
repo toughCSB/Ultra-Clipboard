@@ -4,7 +4,6 @@ import type { ConfigProviderProps } from "antd";
 import { App as AntdApp, ConfigProvider } from "antd";
 import enUS from "antd/locale/en_US";
 import koKR from "antd/locale/ko_KR";
-import zhCN from "antd/locale/zh_CN";
 import type { FC } from "react";
 import { use, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,14 +23,10 @@ const ANTD_MODAL_CONFIG = {
   centered: true,
 } satisfies ConfigProviderProps["modal"];
 
-/**
- * 把设置语言映射到 Ant Design 内置 locale。
- */
 const resolveAntdLocale = (language: Language) => {
   if (language === "en-US") return enUS;
-  if (language === "ko-KR") return koKR;
 
-  return zhCN;
+  return koKR;
 };
 
 const AppContent: FC = () => {
@@ -45,10 +40,6 @@ const AppContent: FC = () => {
   return <RouterProvider router={router} />;
 };
 
-/**
- * 等待 Rust 设置首屏快照灌入后再渲染，避免组件读到空对象闪烁默认值。
- * `use()` 在 promise pending 时抛出，由父级（`main.tsx`）的 Suspense 接住。
- */
 const App: FC = () => {
   use(settingsReady);
 
@@ -71,13 +62,10 @@ const App: FC = () => {
     void i18n.changeLanguage(language);
   }, [i18n, language]);
 
-  // settingsReady 已由 use() gate，挂载即视为前端基础初始化完成；回报 Rust 推进窗口到 ready 阶段。
-  // notifyWindowReady 内部已吞掉并记录失败，这里无需再 try/catch。
   useMount(async () => {
     await notifyWindowReady(getCurrentWebviewWindow().label);
   });
 
-  // 兜底未捕获的 Promise rejection：统一进日志通道，避免只在 devtools 红字闪过、生产环境完全无痕。
   useEventListener("unhandledrejection", (event) => {
     const { reason } = event;
 
@@ -87,7 +75,6 @@ const App: FC = () => {
     );
   });
 
-  // 兜底未捕获的同步异常（含资源加载错误）。React 渲染错误由 ErrorBoundary 接，不会走到这里。
   useEventListener("error", (event) => {
     const { error, ...rest } = event;
 

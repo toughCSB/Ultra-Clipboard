@@ -14,13 +14,6 @@ import onboardingKoKR from "@/locales/ko-KR/onboarding.json";
 import preferencesKoKR from "@/locales/ko-KR/preferences.json";
 import previewKoKR from "@/locales/ko-KR/preview.json";
 import updateKoKR from "@/locales/ko-KR/update.json";
-import clipboardZhCN from "@/locales/zh-CN/clipboard.json";
-import commandsZhCN from "@/locales/zh-CN/commands.json";
-import commonZhCN from "@/locales/zh-CN/common.json";
-import onboardingZhCN from "@/locales/zh-CN/onboarding.json";
-import preferencesZhCN from "@/locales/zh-CN/preferences.json";
-import previewZhCN from "@/locales/zh-CN/preview.json";
-import updateZhCN from "@/locales/zh-CN/update.json";
 import type { Language } from "@/types/settings";
 
 export const DEFAULT_LANGUAGE: Language = "ko-KR";
@@ -34,9 +27,7 @@ export const I18N_NAMESPACES = [
   "update",
 ] as const;
 
-/**
- * react-i18next 初始化入口；资源来自 JSON，key 使用稳定语义路径。
- */
+/** Initializes react-i18next with JSON resources and stable semantic keys. */
 void i18n.use(initReactI18next).init({
   defaultNS: "common",
   fallbackLng: DEFAULT_LANGUAGE,
@@ -63,15 +54,6 @@ void i18n.use(initReactI18next).init({
       preferences: preferencesKoKR,
       preview: previewKoKR,
       update: updateKoKR,
-    },
-    "zh-CN": {
-      clipboard: clipboardZhCN,
-      commands: commandsZhCN,
-      common: commonZhCN,
-      onboarding: onboardingZhCN,
-      preferences: preferencesZhCN,
-      preview: previewZhCN,
-      update: updateZhCN,
     },
   },
 });

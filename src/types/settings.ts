@@ -5,20 +5,17 @@ import type {
 } from "./clipboard";
 
 /**
- * 设置数据契约，镜像 `src-tauri/src/settings/model.rs::Settings`。
+ * Settings contract mirroring `src-tauri/src/settings/model.rs::Settings`.
  *
- * 字段命名、枚举字面量必须与 Rust 的 `serde` 序列化输出严格一致：
- * - struct 默认走 `rename_all = "camelCase"`；
- * - enum 默认走 `rename_all = "camelCase"`，特例已在每个类型上方注明。
- *
- * Rust 端新增/重命名字段时，**本文件必须同步修改**，否则前端读到的是空字段，组件渲染会失真而无报错。
+ * Field names and enum literals must match Rust's `serde` output exactly.
+ * Update this file whenever the Rust model changes.
  */
 
-/** Rust enum `Theme`（`rename_all = "lowercase"`）。 */
+/** Rust enum `Theme` (`rename_all = "lowercase"). */
 export type Theme = "auto" | "light" | "dark";
 
-/** Rust enum `Language`（手动 `serde(rename)`）。 */
-export type Language = "ko-KR" | "zh-CN" | "en-US";
+/** Rust enum `Language` (explicit `serde(rename)`). */
+export type Language = "ko-KR" | "en-US";
 
 export type AutoPaste =
   | "disabled"
@@ -223,10 +220,6 @@ export interface Settings {
   webdav: WebDav;
 }
 
-/**
- * 任意层级可选的设置补丁，与 Rust 端 `update_settings` 的 `serde_json::Value` 深度合并语义对齐。
- * 数组字段按整体替换处理（与 Rust 的 deep_merge 行为一致），调用方需要传完整数组。
- */
 export type SettingsPatch = DeepPartial<Settings>;
 
 type DeepPartial<T> =

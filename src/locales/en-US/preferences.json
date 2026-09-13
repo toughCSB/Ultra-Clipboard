@@ -196,8 +196,7 @@
           "description": "Switch the Ultra Clipboard interface language.",
           "options": {
             "en-US": "English",
-            "ko-KR": "한국어",
-            "zh-CN": "简体中文"
+            "ko-KR": "한국어"
           },
           "title": "Language"
         },

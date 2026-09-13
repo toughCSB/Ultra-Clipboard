@@ -17,9 +17,7 @@ interface LanguageSwitcherProps {
   onChange?: (language: Language) => Promise<void> | void;
 }
 
-/**
- * 语言切换控件，复用偏好设置的语言文案与 antd Select 形态。
- */
+/** Language selector shared by onboarding and preferences. */
 const LanguageSwitcher: FC<LanguageSwitcherProps> = (props) => {
   const { value } = props;
 
