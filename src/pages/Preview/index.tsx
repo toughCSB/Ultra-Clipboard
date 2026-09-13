@@ -54,11 +54,7 @@ const EMPTY_CONNECTOR = {
 interface BeforeDestroyPayload {
   label: string;
 }
-
-/**
- * 系统级剪贴板预览窗口。
- * 预览窗口自身常驻透明 overlay，按 `itemId + updatedAt` 缓存最近内容并渲染基础 Content Viewer。
- */
+/** System clipboard preview window with a persistent transparent overlay. */
 const Preview: FC = () => {
   const [previewState, setPreviewState] =
     useState<ClipboardPreviewState | null>(null);

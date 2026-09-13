@@ -9,10 +9,7 @@ interface PreviewPanelRect {
   top: number;
   width: number;
 }
-
-/**
- * 将最新 layout 写入 Motion Value；首次布局直接跳到目标，后续 retarget 走 spring。
- */
+/** Write layout to Motion Values, springing only after the initial placement. */
 export function usePreviewMotion(
   active: boolean,
   sessionId: number | null,
@@ -209,10 +206,7 @@ export function usePreviewMotion(
     targetY,
   };
 }
-
-/**
- * Motion 的多输入 transform 回调类型为 unknown，这里收窄为数值坐标。
- */
+/** Narrow Motion's multi-input transform value to numeric coordinates. */
 function toMotionNumber(value: unknown) {
   return typeof value === "number" ? value : 0;
 }

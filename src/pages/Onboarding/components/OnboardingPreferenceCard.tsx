@@ -17,9 +17,7 @@ interface OnboardingPreferenceCardProps {
   onChange: PreferenceSettingChangeHandler;
 }
 
-/**
- * 在引导页卡片样式内复用偏好设置项的文案、图标和控件行为。
- */
+/** Reuse preference labels, visuals, and controls in onboarding cards. */
 const OnboardingPreferenceCard: FC<OnboardingPreferenceCardProps> = (props) => {
   const { compact = false, setting, settings, onChange } = props;
   const { t } = useTranslation("preferences");

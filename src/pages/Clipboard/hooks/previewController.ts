@@ -29,9 +29,7 @@ export interface UseClipboardPreviewControllerOptions {
   onHoverSelect: (id: string) => void;
 }
 
-/**
- * 判断 Space 键，兼容旧版 WebKit 的 Spacebar 命名。
- */
+/** Recognize Space across modern and older WebKit key names. */
 export function isSpaceKey(event: KeyboardEvent) {
   return (
     event.key === " " ||
@@ -41,9 +39,7 @@ export function isSpaceKey(event: KeyboardEvent) {
   );
 }
 
-/**
- * 清理 hover 延迟任务。
- */
+/** Clear a pending hover-delay timer. */
 export function clearHoverTimer(timerRef: { current: number | null }) {
   if (timerRef.current === null) return;
 
@@ -51,9 +47,7 @@ export function clearHoverTimer(timerRef: { current: number | null }) {
   timerRef.current = null;
 }
 
-/**
- * 非关键路径关闭预览，失败只写日志。
- */
+/** Close preview on a non-critical path and log failures without surfacing them. */
 export async function closeClipboardPreviewSilently(reason: string) {
   try {
     await closeClipboardPreview();

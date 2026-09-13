@@ -15,9 +15,7 @@ interface ShortcutRecorderControlProps extends ControlProps {
   value: string;
 }
 
-/**
- * 偏好设置里的全局快捷键录入控件，复用通用 ShortcutRecorder 并在录入完成后持久化设置。
- */
+/** Record a global shortcut and persist it through preferences. */
 const ShortcutRecorderControl: FC<ShortcutRecorderControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, settings, value } = props;
@@ -26,9 +24,6 @@ const ShortcutRecorderControl: FC<ShortcutRecorderControlProps> = (props) => {
 
   const conflicts = resolveGlobalShortcutConflicts(t, setting, settings);
 
-  /**
-   * 录入完成后把快捷键字面量交给偏好设置统一持久化流程。
-   */
   const handleChange = async (nextValue: string) => {
     await onChange(setting, nextValue);
   };
@@ -46,9 +41,7 @@ const ShortcutRecorderControl: FC<ShortcutRecorderControlProps> = (props) => {
 
 export default ShortcutRecorderControl;
 
-/**
- * 偏好设置里两个全局快捷键必须互斥，避免同一个组合键触发多个动作。
- */
+/** Ensure the two global shortcuts remain mutually exclusive. */
 function resolveGlobalShortcutConflicts(
   t: TFunction<"preferences">,
   setting: PreferenceSetting,
@@ -73,9 +66,7 @@ function resolveGlobalShortcutConflicts(
   }
 }
 
-/**
- * 用稳定设置 id 取快捷键设置标题，作为冲突 toast 的占用方名称。
- */
+/** Get the setting title used to identify a conflicting shortcut. */
 function translateShortcutSettingTitle(
   t: TFunction<"preferences">,
   id: string,

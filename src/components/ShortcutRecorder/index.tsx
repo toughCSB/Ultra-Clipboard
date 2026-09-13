@@ -36,10 +36,6 @@ interface ShortcutRecorderProps {
   value?: string;
 }
 
-/**
- * 复用 Ant Design 只读 Input 视觉样式的通用快捷键录入器；
- * 外层容器捕获键盘事件，Input 只负责展示录入结果和聚焦态。
- */
 const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
   const {
     className,
@@ -89,9 +85,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
       : t("shortcutRecorder.click");
   const fieldText = displayValue || inputPlaceholder;
 
-  /**
-   * 提交录入结果，并用 ref 去重避免按键完成和 blur 各保存一次。
-   */
   const commit = async (nextValue: string) => {
     if (nextValue === committedValueRef.current) return;
 
@@ -99,25 +92,16 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     await onChange?.(nextValue);
   };
 
-  /**
-   * 同步更新草稿 ref 和 state，避免键盘事件与 React 渲染节奏错位。
-   */
   const setDraftValue = (nextValue: string) => {
     draftValueRef.current = nextValue;
     setDraft(nextValue);
   };
 
-  /**
-   * 同步更新录制态 ref 和 React state，避免最后一次 keyup 清掉已提交结果。
-   */
   const setRecordingState = (nextRecording: boolean) => {
     recordingRef.current = nextRecording;
     setRecording(nextRecording);
   };
 
-  /**
-   * 判断当前录入值是否和调用方传入的其它快捷键冲突。
-   */
   const findShortcutConflict = (nextValue: string) => {
     const normalizedNextValue = normalizeShortcutValue(nextValue);
     if (!normalizedNextValue) return null;
@@ -129,9 +113,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     );
   };
 
-  /**
-   * 冲突时提示占用来源并清空草稿，保持录入态等待用户重新按键。
-   */
   const resetConflictedDraft = (
     conflict: ShortcutRecorderConflict,
     nextValue: string,
@@ -145,9 +126,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     setDraftValue("");
   };
 
-  /**
-   * 执行一次全局快捷键注销并记录结果；供 fire-and-forget 入口复用。
-   */
   const runSuspendShortcuts = async () => {
     try {
       await suspendGlobalShortcuts();
@@ -164,9 +142,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     return false;
   };
 
-  /**
-   * 离开录入态后恢复全局快捷键，恢复时以 Rust 当前设置快照为准。
-   */
   const resumeShortcuts = async () => {
     if (suspendPromiseRef.current) {
       await suspendPromiseRef.current;
@@ -177,9 +152,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     await resumeGlobalShortcuts();
   };
 
-  /**
-   * 进入录入态时立即触发注销；不阻塞 focus，但按键处理前会等待它完成。
-   */
   const suspendShortcuts = () => {
     if (shortcutsSuspendedRef.current) return;
     if (suspendPromiseRef.current) return;
@@ -187,9 +159,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     suspendPromiseRef.current = runSuspendShortcuts();
   };
 
-  /**
-   * 清除当前快捷键并退出录入态，让 placeholder 回到「点击录制快捷键」。
-   */
   const clearShortcut = async () => {
     setDraftValue("");
     setRecordingState(false);
@@ -198,9 +167,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     inputRef.current?.blur();
   };
 
-  /**
-   * 聚焦后进入录制态，先清空展示等待用户按下新组合键。
-   */
   const handleFocus = () => {
     if (disabled) return;
     if (recording) return;
@@ -210,9 +176,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     suspendShortcuts();
   };
 
-  /**
-   * 失焦时校验草稿；无效录入回滚为外部当前值。
-   */
   const handleBlur = async () => {
     if (!recordingRef.current) return;
 
@@ -234,9 +197,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     await resumeShortcuts();
   };
 
-  /**
-   * 捕获冒泡上来的键盘事件，生成可交给 Tauri 注册的快捷键字面量。
-   */
   const handleKeyDown = async (event: KeyboardEvent<HTMLFieldSetElement>) => {
     if (disabled) return;
 
@@ -281,9 +241,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     inputRef.current?.blur();
   };
 
-  /**
-   * 阻止录制中的按键继续冒泡到页面级快捷键处理器。
-   */
   const handleKeyUp = (event: KeyboardEvent<HTMLFieldSetElement>) => {
     if (disabled) return;
 
@@ -303,9 +260,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
     setDraftValue(nextValue);
   };
 
-  /**
-   * 鼠标点击清除图标时清空快捷键。
-   */
   const handleClearClick = async () => {
     await clearShortcut();
   };
@@ -370,9 +324,6 @@ const ShortcutRecorder: FC<ShortcutRecorderProps> = (props) => {
 
 export default ShortcutRecorder;
 
-/**
- * 只有单独按删除键才视为清空；带修饰键时仍允许录入 Ctrl+Delete 等组合。
- */
 function isClearKey(event: KeyboardEvent<HTMLFieldSetElement>) {
   if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
     return false;
@@ -381,17 +332,11 @@ function isClearKey(event: KeyboardEvent<HTMLFieldSetElement>) {
   return event.key === "Backspace" || event.key === "Delete";
 }
 
-/**
- * 清除按钮只处理清除，不让外层 mousedown 重新触发录入态。
- */
 function preventClearMouseDown(event: MouseEvent<HTMLButtonElement>) {
   event.preventDefault();
   event.stopPropagation();
 }
 
-/**
- * 组件卸载时释放可能仍在路上的暂停请求，避免后端暂停计数泄漏。
- */
 async function resumeShortcutsAfterUnmount(
   suspendPromise: Promise<boolean> | null,
   suspended: boolean,
@@ -405,9 +350,6 @@ async function resumeShortcutsAfterUnmount(
   await resumeGlobalShortcuts();
 }
 
-/**
- * 从录入草稿里移除已经弹起的按键；录制态预览只展示仍按住的组合。
- */
 function removeShortcutKey(value: string, shortcutKey: string) {
   return value
     .split("+")

@@ -87,16 +87,10 @@ const SETTING_ICON_MAP: Record<string, string> = {
   "window.selectRangeOnOpen": "i-lucide:list-filter",
 };
 
-/**
- * 根据设置 id 选择图标与色调，保持 schema 只描述信息架构。
- */
 export function resolveSettingVisual(id: string): SettingVisual {
   return settingVisual(SETTING_ICON_MAP[id] ?? "i-lucide:circle");
 }
 
-/**
- * 统一设置行图标质感，避免行内语义色造成视觉噪音。
- */
 function settingVisual(icon: string): SettingVisual {
   return {
     icon,

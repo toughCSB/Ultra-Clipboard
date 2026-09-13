@@ -10,9 +10,7 @@ interface SegmentedSelectControlProps extends ControlProps {
   value: string;
 }
 
-/**
- * 即时保存短选项模式设置，视觉统一为 Select。
- */
+/** Save short option values immediately using a segmented control. */
 export const SegmentedSelectControl: FC<SegmentedSelectControlProps> = (
   props,
 ) => {
@@ -44,9 +42,7 @@ interface SelectControlProps extends ControlProps {
   value?: SettingValue;
 }
 
-/**
- * 即时保存长选项或多选设置。
- */
+/** Save long or multi-select option values immediately. */
 export const SelectControl: FC<SelectControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, value } = props;

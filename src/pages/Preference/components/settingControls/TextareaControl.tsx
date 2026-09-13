@@ -11,9 +11,7 @@ interface TextareaControlProps extends ControlProps {
   value: string[];
 }
 
-/**
- * 多行规则输入：一行一个值，失焦后整体替换数组。
- */
+/** Replace a multiline rule array with one value per line on blur. */
 const TextareaControl: FC<TextareaControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, value } = props;

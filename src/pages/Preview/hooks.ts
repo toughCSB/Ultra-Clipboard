@@ -9,10 +9,7 @@ import { settingsState } from "@/stores/settings";
 import { log } from "@/utils/log";
 import { readCachedPayload, writeCachedPayload } from "./cache";
 import { PREVIEW_EXIT_ANIMATION_MS } from "./constants";
-
-/**
- * 保留退出动画期间的最后一帧 preview state，动画结束后再清空渲染树。
- */
+/** Keep the last preview state during exit animation, then clear the render tree. */
 export function usePreviewRenderState(
   previewState: ClipboardPreviewState | null,
 ) {
@@ -47,10 +44,7 @@ export function usePreviewRenderState(
 
   return renderState;
 }
-
-/**
- * 按预览状态加载 payload，并用 LRU cache 复用最近内容。
- */
+/** Load a payload by preview state and reuse recent contents from the LRU cache. */
 export function usePreviewPayload(
   previewState: ClipboardPreviewState | null,
   resetToken = 0,
@@ -62,7 +56,8 @@ export function usePreviewPayload(
   const { clipboard } = useSnapshot(settingsState);
   const redactSecrets = clipboard.sensitive.redactSecrets;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: resetToken 是销毁前清缓存的纯触发器。
+  // This trigger clears the cache before the preview window is destroyed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resetToken is a destruction-trigger cache clear.
   useEffect(() => {
     cacheRef.current.clear();
     latestRequestIdRef.current += 1;

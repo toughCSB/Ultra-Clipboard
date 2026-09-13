@@ -22,9 +22,7 @@ interface SortableTreeModalProps {
 
 const EMPTY_CHECKED_KEYS: Key[] = [];
 
-/**
- * 偏好设置里复用的可拖拽 Tree 弹框；支持纯排序，也支持排序 + 勾选。
- */
+/** Reusable draggable tree modal supporting sorting and optional checking. */
 const SortableTreeModal: FC<SortableTreeModalProps> = (props) => {
   const {
     cancelText,
@@ -142,16 +140,12 @@ const SortableTreeModal: FC<SortableTreeModalProps> = (props) => {
 
 export default SortableTreeModal;
 
-/**
- * 只允许拖到节点上方或下方，保持 Tree 为一列列表。
- */
+/** Allow drops only above or below nodes in the one-column tree. */
 const allowTreeReorderDrop: TreeProps["allowDrop"] = (info) => {
   return info.dropPosition !== 0;
 };
 
-/**
- * 按 Ant Design 官方 draggable Tree 示例的 dropPosition 逻辑调整单列顺序。
- */
+/** Apply Ant Design's draggable-tree dropPosition ordering to one column. */
 function reorderTreeData(
   data: TreeDataNode[],
   info: Parameters<NonNullable<TreeProps["onDrop"]>>[0],

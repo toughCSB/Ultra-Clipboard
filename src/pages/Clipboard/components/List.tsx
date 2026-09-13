@@ -62,7 +62,7 @@ import {
 import ClipboardCard from "./cards/ClipboardCard";
 import NoteModal from "./NoteModal";
 
-/** 前 10 项的快捷键：index 0-8 对应 1-9，index 9 对应 0 */
+/** Shortcuts for the first ten items, 1 through 9 followed by 0. */
 const KEY_HINTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
 interface ClipboardUpdatedPayload {
@@ -79,10 +79,7 @@ interface ClipboardMenuActionPayload {
   itemId: string;
 }
 
-/**
- * 剪贴板历史列表：虚拟滚动 + 分类型卡片 + 可视范围分页加载，
- * 跟随关键词（Header 已防抖）检索。
- */
+/** Clipboard history list with virtual scrolling and range-based pagination. */
 const List: FC = () => {
   const { t } = useTranslation("clipboard");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -98,8 +95,7 @@ const List: FC = () => {
   const keywordRef = useRef("");
   const reloadCurrentRangeRef = useRef<() => void>(() => {});
   const deferredReloadRef = useRef(false);
-  // 剪贴板窗口启动即隐藏，初值取 false；首个 `window://visibility` show 事件会翻正。
-  // dormant（隐藏）期间到达的剪贴板更新一律延后，不 reload 隐藏窗口。
+
   const clipboardWindowVisibleRef = useRef(false);
 
   const snapshot = useSnapshot(clipboardViewState);
@@ -158,12 +154,12 @@ const List: FC = () => {
   closePreviewRef.current = closePreview;
   reloadCurrentRangeRef.current = reloadCurrentRange;
 
-  // 把 Rust 返回的同过滤下总数同步给 Footer（共享 store），避免 Footer 单独 IPC 计数。
+  // Keep clipboard updates pending while the hidden window is dormant.
   useEffect(() => {
     if (loadedInitial) clipboardStatsState.total = total;
   }, [loadedInitial, total]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: snapshot 作触发器，不需在回调内读取
+  // biome-ignore lint/correctness/useExhaustiveDependencies: snapshot is the trigger for filter changes.
   useEffect(() => {
     setSelectedId(null);
     if (keywordRef.current !== keyword) keywordRef.current = keyword;
@@ -172,7 +168,7 @@ const List: FC = () => {
     closePreview("filterChange");
   }, [snapshot]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 仅按影响列表 payload 的展示设置触发重拉，函数引用用 ref 读取最新值
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only display settings affecting item payloads trigger reload; refs provide current callbacks.
   useEffect(() => {
     if (!displaySettingsMountedRef.current) {
       displaySettingsMountedRef.current = true;
@@ -183,38 +179,23 @@ const List: FC = () => {
     reloadCurrentRangeRef.current();
   }, [fileMaxCount, redactSecrets]);
 
-  /**
-   * 从 Rust 拉取自定义分组，用于空状态展示当前分组名称。
-   */
   const loadGroups = async () => {
     const groups = await listClipboardGroups();
 
     setCustomGroups(groups);
   };
 
-  /**
-   * 首次挂载时拉取分组名称。
-   */
   useMount(() => {
     void loadGroups();
   });
 
-  /**
-   * 自定义分组变化后同步刷新空状态文案可用的分组名。
-   */
   const handleGroupsUpdated = () => {
     void loadGroups();
   };
 
   useTauriListen(TAURI_EVENT.CLIPBOARD_GROUPS_UPDATED, handleGroupsUpdated);
 
-  /**
-   * 收到剪贴板更新：仅在列表位于顶部时刷新；否则延后到用户回到顶部后再刷新，
-   * 避免打断当前浏览位置。
-   * 用 ref 读取最新滚动位置，规避闭包陷旧值（事件订阅只挂载一次）。
-   */
   const handleClipboardUpdated = (payload: ClipboardUpdatedPayload) => {
-    // 剪贴板窗口隐藏（冻结态）期间不立即 reload：只记 pending，避免隐藏期间频繁复制触发反复 IPC + 重渲染。
     if (!clipboardWindowVisibleRef.current) {
       deferredReloadRef.current = true;
       return;
@@ -278,10 +259,6 @@ const List: FC = () => {
     },
   );
 
-  /**
-   * 剪贴板窗口显隐变化：更新可见性镜像；显示时按偏好重置分组与滚动位置。
-   * 可见性 ref 供 `handleClipboardUpdated` 判断是否处于冻结态——隐藏期间只记 pending，不立即 reload。
-   */
   const handleWindowVisibility = (event: {
     payload: WindowVisibilityPayload;
   }) => {
@@ -334,10 +311,6 @@ const List: FC = () => {
     handleWindowVisibility,
   );
 
-  /**
-   * 删除 / 收藏 / 备注命令均不广播 clipboard://updated，故就地改本地镜像，
-   * 避免整页 reload 打断滚动与选中态。
-   */
   const removeItem = (id: string) => {
     removeItemById(id);
   };
@@ -346,9 +319,6 @@ const List: FC = () => {
     patchItemById(id, patch);
   };
 
-  /**
-   * 收藏切换后：favorite 分组下取消收藏的条目应即时移出列表，其余分组仅更新标记。
-   */
   const handleFavoriteToggled = (id: string, isFavorite: boolean) => {
     if (range === "favorite" && !isFavorite) {
       removeItem(id);
@@ -358,9 +328,6 @@ const List: FC = () => {
     patchItem(id, { isFavorite });
   };
 
-  /**
-   * 备注保存后同步本地镜像；后端可能因 autoFavorite 设置联动收藏，故一并回填。
-   */
   const handleNoteSaved = (
     id: string,
     note: string | null,
@@ -373,18 +340,12 @@ const List: FC = () => {
     setNoteTarget(null);
   };
 
-  /**
-   * 打开条目备注编辑框；若该条正在预览，先关闭预览避免窗口层级互相遮挡。
-   */
   const handleOpenNote = (item: ClipboardItem, reason: string) => {
     if (previewSession?.itemId === item.id) closePreview(reason);
 
     setNoteTarget(item);
   };
 
-  /**
-   * 右键菜单移动分组后同步本地镜像；当前分组视图下移出其它分组时直接移除。
-   */
   const handleMoveToGroup = async (
     item: ClipboardItem,
     nextGroupId: string,
@@ -401,9 +362,6 @@ const List: FC = () => {
     patchItem(item.id, { groupId: nextGroupId });
   };
 
-  /**
-   * 读取当前选中项。无显式选中时，优先取当前可视范围第一项。
-   */
   function getActiveItem() {
     if (total === 0) return null;
 
@@ -414,9 +372,6 @@ const List: FC = () => {
     return findItemById(selectedId);
   }
 
-  /**
-   * 注册虚拟列表项对应的 DOM 节点，预览打开时用它采集 anchor rect。
-   */
   const registerItemElement = (id: string) => {
     return (node: HTMLDivElement | null) => {
       if (node) {
@@ -428,10 +383,6 @@ const List: FC = () => {
     };
   };
 
-  /**
-   * 快捷键触发的删除：复用 `deleteClipboardItem` 内置的二次确认弹窗，
-   * 仅当用户确认且 Rust 删除成功时才同步本地镜像。
-   */
   const handleShortcutDelete = async (id: string) => {
     const target = findItemById(id);
 
@@ -459,10 +410,6 @@ const List: FC = () => {
     removeItem(id);
   };
 
-  /**
-   * 快捷键触发的收藏切换：读当前项的 isFavorite 计算下一态，
-   * Rust 返回真实状态后走统一的 `handleFavoriteToggled`（favorite 分组内取消会移除）。
-   */
   const handleShortcutToggleFavorite = async (id: string) => {
     const current = findItemById(id);
 
@@ -473,9 +420,6 @@ const List: FC = () => {
     handleFavoriteToggled(id, next);
   };
 
-  /**
-   * 切换条目置顶态；置顶影响排序，成功后刷新当前范围以继续信任后端顺序。
-   */
   const handleTogglePinned = async (id: string) => {
     const current = findItemById(id);
 
@@ -487,9 +431,6 @@ const List: FC = () => {
     reloadCurrentRange();
   };
 
-  /**
-   * 按当前条目后端声明的可用动作执行“打开”：链接 / 邮箱 / 定位文件共用 Cmd/Ctrl+O。
-   */
   const handleShortcutOpen = async (
     item: ClipboardItem,
     action: ClipboardAction,
@@ -512,11 +453,6 @@ const List: FC = () => {
     }
   };
 
-  /**
-   * Rust 右键菜单点击事件：携带 `{action, itemId}`。
-   * 用 ref 持续指向「当前 render 的派发函数」，规避 `useTauriListen` 只在挂载时
-   * 抓一次闭包导致的状态过期（同款做法见 `handleClipboardUpdated`）。
-   */
   const handleMenuActionRef = useRef<
     (payload: ClipboardMenuActionPayload) => void
   >(() => {});
@@ -750,9 +686,6 @@ const List: FC = () => {
     consumeDeferredReloadAtTop();
   };
 
-  /**
-   * 自动刷新请求只在顶部执行；离开顶部时保留 pending，等待回顶后消费。
-   */
   function requestReloadAtTop() {
     if (!isAtTopRef.current && total > 0) {
       deferredReloadRef.current = true;
@@ -763,9 +696,6 @@ const List: FC = () => {
     reload();
   }
 
-  /**
-   * 消费已有 pending；用于窗口回顶偏好或用户手动回到顶部后的补刷。
-   */
   function consumeDeferredReloadAtTop() {
     if (!deferredReloadRef.current) return;
 
@@ -1056,9 +986,6 @@ const List: FC = () => {
     );
   }
 
-  /**
-   * 根据方向键计算下一项。
-   */
   function getNextKeyboardTarget(event: KeyboardEvent) {
     const nextIndex = getNextKeyboardIndex(
       getItemIndexById,
@@ -1076,9 +1003,6 @@ const List: FC = () => {
     return { index: nextIndex, item };
   }
 
-  /**
-   * 判断当前条目是否允许删除：收藏 / 置顶条目分别受各自保护开关约束。
-   */
   function canDeleteItem(item: ClipboardItem) {
     if (item.isPinned && !deletePinnedItems) return false;
 
@@ -1091,9 +1015,6 @@ const List: FC = () => {
     return range === "favorite";
   }
 
-  /**
-   * ESC 按预览、分组、分类、窗口的顺序逐层退出。
-   */
   function closeTopEscapeLayer() {
     if (previewSession !== null) {
       closePreview("escape");
@@ -1114,9 +1035,6 @@ const List: FC = () => {
   }
 };
 
-/**
- * 生成空列表文案，按搜索词、范围、分类和自定义分组组合出具体提示。
- */
 function getEmptyDescription(
   t: TFunction<"clipboard">,
   keyword: string,
@@ -1175,9 +1093,6 @@ function getEmptyDescription(
   return t(isFavorite ? "empty.favorites" : "empty.history");
 }
 
-/**
- * 生成搜索空状态文案，覆盖范围 / 分类 / 分组三种过滤维度。
- */
 function getSearchingEmptyDescription(
   t: TFunction<"clipboard">,
   keyword: string,
@@ -1233,9 +1148,6 @@ function getSearchingEmptyDescription(
   return t("empty.searchHistory", { keyword });
 }
 
-/**
- * 从当前已加载分组列表中取出选中分组名称；找不到时交给文案层兜底。
- */
 function getCurrentGroupName(
   groups: ClipboardGroupRecord[],
   groupId: string | null,
@@ -1249,9 +1161,6 @@ function getCurrentGroupName(
   return current?.name ?? null;
 }
 
-/**
- * 根据方向键和当前选中 id 计算下一项索引。
- */
 function getNextKeyboardIndex(
   getItemIndexById: (id: string) => number | null,
   firstVisibleIndex: number,
@@ -1270,9 +1179,6 @@ function getNextKeyboardIndex(
   return Math.min(total - 1, currentIndex + 1);
 }
 
-/**
- * 按条目保护规则过滤右键菜单动作，避免受保护项出现删除入口。
- */
 function getAllowedClipboardActions(
   actions: ClipboardAction[] | undefined,
   item: ClipboardItem,
@@ -1285,9 +1191,6 @@ function getAllowedClipboardActions(
   });
 }
 
-/**
- * 从后端声明的右键动作中取出可由 Cmd/Ctrl+O 触发的“打开”动作。
- */
 function getOpenClipboardAction(actions: ClipboardAction[] | undefined) {
   const openActions: ClipboardAction[] = [
     "openLink",
@@ -1301,9 +1204,6 @@ function getOpenClipboardAction(actions: ClipboardAction[] | undefined) {
   });
 }
 
-/**
- * 按条目保护规则过滤悬停快捷动作，避免受保护项出现删除按钮。
- */
 function getAllowedItemActions(
   actions: readonly ItemAction[],
   item: ClipboardItem,
@@ -1316,10 +1216,6 @@ function getAllowedItemActions(
   });
 }
 
-/**
- * 删除当前 active 项后优先选后一项；删除末尾时回退到前一项。
- * 右键删除非 active 项时保留当前显式选中，避免意外跳选。
- */
 function getSelectedIdAfterDelete(
   getItem: (index: number) => ClipboardItem | null,
   getItemIndexById: (id: string) => number | null,
@@ -1340,9 +1236,6 @@ function getSelectedIdAfterDelete(
   return nextItem?.id ?? null;
 }
 
-/**
- * 判断 Cmd/Ctrl+C 是否应交给浏览器原生复制，避免覆盖输入框或文本选区复制。
- */
 function shouldUseNativeCopy(event: KeyboardEvent) {
   const target = event.target;
   if (target instanceof HTMLElement) {
@@ -1360,9 +1253,6 @@ const computeItemKey = (index: number, item?: ClipboardItem) => {
   return item?.id ?? `placeholder-${index}`;
 };
 
-/**
- * Virtuoso 的置顶项会 sticky 覆盖滚动内容；这里补实底色避免下方条目透出。
- */
 const TopItemList: FC<TopItemListProps> = (props) => {
   const { children, style } = props;
 
@@ -1373,9 +1263,6 @@ const TopItemList: FC<TopItemListProps> = (props) => {
   );
 };
 
-/**
- * 统计当前已加载页开头连续置顶条目数，供 Virtuoso sticky top items 使用。
- */
 function countLeadingPinnedItems(
   getItem: (index: number) => ClipboardItem | null,
 ) {
@@ -1391,9 +1278,6 @@ function countLeadingPinnedItems(
   return count;
 }
 
-/**
- * 判断普通剪贴板更新是否会出现在当前分组列表中。
- */
 function shouldRefreshCurrentGroup(
   range: ClipboardRange,
   category: ClipboardKind | null,

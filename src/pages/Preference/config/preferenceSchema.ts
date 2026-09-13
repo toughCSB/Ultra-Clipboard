@@ -906,9 +906,6 @@ export const preferenceTabs: PreferenceTab[] = [
   },
 ];
 
-/**
- * 按稳定 setting id 查找偏好设置项，供其它窗口复用偏好 schema。
- */
 export function findPreferenceSetting(
   settingId: string,
 ): PreferenceSetting | null {
@@ -925,9 +922,6 @@ export function findPreferenceSetting(
   return null;
 }
 
-/**
- * 按稳定 section id 取偏好设置项；平台条件已由 schema 自身处理。
- */
 export function findPreferenceSectionSettings(
   sectionId: string,
 ): PreferenceSetting[] {
@@ -942,9 +936,6 @@ export function findPreferenceSectionSettings(
   return [];
 }
 
-/**
- * 必需设置缺失属于 schema 维护错误，调用方无需静默降级。
- */
 export function requirePreferenceSetting(settingId: string): PreferenceSetting {
   const setting = findPreferenceSetting(settingId);
   if (!setting) {

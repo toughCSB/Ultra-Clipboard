@@ -17,9 +17,7 @@ interface RetentionControlProps extends ControlProps {
   value: RetentionSettingValue;
 }
 
-/**
- * 将未知设置值归一成保留周期对象，避免空快照或 schema 误配导致控件崩溃。
- */
+/** Normalize an unknown setting value into a retention-period object. */
 export function resolveRetentionValue(
   value?: SettingValue,
 ): RetentionSettingValue {
@@ -36,9 +34,7 @@ export function resolveRetentionValue(
   return { unit: DEFAULT_RETENTION_UNIT, value: 0 };
 }
 
-/**
- * 历史保留周期控件：单位固定为月，0 表示不按时间清理。
- */
+/** Retention control with months as the fixed unit; zero disables time cleanup. */
 const RetentionControl: FC<RetentionControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, value } = props;

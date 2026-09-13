@@ -17,9 +17,7 @@ let sourceAppsPreload: Promise<void> | null = null;
 let sourceAppsLoaded = false;
 let sourceAppsRequestToken = 0;
 
-/**
- * 预热应用过滤数据，供偏好窗口后台创建完成后先行填充列表。
- */
+/** Preload source-app filter data for the preferences window. */
 export function preloadSourceApps() {
   if (sourceAppsLoaded) return Promise.resolve();
   if (sourceAppsPreload) return sourceAppsPreload;
@@ -29,25 +27,19 @@ export function preloadSourceApps() {
   return sourceAppsPreload;
 }
 
-/**
- * 后台刷新完整可过滤应用，并保留右侧已忽略应用的真实元数据。
- */
+/** Refresh filterable apps while preserving metadata for ignored apps. */
 export async function refreshSourceApps(preservedIds: string[]) {
   await replaceSourceApps(listAllApps(), "refresh source apps failed", {
     preservedIds,
   });
 }
 
-/**
- * 重新拉取完整可过滤应用列表，包含当前运行中与已落库来源应用。
- */
+/** Reload all known filterable source apps. */
 export async function reloadSourceApps() {
   await loadSourceApps();
 }
 
-/**
- * 合并单个新应用，保持手动添加后左右列表立即可见。
- */
+/** Merge one newly discovered app into both visible lists. */
 export function mergeSourceApp(app: ClipboardApp) {
   const merged = new Map(
     sourceAppsState.apps.map((item) => {
@@ -59,9 +51,7 @@ export function mergeSourceApp(app: ClipboardApp) {
   sourceAppsLoaded = true;
 }
 
-/**
- * 从偏好页全局镜像移除已删除的来源应用。
- */
+/** Remove deleted source apps from the preferences mirror. */
 export function removeSourceApps(ids: string[]) {
   if (ids.length === 0) return;
 
@@ -71,16 +61,10 @@ export function removeSourceApps(ids: string[]) {
   });
 }
 
-/**
- * 拉取全部已知来源应用并写入偏好页全局镜像。
- */
 async function loadSourceApps() {
   await replaceSourceApps(listAllApps(), "load source apps failed");
 }
 
-/**
- * 执行一次共享预热请求，完成后释放复用中的 Promise。
- */
 async function runSourceAppsPreload() {
   try {
     await loadSourceApps();
@@ -89,9 +73,6 @@ async function runSourceAppsPreload() {
   }
 }
 
-/**
- * 写入最新一次来源应用请求的结果，避免较慢的旧请求覆盖新刷新。
- */
 async function replaceSourceApps(
   request: Promise<ClipboardApp[]>,
   errorMessage: string,
@@ -118,9 +99,6 @@ async function replaceSourceApps(
   }
 }
 
-/**
- * 用最新可过滤应用替换左侧列表，同时保留已忽略应用已有的完整行数据。
- */
 function mergePreservedApps(apps: ClipboardApp[], preservedIds: string[]) {
   if (preservedIds.length === 0) return apps;
 

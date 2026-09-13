@@ -27,9 +27,7 @@ interface PreferenceSearchResultsProps {
   onPick: (result: SearchResult) => void;
 }
 
-/**
- * 全局设置搜索结果：直接跳转到设置所在位置。
- */
+/** Global settings search results that jump to the selected setting. */
 const PreferenceSearchResults: FC<PreferenceSearchResultsProps> = (props) => {
   const { query, results, shouldReduceMotion, onPick } = props;
   const { t } = useTranslation("preferences");
@@ -93,9 +91,6 @@ const PreferenceSearchResults: FC<PreferenceSearchResultsProps> = (props) => {
     };
   }, [query, panelContentKey, measureNode]);
 
-  /**
-   * 渲染搜索结果内容；隐藏测量层复用同一结构，保证动画目标尺寸和可见内容一致。
-   */
   const renderPanelContent = () => {
     if (results.length === 0) {
       return (

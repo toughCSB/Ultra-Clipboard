@@ -4,15 +4,10 @@ import Highlight from "@/components/Highlight";
 import { clipboardViewState } from "@/stores/clipboardView";
 
 interface NoteAnnotationProps {
-  /**
-   * 已归一化的备注内容；调用方仅在非空时渲染本组件。
-   */
   note: string;
 }
 
-/**
- * 剪贴板条目的内联备注批注：作为有备注条目的默认内容展示，并支持搜索高亮。
- */
+/** Render a normalized non-empty note with search highlighting. */
 const NoteAnnotation: FC<NoteAnnotationProps> = (props) => {
   const { note } = props;
   const { keyword } = useSnapshot(clipboardViewState);

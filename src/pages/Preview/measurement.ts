@@ -6,10 +6,7 @@ export interface PreviewMeasuredSize {
   height: number;
   width: number;
 }
-
-/**
- * 监听隐藏测量层尺寸，并把内容自然尺寸同步给动态面板布局。
- */
+/** Observe the hidden measurement layer and sync its natural size to the panel. */
 export function useMeasuredPanelSize(
   ref: RefObject<HTMLDivElement | null>,
 ): PreviewMeasuredSize {
@@ -42,20 +39,14 @@ export function useMeasuredPanelSize(
 
   return size;
 }
-
-/**
- * 判断隐藏测量层是否已经给出当前内容的真实尺寸。
- */
+/** Whether the hidden measurement layer has reported the current natural size. */
 export function hasMeasuredPanelSize(size: PreviewMeasuredSize) {
   return (
     size.height !== PREVIEW_PANEL_FALLBACK_SIZE.height ||
     size.width !== PREVIEW_PANEL_FALLBACK_SIZE.width
   );
 }
-
-/**
- * 从测量节点读取自然尺寸，相同尺寸不触发 state 更新。
- */
+/** Read natural dimensions without updating state when the size is unchanged. */
 function syncMeasuredPanelSize(
   node: HTMLDivElement,
   setSize: React.Dispatch<React.SetStateAction<PreviewMeasuredSize>>,

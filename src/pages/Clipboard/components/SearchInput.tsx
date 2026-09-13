@@ -9,12 +9,7 @@ interface SearchInputProps extends Omit<InputProps, "prefix"> {
   clearToken?: number;
   focusToken?: number;
 }
-
-/**
- * 带快捷键提示的搜索输入框，支持 ⌘F / Ctrl+F 聚焦。
- * IME 拼音/日文组合输入期间抑制 onChange，待 compositionend 再补发一次，
- * 避免上层防抖/受控逻辑被中间态拼字串污染。
- */
+/** Search input with shortcut focus and IME-safe change handling. */
 const SearchInput: FC<SearchInputProps> = (props) => {
   const {
     blurToken = 0,
@@ -29,9 +24,7 @@ const SearchInput: FC<SearchInputProps> = (props) => {
   const inputRef = useRef<InputRef>(null);
   const composingRef = useRef(false);
 
-  /**
-   * 聚焦搜索框并选中已有内容，便于直接覆盖输入。
-   */
+  /** Focus and select the existing query for immediate replacement. */
   const focusSearch = useCallback(async () => {
     if (!inputRef.current) return;
 
@@ -75,7 +68,8 @@ const SearchInput: FC<SearchInputProps> = (props) => {
     composingRef.current = false;
 
     onCompositionEnd?.(event);
-    // composition 结束时浏览器已派发最后一次 input，但被上面挡掉了，这里补一次。
+
+    // The final input event was suppressed during composition, so emit it here.
     onChange?.(event as unknown as ChangeEvent<HTMLInputElement>);
   };
 

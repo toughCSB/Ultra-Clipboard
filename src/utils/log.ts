@@ -1,11 +1,4 @@
-/**
- * 前端日志统一入口。
- *
- * - 始终通过 `tauri-plugin-log` 走到 Rust，落 LogDir 文件 + Stdout，与 Rust `log::error!` 同源。
- * - dev 环境额外打到浏览器 console（Rust 侧的 Webview target 也仅在 dev 启用，避免回灌到生产 webview）。
- * - plugin-log 的 IPC 是 Promise；调用方不需要 await，但要 catch 兜底，避免日志失败再触发未捕获 promise 报错。
- */
-
+/** Frontend logging entry point shared by plugin logging and development console output. */
 import {
   debug as pluginDebug,
   error as pluginError,
@@ -17,10 +10,7 @@ import { isDev } from "./is";
 
 type Payload = unknown;
 type Level = "debug" | "info" | "warn" | "error";
-
-/**
- * 把 message + 可选 payload 序列化成单行字符串，便于落文件检索。
- */
+/** Serialize a message and optional payload as one searchable log line. */
 function format(message: string, payload?: Payload): string {
   if (payload === void 0) return message;
 
@@ -34,11 +24,7 @@ function format(message: string, payload?: Payload): string {
     return `${message}: ${String(payload)}`;
   }
 }
-
-/**
- * dev 环境下把日志同步打到浏览器 console，方便调试时直接看；
- * 生产环境跳过，避免无谓 IO（文件日志由 plugin-log 负责）。
- */
+/** Write logs to the browser console only in development. */
 function devConsole(level: Level, message: string, payload?: Payload): void {
   if (!isDev) return;
 
@@ -55,7 +41,7 @@ async function safe(
   try {
     await fn(msg);
   } catch {
-    // 启动期 IPC 通道可能尚未就绪；落控制台兜底，避免 unhandled rejection。
+    // The IPC channel may not be ready during startup, so keep a console fallback.
     // biome-ignore lint/suspicious/noConsole: log channel fallback
     console.error("[log fallback]", msg);
   }

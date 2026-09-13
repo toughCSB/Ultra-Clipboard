@@ -9,9 +9,7 @@ interface StatusControlProps {
   setting: PreferenceSetting;
 }
 
-/**
- * 展示不可配置的能力状态；默认能力用只读开关表达，未来能力用标签表达。
- */
+/** Display non-configurable capability status with switches or tags. */
 const StatusControl: FC<StatusControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { setting } = props;

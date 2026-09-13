@@ -9,9 +9,6 @@ export interface ClearClipboardItemsOptions {
   deletePinned: boolean;
 }
 
-/**
- * 弹出清空记录确认框，并返回是否连带删除收藏 / 置顶记录；取消时返回 null。
- */
 export const confirmClearClipboardItems =
   async (): Promise<ClearClipboardItemsOptions | null> => {
     let choices: ClearClipboardItemsChoice[] = [];

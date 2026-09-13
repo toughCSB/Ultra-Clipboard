@@ -36,9 +36,7 @@ interface PreferenceSettingRowProps {
   onChange: PreferenceSettingChangeHandler;
 }
 
-/**
- * 单个设置项行：左侧说明结果，右侧渲染对应控件。
- */
+/** One setting row with explanatory text and its control. */
 const PreferenceSettingRow: FC<PreferenceSettingRowProps> = (props) => {
   const { t } = useTranslation("preferences");
   const {
@@ -161,9 +159,6 @@ const PreferenceSettingRow: FC<PreferenceSettingRowProps> = (props) => {
 
 export default PreferenceSettingRow;
 
-/**
- * 数据目录行展示当前真实路径，其它设置沿用 schema 文案。
- */
 function resolveSettingDescription(
   t: TFunction<"preferences">,
   setting: PreferenceSetting,

@@ -40,10 +40,7 @@ const FILES_VIRTUOSO_COMPONENTS = {
   Footer: PreviewFilesPadding,
   Header: PreviewFilesPadding,
 };
-
-/**
- * Content Viewer 顶部元信息区。
- */
+/** Metadata area at the top of the Content Viewer. */
 export const PreviewHeader: FC<PreviewHeaderProps> = (props) => {
   const { payload } = props;
   const { t } = useTranslation(["preview", "clipboard"]);
@@ -67,10 +64,7 @@ export const PreviewHeader: FC<PreviewHeaderProps> = (props) => {
     </div>
   );
 };
-
-/**
- * 按 payload kind 分发到基础 viewer。
- */
+/** Dispatch a payload by kind to its basic viewer. */
 export const PreviewContent: FC<PreviewContentProps> = (props) => {
   const { payload } = props;
   const { t } = useTranslation("preview");
@@ -92,10 +86,7 @@ export const PreviewContent: FC<PreviewContentProps> = (props) => {
 
   return <TextViewer payload={payload} />;
 };
-
-/**
- * 文本预览：所有文本族内容都按纯文本虚拟行展示，避免长 HTML / RTF 构造大 DOM。
- */
+/** Render text-family payloads as virtual plain-text rows to avoid a large DOM. */
 const TextViewer: FC<PayloadViewerProps> = (props) => {
   const { payload } = props;
   const { t } = useTranslation("preview");
@@ -145,10 +136,7 @@ const TextViewer: FC<PayloadViewerProps> = (props) => {
     );
   }
 };
-
-/**
- * 图片预览：使用原图路径渲染，缺失时降级为空状态。
- */
+/** Render an image from its original path, falling back when the file is missing. */
 const ImageViewer: FC<PayloadViewerProps> = (props) => {
   const { payload } = props;
   const { t } = useTranslation("preview");
@@ -179,10 +167,7 @@ const ImageViewer: FC<PayloadViewerProps> = (props) => {
     </div>
   );
 };
-
-/**
- * 文件预览：虚拟列表展示路径、文件名、存在状态与基础大小。
- */
+/** Render file paths, names, existence, and basic sizes in a virtual list. */
 const FilesViewer: FC<PayloadViewerProps> = (props) => {
   const { payload } = props;
   const { t } = useTranslation("preview");
@@ -247,24 +232,15 @@ const FilesViewer: FC<PayloadViewerProps> = (props) => {
     );
   }
 };
-
-/**
- * 虚拟文本列表上下留白。
- */
+/** Vertical padding for the virtual text list. */
 function PreviewTextPadding() {
   return <div className="h-4" />;
 }
-
-/**
- * 虚拟文件列表顶部留白。
- */
+/** Top padding for the virtual file list. */
 function PreviewFilesPadding() {
   return <div className="h-2" />;
 }
-
-/**
- * 文件 viewer 的单行展示。
- */
+/** Render one row in the file viewer. */
 const FilePreviewRow: FC<FilePreviewRowProps> = (props) => {
   const { file } = props;
   const { t } = useTranslation("preview");
@@ -305,10 +281,7 @@ const FilePreviewRow: FC<FilePreviewRowProps> = (props) => {
     </div>
   );
 };
-
-/**
- * 将长文本拆成虚拟行，超长单行按固定字符数软切块。
- */
+/** Split long text into virtual rows, soft-wrapping oversized lines. */
 function buildTextPreviewRows(text: string) {
   const rows: string[] = [];
 
@@ -329,10 +302,7 @@ function buildTextPreviewRows(text: string) {
 
   return rows;
 }
-
-/**
- * 生成 Content Viewer 标题。
- */
+/** Build the Content Viewer title. */
 function previewTitle(
   t: TFunction<"preview">,
   payload: ClipboardPreviewPayload,
@@ -347,10 +317,7 @@ function previewTitle(
 
   return t("title.text");
 }
-
-/**
- * 生成 Content Viewer 元信息。
- */
+/** Build Content Viewer metadata. */
 function previewMeta(
   t: TFunction<"preview">,
   payload: ClipboardPreviewPayload,
@@ -373,10 +340,7 @@ function previewMeta(
     count: payload.size ?? payload.text?.length ?? 0,
   });
 }
-
-/**
- * 格式化字节大小为紧凑文本。
- */
+/** Format a byte count as compact text. */
 function formatBytes(value: number) {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let size = value;

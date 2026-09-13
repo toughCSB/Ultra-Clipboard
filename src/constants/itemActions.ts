@@ -111,16 +111,10 @@ export const ITEM_ACTION_OPTIONS = ITEM_ACTION_ORDER.map((action) => {
 
 const ITEM_ACTION_KEYS = new Set<ItemAction>(ITEM_ACTION_ORDER);
 
-/**
- * 判断未知字符串是否为剪贴板条目快捷动作。
- */
 export function isItemAction(value: string): value is ItemAction {
   return ITEM_ACTION_KEYS.has(value as ItemAction);
 }
 
-/**
- * 从 clipboard 命名空间翻译快捷动作文案。
- */
 export function translateItemActionLabel(
   t: ClipboardTranslator,
   action: ItemAction,
@@ -139,9 +133,6 @@ export function translateItemActionLabel(
   return t(meta.labelKey);
 }
 
-/**
- * 生成剪贴板卡片 hover 快捷动作使用的完整文案表。
- */
 export function buildItemActionLabels(t: ClipboardTranslator) {
   const labels = ITEM_ACTION_ORDER.reduce(
     (result, action) => {
@@ -162,9 +153,6 @@ export function buildItemActionLabels(t: ClipboardTranslator) {
   };
 }
 
-/**
- * 解析快捷动作按钮当前状态下的展示信息。
- */
 export function resolveItemActionPresentation(
   action: ItemAction,
   labels: ItemActionLabels,
@@ -177,9 +165,6 @@ export function resolveItemActionPresentation(
   };
 }
 
-/**
- * 根据动作当前状态解析展示文案。
- */
 export function resolveItemActionLabel(
   action: ItemAction,
   labels: ItemActionLabels,
@@ -194,9 +179,6 @@ export function resolveItemActionLabel(
   return labels[action];
 }
 
-/**
- * 根据动作当前状态解析图标。
- */
 export function resolveItemActionIcon(
   action: ItemAction,
   state: ItemActionState = {},
@@ -208,23 +190,14 @@ export function resolveItemActionIcon(
   return meta.icon;
 }
 
-/**
- * 判断动作是否需要 danger 视觉样式。
- */
 export function isDangerItemAction(action: ItemAction) {
   return Boolean(ITEM_ACTION_META[action].danger);
 }
 
-/**
- * 判断动作是否为写回剪贴板动作，可展示复制成功临时反馈。
- */
 export function isCopyItemAction(action: ItemAction) {
   return action === "copy" || action === "copyPlain";
 }
 
-/**
- * 按当前条目的可用右键菜单动作过滤 hover 快捷动作。
- */
 export function filterAvailableItemActions(
   actions: readonly ItemAction[],
   item: ClipboardItem,
@@ -234,9 +207,6 @@ export function filterAvailableItemActions(
   });
 }
 
-/**
- * 判断某个快捷动作在当前条目上是否有意义。
- */
 export function isItemActionAvailable(action: ItemAction, item: ClipboardItem) {
   switch (action) {
     case "copyPlain":
@@ -269,9 +239,6 @@ export function isItemActionAvailable(action: ItemAction, item: ClipboardItem) {
   }
 }
 
-/**
- * 判断 Rust 返回的右键菜单动作列表是否包含目标动作。
- */
 function hasClipboardAction(item: ClipboardItem, action: ClipboardAction) {
   return item.availableActions?.includes(action) ?? false;
 }

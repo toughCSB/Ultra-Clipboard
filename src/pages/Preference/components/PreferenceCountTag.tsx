@@ -6,9 +6,7 @@ interface PreferenceCountTagProps {
   className?: string;
 }
 
-/**
- * 偏好页统一数量标签：用于设置数量、应用数量等轻量状态胶囊。
- */
+/** Shared compact count tag for settings and app counts. */
 const PreferenceCountTag: FC<PreferenceCountTagProps> = (props) => {
   const { children, className } = props;
 

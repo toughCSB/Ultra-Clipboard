@@ -13,9 +13,7 @@ interface NumberControlProps extends ControlProps {
   value: number;
 }
 
-/**
- * 数字输入失焦保存，避免连续输入时频繁落盘。
- */
+/** Save numeric input on blur to avoid persisting every keystroke. */
 const NumberControl: FC<NumberControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, value } = props;

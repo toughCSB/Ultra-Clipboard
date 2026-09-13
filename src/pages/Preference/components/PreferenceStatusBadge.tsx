@@ -24,9 +24,7 @@ const STATUS_META: Record<
   },
 };
 
-/**
- * 设置项状态徽标：用文字和图标表达状态，避免只依赖颜色。
- */
+/** Status badge that communicates capability state with text and icon. */
 const PreferenceStatusBadge: FC<PreferenceStatusBadgeProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { compact = false, status } = props;

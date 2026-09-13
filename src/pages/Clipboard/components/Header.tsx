@@ -33,10 +33,7 @@ type HeaderMoreMenuKey = "clear" | "preference";
 
 const MORE_ACTION_TRIGGER: AppDropdownProps["trigger"] = ["click"];
 const PREFERENCE_SHORTCUT = formatShortcutDisplay("CmdOrCtrl+,", " ");
-
-/**
- * 剪贴板窗口顶部条：logo、搜索框（⌘F / Ctrl+F 聚焦）、固定窗口与更多操作入口。
- */
+/** Clipboard window header with logo, search, pin, and more actions. */
 const Header: FC = () => {
   const { t } = useTranslation("clipboard");
   const settings = useSnapshot(settingsState);
@@ -45,23 +42,17 @@ const Header: FC = () => {
   const [searchClearToken, setSearchClearToken] = useState(0);
   const [searchFocusToken, setSearchFocusToken] = useState(0);
 
-  /**
-   * 统一处理偏好设置入口（按钮点击/快捷键）。
-   */
+  /** Open preferences from the button or keyboard shortcut. */
   const handleOpenPreference = () => {
     return showWindow(WINDOW_LABEL.PREFERENCE);
   };
 
-  /**
-   * 清空剪贴板历史；确认、toast 与后端调用统一收口在命令包装内。
-   */
+  /** Clear clipboard history through the shared command wrapper. */
   const handleClearClipboardItems = async () => {
     await clearClipboardItems();
   };
 
-  /**
-   * 更多操作菜单分发：危险操作走确认弹窗，偏好设置打开独立窗口。
-   */
+  /** Dispatch menu actions, using the command wrapper for confirmation. */
   const handleMoreMenuClick: MenuProps["onClick"] = async (info) => {
     const key = info.key as HeaderMoreMenuKey;
 
@@ -74,9 +65,7 @@ const Header: FC = () => {
     await handleOpenPreference();
   };
 
-  /**
-   * 切换剪贴板窗口固定态：Rust 侧立即生效（resign_key / 外部点击钩子读取），本地态仅用于按钮渲染。
-   */
+  /** Toggle the pinned state in Rust and update the button state. */
   const handleTogglePinned = async () => {
     const next = !pinned;
 
@@ -84,10 +73,7 @@ const Header: FC = () => {
     setPinned(next);
   };
 
-  /**
-   * 防抖写入共享 store：连续打字时仅保留最后一次值，下游 List 直接消费 store 触发查询。
-   * 搜索框自身不受 store 控制（非受控），避免 IME composition 期回灌导致重复字符。
-   */
+  /** Debounced search updates keep the input uncontrolled during IME composition. */
   const { cancel: cancelKeywordChange, run: handleKeywordChange } =
     useDebounceFn(
       (event: ChangeEvent<HTMLInputElement>) => {
@@ -96,9 +82,7 @@ const Header: FC = () => {
       { wait: 200 },
     );
 
-  /**
-   * 递增 token 触发搜索框清空，同时同步查询状态回到完整列表。
-   */
+  /** Clear the shared query and remount the input. */
   const clearSearch = () => {
     cancelKeywordChange();
     clipboardViewState.keyword = "";
@@ -108,27 +92,20 @@ const Header: FC = () => {
     });
   };
 
-  /**
-   * 递增 token 让搜索框失焦，避免窗口重新打开时保留上一次 activeElement。
-   */
+  /** Blur the search input when the window is hidden. */
   const blurSearch = () => {
     setSearchBlurToken((current) => {
       return current + 1;
     });
   };
 
-  /**
-   * 递增 token 触发搜索框在窗口完成显示后的下一帧聚焦。
-   */
+  /** Focus the search input after the window becomes visible. */
   const focusSearch = () => {
     setSearchFocusToken((current) => {
       return current + 1;
     });
   };
 
-  /**
-   * 剪贴板窗口显隐变化时执行搜索框偏好：下次显示时清空关键词，显示后按设置自动聚焦。
-   */
   const handleWindowVisibility = (event: {
     payload: WindowVisibilityPayload;
   }) => {

@@ -19,22 +19,13 @@ import TextCard from "./TextCard";
 interface ClipboardCardProps {
   item: ClipboardItem;
   isSelected?: boolean;
-  /**
-   * 快捷键提示字符（"1"–"9" / "0"），存在时在 app 图标上叠加 KeyHint；
-   * 按下修饰键（macOS ⌘ / Windows Ctrl）+ 该数字键触发快速粘贴。
-   */
+
   hintKey?: string;
-  /**
-   * 快捷键触发时执行的粘贴操作，由父级列表注入。
-   */
+
   onQuickPaste?: () => void;
-  /**
-   * MOD 键按下时，URL / Email 文本以链接态展示。
-   */
+
   isLinkActive?: boolean;
-  /**
-   * 点击 URL / Email 文本时打开外部链接。
-   */
+
   onOpenLink?: () => void;
   onPointerEnter?: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerLeave?: () => void;
@@ -50,12 +41,7 @@ interface ClipboardCardProps {
   rootRef?: Ref<HTMLDivElement>;
 }
 
-/**
- * 按 `kind` 分发到具体卡片组件，统一外层 padding / 时间戳 / 来源应用图标。
- * `isSelected` 为 true 时高亮背景与边框；指针事件由列表注入用于 hover preview；
- * 右键根节点弹出 Rust 端原生菜单（避免 tauri-apps/tauri#9470 的 muda use-after-free），
- * 点击菜单项后由列表层订阅 `clipboard://menu-action` 派发到实际处理逻辑。
- */
+/** Dispatch an item by kind and provide shared selection and context-menu behavior. */
 const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const {
     item,
@@ -204,9 +190,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   );
 };
 
-/**
- * 渲染卡片右下角的状态水印；仅表达状态，不参与交互。
- */
+/** Render the non-interactive status watermark in the card corner. */
 function renderStatusIndicators(isPinned: boolean, isSensitive: boolean) {
   return (
     <div className="pointer-events-none absolute right-2 bottom-2 flex items-end gap-1 text-ant-quaternary">

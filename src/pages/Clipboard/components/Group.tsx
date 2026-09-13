@@ -104,9 +104,7 @@ const GROUP_BUTTON_WIDTH = 24;
 const GROUP_BUTTON_GAP = 4;
 const GROUP_SEPARATOR_MARGIN = 4;
 
-/**
- * Header 下方的分组筛选栏：内置类型分组 + 自定义分组入口。
- */
+/** Group filter bar with built-in categories and custom group entry points. */
 const Group: FC = () => {
   const { t } = useTranslation(["clipboard", "common"]);
   const { category, groupId, range } = useSnapshot(clipboardViewState);
@@ -136,9 +134,7 @@ const Group: FC = () => {
     visibleCustomGroupCount,
   );
 
-  /**
-   * 从 Rust 拉取自定义分组。
-   */
+  /** Load custom groups from Rust. */
   const loadGroups = async () => {
     const groups = await listClipboardGroups();
 
@@ -154,25 +150,18 @@ const Group: FC = () => {
     ensureSelectedGroupStillExists(groups);
   };
 
-  /**
-   * 首次挂载时拉取分组。
-   */
   useMount(() => {
     void loadGroups();
   });
 
-  /**
-   * 其他窗口或命令修改分组后刷新本地列表。
-   */
+  /** Refresh the local list after another window or command changes groups. */
   const handleGroupsUpdated = () => {
     void loadGroups();
   };
 
   useTauriListen(TAURI_EVENT.CLIPBOARD_GROUPS_UPDATED, handleGroupsUpdated);
 
-  /**
-   * 容器尺寸变化时重新测量溢出状态。
-   */
+  /** Recalculate overflow when the toolbar size changes. */
   useEffect(() => {
     const toolbar = toolbarRef.current;
     const customAnchor = customGroupAnchorRef.current;
@@ -196,9 +185,7 @@ const Group: FC = () => {
     };
   }, [visibleCustomGroups.length]);
 
-  /**
-   * 切换范围；范围必须始终保留一个选中项。
-   */
+  /** Switch range while keeping one range selected. */
   const selectRange = (value: ClipboardRange) => {
     clipboardViewState.range = value;
     clipboardViewState.category = null;
@@ -213,16 +200,11 @@ const Group: FC = () => {
       clipboardViewState.category === value ? null : value;
   };
 
-  /**
-   * 切换到自定义分组；再次点击当前分组时取消。
-   */
+  /** Toggle a custom group, clearing it when selected again. */
   const toggleCustomGroup = (id: string) => {
     clipboardViewState.groupId = clipboardViewState.groupId === id ? null : id;
   };
 
-  /**
-   * 点击分组按钮时根据 data 属性切换筛选。
-   */
   const handleGroupClick = (event: MouseEvent<HTMLButtonElement>) => {
     const type = event.currentTarget.dataset.type;
     const value = event.currentTarget.dataset.value;
@@ -243,9 +225,6 @@ const Group: FC = () => {
     }
   };
 
-  /**
-   * 记录右键菜单所属分组。
-   */
   const handleCustomGroupContextMenu = (
     event: MouseEvent<HTMLButtonElement>,
   ) => {
@@ -258,9 +237,6 @@ const Group: FC = () => {
       }) ?? null;
   };
 
-  /**
-   * 处理分组栏快捷键：Cmd/Ctrl+Q 切换范围，左右键切分类，Tab / Shift+Tab 仅在可见自定义分组间循环。
-   */
   const handleKeyDown = (event: KeyboardEvent) => {
     const eventModifierPressed = event.metaKey || event.ctrlKey;
 
@@ -298,17 +274,11 @@ const Group: FC = () => {
 
   useKeyboardEvent("keydown", handleKeyDown);
 
-  /**
-   * 在全部 / 收藏范围之间循环切换，不影响分类与自定义分组筛选。
-   */
   const toggleRange = () => {
     clipboardViewState.range =
       clipboardViewState.range === "all" ? "favorite" : "all";
   };
 
-  /**
-   * 按方向键在固定分类序列内循环；未选分类时从方向对应的端点进入。
-   */
   const selectAdjacentCategory = (direction: -1 | 1) => {
     const options = CATEGORY_GROUP_OPTIONS.map((option) => {
       return option.value;
@@ -325,35 +295,23 @@ const Group: FC = () => {
     clipboardViewState.category = options[normalizedIndex];
   };
 
-  /**
-   * 打开新增分组弹框。
-   */
   const openCreateModal = () => {
     setModalMode("create");
     setEditingGroup(null);
     setModalOpen(true);
   };
 
-  /**
-   * 打开编辑分组弹框。
-   */
   const openEditModal = (record: ClipboardGroupRecord) => {
     setModalMode("edit");
     setEditingGroup(record);
     setModalOpen(true);
   };
 
-  /**
-   * 关闭新增 / 编辑分组弹框。
-   */
   const closeModal = () => {
     setModalOpen(false);
     setEditingGroup(null);
   };
 
-  /**
-   * 保存分组弹框内容。
-   */
   const handleModalSubmit = async (input: ClipboardGroupInput) => {
     if (modalMode === "create") {
       await createClipboardGroup(input);
@@ -367,9 +325,6 @@ const Group: FC = () => {
     closeModal();
   };
 
-  /**
-   * 执行自定义分组右键菜单动作。
-   */
   const handleGroupMenuClick = (info: { key: string }) => {
     const record = contextGroupRef.current;
     if (!record) return;
@@ -396,23 +351,14 @@ const Group: FC = () => {
     }
   };
 
-  /**
-   * 执行新增分组动作。
-   */
   const handleCreateGroupAction = () => {
     openCreateModal();
   };
 
-  /**
-   * 打开偏好设置并定位到自定义分组管理项。
-   */
   const openGroupPreference = async () => {
     await openPreferenceWithHighlight(CUSTOM_GROUPS_SETTING_ID);
   };
 
-  /**
-   * 执行更多菜单动作：新增 / 管理分组，或切换到溢出的自定义分组。
-   */
   const handleMoreMenuClick = async (info: { key: string }) => {
     const action = parseMoreMenuAction(info.key);
     if (action === MORE_MENU_ACTION.NEW_GROUP) {
@@ -431,9 +377,6 @@ const Group: FC = () => {
     toggleCustomGroup(id);
   };
 
-  /**
-   * 弹出删除确认框。
-   */
   const requestDeleteGroup = (record: ClipboardGroupRecord) => {
     deleteGroupRef.current = record;
 
@@ -453,9 +396,6 @@ const Group: FC = () => {
     });
   };
 
-  /**
-   * 确认删除当前待删除分组。
-   */
   const confirmDeleteGroup = async () => {
     const record = deleteGroupRef.current;
     if (!record) return;
@@ -472,9 +412,6 @@ const Group: FC = () => {
   const groupMenuItems = buildGroupActionMenuItems(t);
   const createMenuItems = buildCreateMenuItems(t);
 
-  /**
-   * 记录溢出菜单中右键菜单所属分组。
-   */
   const handleOverflowGroupContext = (record: ClipboardGroupRecord) => {
     contextGroupRef.current = record;
   };
@@ -491,9 +428,6 @@ const Group: FC = () => {
     return record.id === groupId;
   });
 
-  /**
-   * 渲染溢出分组菜单按钮。
-   */
   const renderMoreButton = () => {
     if (overflowCustomGroups.length === 0) return null;
 
@@ -523,9 +457,6 @@ const Group: FC = () => {
     );
   };
 
-  /**
-   * 渲染独立新增按钮；存在溢出菜单时由菜单内新增入口承接。
-   */
   const renderCreateButton = () => {
     if (overflowCustomGroups.length > 0) return null;
 
@@ -554,9 +485,6 @@ const Group: FC = () => {
     );
   };
 
-  /**
-   * 渲染范围按钮。
-   */
   const renderRangeButton = ({ labelKey, value, icon }: RangeGroupOption) => {
     const selected = range === value;
     const nextRange =
@@ -573,9 +501,6 @@ const Group: FC = () => {
     });
   };
 
-  /**
-   * 渲染分类按钮。
-   */
   const renderCategoryButton = ({
     labelKey,
     value,
@@ -592,9 +517,6 @@ const Group: FC = () => {
     });
   };
 
-  /**
-   * 渲染单个筛选按钮。
-   */
   const renderFilterButton = (options: {
     icon: ClipboardGroupIconValue;
     label: string;
@@ -695,9 +617,6 @@ const Group: FC = () => {
   );
 };
 
-/**
- * 分隔范围、分类、自定义分组三段。
- */
 const GroupSeparator: FC<GroupSeparatorProps> = (props) => {
   const { separatorRef } = props;
 
@@ -710,9 +629,6 @@ const GroupSeparator: FC<GroupSeparatorProps> = (props) => {
   );
 };
 
-/**
- * 溢出菜单里的分组行：左键选择分组，右键打开同一套分组管理菜单。
- */
 const OverflowGroupMenuLabel: FC<OverflowGroupMenuLabelProps> = (props) => {
   const { menuItems, onContext, onMenuClick, record } = props;
 
@@ -741,9 +657,7 @@ const OverflowGroupMenuLabel: FC<OverflowGroupMenuLabelProps> = (props) => {
   );
 };
 
-/**
- * 下一帧提交可见自定义分组数量；分组数据更新后等待 DOM 渲染完成再测量。
- */
+/** Commit visible custom-group count after the next render. */
 function scheduleVisibleCustomGroupCountUpdate(
   toolbarRef: RefObject<HTMLDivElement | null>,
   customAnchorRef: RefObject<HTMLSpanElement | null>,
@@ -760,9 +674,7 @@ function scheduleVisibleCustomGroupCountUpdate(
   });
 }
 
-/**
- * 根据自定义分组栏可用宽度写入可见分组数量。
- */
+/** Write the number of custom groups that fit in the toolbar. */
 function commitVisibleCustomGroupCount(
   toolbar: HTMLDivElement | null,
   customAnchor: HTMLSpanElement | null,
@@ -782,9 +694,7 @@ function commitVisibleCustomGroupCount(
   });
 }
 
-/**
- * 按整条分组栏剩余宽度计算自定义分组可显示数量。
- */
+/** Compute how many custom groups fit in the remaining toolbar width. */
 function computeCustomGroupCapacity(
   toolbar: HTMLDivElement,
   customAnchor: HTMLSpanElement,
@@ -811,9 +721,7 @@ function computeCustomGroupCapacity(
   );
 }
 
-/**
- * 构建自定义分组右键菜单；内联分组和溢出菜单分组共用这一份定义。
- */
+/** Build the shared context menu for inline and overflow groups. */
 function buildGroupActionMenuItems(
   t: TFunction<["clipboard", "common"]>,
 ): DropdownMenuItems {
@@ -838,9 +746,7 @@ function buildGroupActionMenuItems(
   ];
 }
 
-/**
- * 构建新增按钮右键菜单；左键继续新增，右键提供管理入口。
- */
+/** Build the add button menu, retaining add on the left click. */
 function buildCreateMenuItems(
   t: TFunction<["clipboard", "common"]>,
 ): DropdownMenuItems {
@@ -853,9 +759,7 @@ function buildCreateMenuItems(
   ];
 }
 
-/**
- * 构建更多菜单项：新增 / 管理入口 + 溢出分组快速入口。
- */
+/** Build the more menu with management and overflow shortcuts. */
 function buildMoreMenuItems(
   groups: ClipboardGroupRecord[],
   groupMenuItems: DropdownMenuItems,
@@ -908,9 +812,6 @@ function buildMoreMenuItems(
   ];
 }
 
-/**
- * 解析自定义分组右键菜单动作。
- */
 function parseGroupMenuAction(key: string): GroupMenuAction | null {
   const actions = Object.values(GROUP_MENU_ACTION);
   if (!actions.includes(key as GroupMenuAction)) return null;
@@ -918,9 +819,6 @@ function parseGroupMenuAction(key: string): GroupMenuAction | null {
   return key as GroupMenuAction;
 }
 
-/**
- * 解析更多菜单动作。
- */
 function parseMoreMenuAction(key: string): MoreMenuAction | null {
   const actions = Object.values(MORE_MENU_ACTION);
   if (!actions.includes(key as MoreMenuAction)) return null;
@@ -928,43 +826,28 @@ function parseMoreMenuAction(key: string): MoreMenuAction | null {
   return key as MoreMenuAction;
 }
 
-/**
- * 生成更多菜单中的分组 key。
- */
 function buildMoreMenuGroupKey(id: string): MoreMenuGroupKey {
   return `group:${id}`;
 }
 
-/**
- * 从更多菜单 key 中解析自定义分组 id。
- */
 function parseMoreMenuGroupId(key: string) {
   if (!key.startsWith("group:")) return null;
 
   return key.slice("group:".length);
 }
 
-/**
- * 判断字符串是否为范围分组值。
- */
 function isRangeGroup(value: unknown): value is ClipboardRange {
   return RANGE_GROUP_OPTIONS.some((option) => {
     return option.value === value;
   });
 }
 
-/**
- * 判断字符串是否为分类分组值。
- */
 function isCategoryGroup(value: unknown): value is ClipboardCategory {
   return CATEGORY_GROUP_OPTIONS.some((option) => {
     return option.value === value;
   });
 }
 
-/**
- * 在可见自定义分组间前后循环；当前未选中分组时，正向取第一个，反向取最后一个。
- */
 function selectAdjacentCustomGroup(
   groups: ClipboardGroupRecord[],
   groupId: string | null,
@@ -991,9 +874,6 @@ function selectAdjacentCustomGroup(
   return groups[(currentIndex + 1) % groups.length]?.id ?? null;
 }
 
-/**
- * 判断左右键是否应交给输入控件原生光标导航。
- */
 function shouldUseNativeHorizontalNavigation(event: KeyboardEvent) {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return false;
@@ -1004,9 +884,6 @@ function shouldUseNativeHorizontalNavigation(event: KeyboardEvent) {
   return tagName === "input" || tagName === "textarea";
 }
 
-/**
- * 当前选中分组被删除或不再存在时，回到全部分组。
- */
 function ensureSelectedGroupStillExists(groups: ClipboardGroupRecord[]) {
   const selectedGroupId = clipboardViewState.groupId;
   if (!selectedGroupId) return;

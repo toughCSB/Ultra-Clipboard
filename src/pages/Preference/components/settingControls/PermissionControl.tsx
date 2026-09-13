@@ -32,9 +32,7 @@ interface PermissionControlProps {
   setting: PreferenceSetting;
 }
 
-/**
- * 展示系统授权入口，并以系统真实状态刷新开关和状态标签。
- */
+/** Show system permission controls and refresh them from the actual state. */
 const PermissionControl: FC<PermissionControlProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const { disabled, setting } = props;

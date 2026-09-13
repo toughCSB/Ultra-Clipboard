@@ -5,9 +5,7 @@ import { proxy } from "valtio";
 import { TAURI_EVENT } from "@/constants/events";
 import { log } from "@/utils/log";
 
-/**
- * 窗口生命周期阶段，与 Rust `LifecyclePhase` 一一对应（camelCase）。
- */
+/** Lifecycle stages mirror Rust `LifecyclePhase` in camelCase. */
 export type LifecyclePhase =
   | "notCreated"
   | "created"
@@ -18,9 +16,7 @@ export type LifecyclePhase =
   | "destroyPending"
   | "destroyed";
 
-/**
- * Rust `window://lifecycle` 事件 payload。
- */
+/** Payload emitted by the Rust `window://lifecycle` event. */
 interface LifecyclePayload {
   label: string;
   phase: LifecyclePhase;
@@ -29,12 +25,7 @@ interface LifecyclePayload {
   visible: boolean;
 }
 
-/**
- * 当前 WebView 的生命周期镜像。真相源在 Rust（`WindowLifecycleManager`）。
- *
- * 每个 WebView 只关心自身窗口的阶段，故事件订阅按 `label` 过滤；跨窗口的阶段不进本镜像。
- * 初值 `created` 仅占位，Rust 在 show / hide / ready 时通过事件推进。
- */
+/** Lifecycle mirror for the current WebView. Rust is the source of truth. */
 export const windowLifecycleState = proxy<{
   phase: LifecyclePhase;
   visible: boolean;
@@ -47,10 +38,7 @@ export const windowLifecycleState = proxy<{
 
 const currentLabel = getCurrentWebviewWindow().label;
 
-/**
- * 启动期一次性订阅 `window://lifecycle`，只接收当前窗口的阶段更新。
- * 模块导入即开跑，单 WebView 内天然单例。
- */
+/** Subscribe once to lifecycle updates for the current window. */
 export const windowLifecycleReady: Promise<void> = (async () => {
   try {
     await listen<LifecyclePayload>(TAURI_EVENT.WINDOW_LIFECYCLE, (event) => {

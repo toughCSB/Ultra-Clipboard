@@ -6,10 +6,7 @@ interface PreviewContentTransitionProps {
   children: ReactNode;
   contentKey: string;
 }
-
-/**
- * 内容切换时做轻量淡出 / 淡入位移，避免 payload 更换出现硬切。
- */
+/** Fade and shift content lightly when the payload changes. */
 const PreviewContentTransition: FC<PreviewContentTransitionProps> = (props) => {
   const { children, contentKey } = props;
 

@@ -1,7 +1,3 @@
-/**
- * 与 Rust `app.emit` 事件名一一对应的常量表。
- * 命名采用 `domain://action` 形式（见 AGENTS.md）。
- */
 export const TAURI_EVENT = {
   BACKUP_RECEIVED: "backup://received",
   CLIPBOARD_GROUPS_UPDATED: "clipboard-groups://updated",

@@ -29,9 +29,7 @@ interface SortableCheckboxTreeControlProps extends ControlProps {
   value?: SettingValue;
 }
 
-/**
- * 用一个按钮打开可拖拽 Tree 弹框，勾选项按当前树顺序保存。
- */
+/** Open a sortable tree modal and save checked keys in tree order. */
 const SortableCheckboxTreeControl: FC<SortableCheckboxTreeControlProps> = (
   props,
 ) => {
@@ -102,9 +100,7 @@ const SortableCheckboxTreeControl: FC<SortableCheckboxTreeControlProps> = (
 
 export default SortableCheckboxTreeControl;
 
-/**
- * 解析排序勾选树控件值；数组输入视为同时包含选择态和排序。
- */
+/** Parse a sortable-tree value containing selection and order. */
 function resolveTreeValue(value?: SettingValue) {
   if (Array.isArray(value)) {
     return { order: value, selected: value };
@@ -127,9 +123,7 @@ function resolveTreeValue(value?: SettingValue) {
   };
 }
 
-/**
- * 从未知值中提取字符串数组。
- */
+/** Extract a string array from an unknown value. */
 function resolveStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
 
@@ -138,9 +132,7 @@ function resolveStringArray(value: unknown) {
   });
 }
 
-/**
- * 生成 Tooltip 里展示的已选动作摘要。
- */
+/** Build the selected-action summary shown in the tooltip. */
 function resolveSelectedLabels(
   t: TFunction<"preferences">,
   clipboardT: TFunction<"clipboard">,
@@ -164,9 +156,7 @@ function resolveSelectedLabels(
   return translatePreferenceSetting(t, setting, "title");
 }
 
-/**
- * 根据保存的完整顺序与 schema 默认顺序生成单列 Tree 数据。
- */
+/** Build one-column tree data from saved and default order. */
 function buildTreeData(
   t: TFunction<"preferences">,
   clipboardT: TFunction<"clipboard">,
@@ -204,9 +194,7 @@ function buildTreeData(
   }, []);
 }
 
-/**
- * 渲染动作项标题；图标放在 checkbox 后、文案前。
- */
+/** Render an action title with its icon before the label. */
 function renderActionTitle(value: string, label: string) {
   const iconClass = isItemAction(value)
     ? resolveItemActionIcon(value)
@@ -223,9 +211,7 @@ function renderActionTitle(value: string, label: string) {
   );
 }
 
-/**
- * 解析树节点选项文案；快捷动作复用剪贴板窗口同一组文案。
- */
+/** Resolve an option label, reusing clipboard-window action labels. */
 function resolveOptionLabel(
   t: TFunction<"preferences">,
   clipboardT: TFunction<"clipboard">,

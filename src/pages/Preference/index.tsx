@@ -64,9 +64,7 @@ interface AppMetadata {
   version: string;
 }
 
-/**
- * Ultra Clipboard 偏好设置：以用户心智组织设置，而非代码模块。
- */
+/** Preferences organized around user concepts rather than code modules. */
 const Preference: FC = () => {
   const { t } = useTranslation("preferences");
   const settings = useSnapshot(settingsState) as Settings;
@@ -134,9 +132,7 @@ const Preference: FC = () => {
     highlightSetting(result.setting.id);
   };
 
-  /**
-   * 切换到指定设置项所属分类，并触发滚动高亮。
-   */
+  /** Select the setting's category and scroll it into view. */
   const highlightSetting = (settingId: string) => {
     const target = findPreferenceSetting(settingId);
     if (!target) return;
@@ -164,9 +160,7 @@ const Preference: FC = () => {
 
     try {
       await commitSettingChange(setting, value);
-    } catch {
-      // 错误 toast 已由 commands 层统一处理；设置镜像等待 Rust 事件回灌。
-    }
+    } catch {}
   };
 
   const highlightBackupImport = () => {
@@ -185,16 +179,12 @@ const Preference: FC = () => {
     setBackupImportTarget(payload);
   };
 
-  /**
-   * 关闭备份导入弹窗并丢弃当前接收的文件路径。
-   */
+  /** Close the backup import modal and discard its pending file path. */
   const closeBackupImportModal = () => {
     setBackupImportTarget(null);
   };
 
-  /**
-   * 导入完成后刷新存储占用。
-   */
+  /** Refresh storage usage after a successful import. */
   const handleBackupImported = (_result: ImportHistoryBackupResult) => {
     closeBackupImportModal();
     void initializeStorageUsage();
@@ -228,9 +218,7 @@ const Preference: FC = () => {
     }
   };
 
-  /**
-   * 加载当前环境数据目录的递归占用，用于侧栏低频状态展示。
-   */
+  /** Load recursive usage for the active data directory. */
   const initializeStorageUsage = async () => {
     setStorageState("loading");
 
@@ -249,9 +237,7 @@ const Preference: FC = () => {
     }
   };
 
-  /**
-   * 从 Tauri 应用元信息读取展示名称和版本，避免前端手写包信息。
-   */
+  /** Read the display name and version from Tauri metadata. */
   const initializeAppMetadata = async () => {
     try {
       const [name, version] = await Promise.all([getName(), getVersion()]);
@@ -267,7 +253,7 @@ const Preference: FC = () => {
     void initializeAppMetadata();
     void preloadSourceApps();
 
-    // 窗口空闲销毁后重建时，备份接收 / 定位高亮事件已无法 push 给刚挂载的前端，改为主动拉取暂存值。
+    // Pull staged values because an idle-destroyed window cannot receive past events.
     const pendingBackup = await takePendingBackup();
 
     if (pendingBackup) {
@@ -416,9 +402,7 @@ const Preference: FC = () => {
   );
 };
 
-/**
- * 从完整偏好设置 schema 中找到指定设置项及其所属层级。
- */
+/** Find a setting and its hierarchy in the complete preference schema. */
 function findPreferenceSetting(settingId: string) {
   for (const tab of preferenceTabs) {
     for (const section of tab.sections) {

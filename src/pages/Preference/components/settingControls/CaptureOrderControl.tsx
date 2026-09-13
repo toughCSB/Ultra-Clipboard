@@ -26,9 +26,7 @@ interface CaptureOrderControlProps extends ControlProps {
   value?: SettingValue;
 }
 
-/**
- * 通过可拖拽 Tree 弹框调整剪贴板多表示内容的采集优先级。
- */
+/** Adjust clipboard representation priority with a draggable tree. */
 const CaptureOrderControl: FC<CaptureOrderControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { t: commonT } = useTranslation("common");
@@ -78,9 +76,7 @@ const CaptureOrderControl: FC<CaptureOrderControlProps> = (props) => {
 
 export default CaptureOrderControl;
 
-/**
- * 解析采集顺序设置值，并补齐缺失项、过滤未知项。
- */
+/** Parse, complete, and filter the capture-order setting. */
 function resolveCaptureOrder(value?: SettingValue): CaptureKind[] {
   const input = Array.isArray(value) ? value : [];
   const order: CaptureKind[] = [];
@@ -100,9 +96,7 @@ function resolveCaptureOrder(value?: SettingValue): CaptureKind[] {
   return order;
 }
 
-/**
- * 生成按钮 Tooltip 中展示的当前采集优先级摘要。
- */
+/** Build the capture-order summary shown in the button tooltip. */
 function resolveCaptureOrderLabels(
   t: TFunction<"preferences">,
   order: CaptureKind[],
@@ -114,9 +108,7 @@ function resolveCaptureOrderLabels(
     .join(" / ");
 }
 
-/**
- * 根据当前顺序生成单列 Tree 节点。
- */
+/** Build one-column tree nodes from the current capture order. */
 function buildTreeData(
   t: TFunction<"preferences">,
   setting: PreferenceSetting,
@@ -141,9 +133,7 @@ function buildTreeData(
   }, []);
 }
 
-/**
- * 渲染采集类型项标题；图标放在文案前，便于拖拽列表快速扫描。
- */
+/** Render a capture type title with its icon before the label. */
 function renderCaptureTitle(kind: CaptureKind, label: string) {
   return (
     <span className="flex min-w-0 items-center gap-2">

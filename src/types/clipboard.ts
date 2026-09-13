@@ -1,8 +1,4 @@
-/**
- * 与 Rust `db::models::ClipboardItem` 对应（`serde(rename_all = "camelCase")`）。
- * 列表视图下 text 类型条目的 `content` / `searchText` 由 Rust 端置空，渲染走 `summary`。
- */
-
+/** Frontend shape corresponding to Rust `db::models::ClipboardItem`. */
 export type ClipboardKind = "text" | "image" | "files";
 
 export type ClipboardSubKind =
@@ -14,11 +10,7 @@ export type ClipboardSubKind =
   | "path";
 
 export type ClipboardPlatform = "macos" | "windows";
-
-/**
- * 右键菜单可用动作。与 Rust `ClipboardAction` 对应（`serde(rename_all = "camelCase")`）。
- * 顺序由后端给出，前端按此顺序渲染。
- */
+/** Context-menu actions returned by Rust, in the order they should be rendered. */
 export type ClipboardAction =
   | "paste"
   | "pasteAsPlainText"
@@ -57,26 +49,21 @@ export interface ClipboardItem {
   note: string | null;
   createdAt: string;
   updatedAt: string;
-  /**
-   * 后端 LEFT JOIN `clipboard_apps` 顺带返回的来源应用元信息。
-   * `sourceAppIconPath` 已由 Rust 命令层用 `AppIconStore` 解析为绝对路径，
-   * 前端直接 `convertFileSrc(sourceAppIconPath)` 渲染。
-   * `sourceAppIconFile` 是 Rust 内部解析用的原始文件名，前端通常不需要。
-   */
+  /** Source-app metadata returned by the backend's `clipboard_apps` join. */
   sourceAppName?: string;
   sourceAppIconFile?: string;
   sourceAppIconPath?: string;
-  /** image 条目的缩略图绝对路径（后端预处理返回）。 */
+  /** Absolute thumbnail path prepared by the backend for image items. */
   imageThumbnailPath?: string;
-  /** files 条目的预处理条目（与 content 中路径顺序一致，数量由 Rust 按设置截断）。 */
+  /** Preprocessed file entries, in the same order as the content paths. */
   fileEntries?: FileEntry[];
-  /** 右键菜单可用动作；顺序由 Rust 给出，前端按序渲染并按 action 查文案/快捷键。 */
+  /** Context-menu actions returned by Rust in render order. */
   availableActions?: ClipboardAction[];
-  /** sub_kind = color 时由 Rust 校验过的 CSS 颜色串（合法才存在）。 */
+  /** Validated CSS color string for color subtypes. */
   colorPreview?: string;
-  /** Files 卡片渲染模式，由 Rust 命令层根据 `fileEntries` 计算。 */
+  /** Files-card rendering mode calculated by the Rust command layer. */
   filesPreviewKind?: "imagePreview" | "list";
-  /** Rust 按本地时区做三档格式化的 createdAt：HH:mm / MM-DD HH:mm / YYYY-MM-DD HH:mm。 */
+  /** `createdAt` formatted in the local timezone for display. */
   displayCreatedAt?: string;
 }
 
@@ -133,27 +120,20 @@ export interface ClipboardItemQuery {
   groupId?: string;
   favorite?: boolean;
   pinned?: boolean;
-  /** 列表顶部 Tab；Rust 侧翻译成 kind / favorite，前端不再手动映射。 */
+  /** Top-level list tab; Rust maps it to kind or favorite filtering. */
   group?: ClipboardGroup;
   keyword?: string;
   sort?: ClipboardItemSort;
   limit?: number;
   offset?: number;
 }
-
-/**
- * 列表查询的一页结果，Rust 直接给出 `total` 与 `hasMore`，
- * 前端无需再用 `length === pageSize` 近似。
- */
+/** One page returned by the Rust list query, including its total and continuation flag. */
 export interface ClipboardItemPage {
   list: ClipboardItem[];
   total: number;
   hasMore: boolean;
 }
-
-/**
- * 备注更新结果：Rust 归一化后的 note + 是否触发 auto-favorite。
- */
+/** Normalized note update result and whether auto-favorite was triggered. */
 export interface UpdateNoteResult {
   note: string | null;
   autoFavorited: boolean;

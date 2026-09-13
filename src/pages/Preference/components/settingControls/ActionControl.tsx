@@ -98,9 +98,7 @@ interface ActionControlProps {
   storageLocation: StorageLocation | null;
 }
 
-/**
- * 展示右侧操作按钮，所有 action 控件保持同一尺寸。
- */
+/** Render action buttons, including backup, permissions, and diagnostics. */
 const ActionControl: FC<ActionControlProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const { disabled, setting, storageLocation, onActionComplete } = props;
@@ -118,9 +116,6 @@ const ActionControl: FC<ActionControlProps> = (props) => {
 
   if (setting.control.type !== "action") return null;
 
-  /**
-   * 操作进行中保活当前窗口；隐藏后 idle destroy 会等租约释放或超时兜底。
-   */
   async function runWithKeepalive<T>(reason: string, task: () => Promise<T>) {
     const owner = `action:${setting.id}`;
 
@@ -268,9 +263,6 @@ const ActionControl: FC<ActionControlProps> = (props) => {
     }
   };
 
-  /**
-   * 选择 `.ecopastebak` 文件并交给 Rust 识别，识别事件会打开统一导入弹窗。
-   */
   const pickImportBackup = async () => {
     setLoading(true);
     try {
@@ -515,9 +507,7 @@ interface WindowLifecycleSnapshotTableProps {
   rows: WindowLifecycleSnapshot[];
 }
 
-/**
- * 渲染窗口生命周期调试快照。
- */
+/** Render the window-lifecycle diagnostics snapshot. */
 const WindowLifecycleSnapshotTable: FC<WindowLifecycleSnapshotTableProps> = (
   props,
 ) => {
@@ -610,9 +600,7 @@ const WindowLifecycleSnapshotTable: FC<WindowLifecycleSnapshotTableProps> = (
   );
 };
 
-/**
- * 把内部窗口 label 转换为当前语言的诊断显示名；未知 label 保留原值便于排查。
- */
+/** Translate an internal window label for the diagnostics view. */
 function formatLifecycleWindowLabel(
   t: TFunction<"preferences">,
   label: string,
@@ -623,9 +611,7 @@ function formatLifecycleWindowLabel(
   return t(key);
 }
 
-/**
- * 把 Rust 生命周期阶段枚举转换为当前语言的诊断显示文案。
- */
+/** Translate a Rust lifecycle phase for the diagnostics view. */
 function formatLifecyclePhase(
   t: TFunction<"preferences">,
   phase: WindowLifecyclePhase,
@@ -633,9 +619,7 @@ function formatLifecyclePhase(
   return t(WINDOW_LIFECYCLE_PHASE_LABEL_KEYS[phase]);
 }
 
-/**
- * 把毫秒时长压缩为最多两个单位的本地化短文本。
- */
+/** Format milliseconds as a localized duration with at most two units. */
 function formatLifecycleDuration(
   t: TFunction<"preferences">,
   durationMs: number,
@@ -666,9 +650,6 @@ function formatLifecycleDuration(
   return parts.join(t(`${WINDOW_LIFECYCLE_I18N_PREFIX}.durationSeparator`));
 }
 
-/**
- * 格式化生命周期调试时间信息。
- */
 function formatLifecycleTiming(
   t: TFunction<"preferences">,
   row: WindowLifecycleSnapshot,

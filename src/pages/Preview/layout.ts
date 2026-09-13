@@ -24,9 +24,7 @@ import {
 } from "./constants";
 import type { PreviewMeasuredSize } from "./measurement";
 
-/**
- * 图片 payload 已有 DB 尺寸时，直接按比例估算面板尺寸，避免等图片加载后才撑开。
- */
+/** Estimate image panel size from stored dimensions before image loading completes. */
 export function resolveEffectivePanelSize(
   layout: ClipboardPreviewState["layout"],
   measuredSize: PreviewMeasuredSize,
@@ -58,9 +56,7 @@ export function resolveEffectivePanelSize(
   return imageSize;
 }
 
-/**
- * 根据内容自然尺寸生成实际面板 rect，保留 Rust 给出的 placement 和可用最大区域。
- */
+/** Build the panel rect from natural content size while preserving placement bounds. */
 export function resolveDynamicPanelRect(
   layout: ClipboardPreviewState["layout"],
   measuredSize: PreviewMeasuredSize,
@@ -80,9 +76,7 @@ export function resolveDynamicPanelRect(
   return clampRect(raw, insetRect(layout.overlayRect, PREVIEW_PANEL_MARGIN));
 }
 
-/**
- * 让隐藏测量层使用和真实面板一致的宽度上限，避免文本换行数被低估。
- */
+/** Keep the hidden measurement layer's width cap aligned with the real panel. */
 export function resolveMeasurePanelStyle(
   layout: ClipboardPreviewState["layout"],
 ): CSSProperties {
@@ -95,9 +89,7 @@ export function resolveMeasurePanelStyle(
   };
 }
 
-/**
- * 把跨端 rect 转成 React absolute positioning style。
- */
+/** Convert a cross-platform rect into React absolute-positioning styles. */
 export function rectStyle(rect: ClipboardPreviewRect) {
   return {
     height: rect.height,
@@ -107,9 +99,7 @@ export function rectStyle(rect: ClipboardPreviewRect) {
   };
 }
 
-/**
- * 按 placement 把动态面板仍放在列表项对应侧，并围绕 source 中线对齐。
- */
+/** Place the dynamic panel on the source item's side and align its center. */
 function rawDynamicPanelRect(
   layout: ClipboardPreviewState["layout"],
   width: number,
@@ -151,9 +141,7 @@ function rawDynamicPanelRect(
   }
 }
 
-/**
- * 按图片原始宽高、面板上限和固定内边距计算等比例展示尺寸。
- */
+/** Calculate proportional image display size from source dimensions and panel limits. */
 function resolveImagePanelSize(
   layout: ClipboardPreviewState["layout"],
   imageWidth: number | null,
@@ -203,9 +191,7 @@ function resolveImagePanelSize(
   };
 }
 
-/**
- * 文本 viewer 使用虚拟行渲染，测量层不再渲染整段内容；这里按同款软切行估算面板尺寸。
- */
+/** Estimate text panel size using the same soft-wrap rules as the text viewer. */
 function resolveTextPanelSize(
   layout: ClipboardPreviewState["layout"],
   text: string,
@@ -234,9 +220,7 @@ function resolveTextPanelSize(
   };
 }
 
-/**
- * 文件 viewer 也走虚拟列表；尺寸只按已返回的行数和截断提示估算。
- */
+/** Estimate file panel size from returned rows and truncation state. */
 function resolveFilesPanelSize(
   layout: ClipboardPreviewState["layout"],
   shownCount: number,
@@ -267,9 +251,6 @@ function resolveFilesPanelSize(
   };
 }
 
-/**
- * 统计虚拟文本行数，和 `TextViewer` 的软切块规则保持一致。
- */
 function countTextPreviewRows(text: string) {
   if (text.length === 0) return 0;
 
@@ -284,9 +265,6 @@ function countTextPreviewRows(text: string) {
   return rowCount;
 }
 
-/**
- * 把 rect 限制在 bounds 内。
- */
 function clampRect(rect: ClipboardPreviewRect, bounds: ClipboardPreviewRect) {
   const maxLeft = Math.max(bounds.left, rectRight(bounds) - rect.width);
   const maxTop = Math.max(bounds.top, rectBottom(bounds) - rect.height);
@@ -299,9 +277,6 @@ function clampRect(rect: ClipboardPreviewRect, bounds: ClipboardPreviewRect) {
   };
 }
 
-/**
- * 生成带安全边距的内部边界。
- */
 function insetRect(rect: ClipboardPreviewRect, amount: number) {
   return {
     height: Math.max(1, rect.height - amount * 2),
@@ -311,23 +286,14 @@ function insetRect(rect: ClipboardPreviewRect, amount: number) {
   };
 }
 
-/**
- * 限制数值范围。
- */
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-/**
- * 返回 rect 右边界。
- */
 function rectRight(rect: { left: number; width: number }) {
   return rect.left + rect.width;
 }
 
-/**
- * 返回 rect 下边界。
- */
 function rectBottom(rect: { top: number; height: number }) {
   return rect.top + rect.height;
 }

@@ -10,9 +10,6 @@ export type PreferenceSearchTranslator = Parameters<
   typeof translatePreferenceTab
 >[0];
 
-/**
- * 从完整设置 schema 中执行轻量本地搜索，返回最多 8 条可跳转结果。
- */
 export function searchPreferenceSettings(
   query: string,
   t: PreferenceSearchTranslator,

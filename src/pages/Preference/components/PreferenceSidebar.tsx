@@ -21,9 +21,7 @@ interface PreferenceSidebarProps {
   onTabSelect: (tabId: PreferenceTabId) => void;
 }
 
-/**
- * 偏好窗口左侧导航栏：展示应用身份、一级分类和本地存储概览。
- */
+/** Preferences sidebar with app identity, categories, and storage summary. */
 const PreferenceSidebar: FC<PreferenceSidebarProps> = (props) => {
   const { t } = useTranslation("preferences");
   const {

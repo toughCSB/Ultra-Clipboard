@@ -31,9 +31,7 @@ interface QuickActionButtonProps {
   tabIndex: 0 | -1;
 }
 
-/**
- * 在卡片 meta 右侧展示时间，并在 hover 时替换为当前条目可执行的快捷动作。
- */
+/** Show the timestamp or available hover actions in the card metadata area. */
 const ClipboardQuickActions: FC<ClipboardQuickActionsProps> = (props) => {
   const { item, labels, onQuickAction, quickActions, visible } = props;
   const shouldReduceMotion = useReducedMotion();
@@ -108,9 +106,7 @@ const ClipboardQuickActions: FC<ClipboardQuickActionsProps> = (props) => {
 
 export default ClipboardQuickActions;
 
-/**
- * 单个 hover 快捷动作按钮；按下时阻止事件冒泡，避免触发卡片点击或自动粘贴。
- */
+/** Render one hover action without bubbling to the card. */
 const QuickActionButton: FC<QuickActionButtonProps> = (props) => {
   const {
     action,

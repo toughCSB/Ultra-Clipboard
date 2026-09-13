@@ -5,13 +5,11 @@ import { getShortcutKeyDisplays, type ShortcutPattern } from "@/utils/shortcut";
 
 interface Shortcut {
   labelKey: string;
-  /** 按下顺序排列的按键，每个元素渲染为一个 kbd 徽标。 */
+
   keys: ShortcutPattern;
 }
 
-/**
- * 单个按键徽标：灰底圆角小方块，配合 monospace 显示符号或字母。
- */
+/** Render one keyboard key as a compact badge. */
 const Kbd: FC<{ children: ReactNode }> = (props) => {
   const { children } = props;
 
@@ -54,13 +52,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: "Escape", labelKey: "shortcuts.closePreviewFilterWindow" },
 ];
 
-// 暂未实现但占位，方便后续补齐（注释提示，不渲染）：
-// SHIFT 触发的组合：⇧⌘1 粘贴第一行为纯文本等。
-
-/**
- * 快捷键速查面板：列出当前剪贴板窗口已支持的所有键盘操作；
- * 仅渲染纯文本与按键徽标，不绑定真实事件。
- */
+/** Shortcut reference panel for supported clipboard-window keyboard actions. */
 const ShortcutList: FC = () => {
   const { t } = useTranslation("clipboard");
 
@@ -78,7 +70,7 @@ const ShortcutList: FC = () => {
 
           <div className="flex items-center gap-1">
             {getShortcutKeyDisplays(item.keys).map((key, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: 静态序列且不会重排
+              // biome-ignore lint/suspicious/noArrayIndexKey: static shortcut sequences never reorder.
               <Kbd key={index}>{key}</Kbd>
             ))}
           </div>

@@ -26,9 +26,7 @@ interface BackupExportForm {
   plainConfirmed?: boolean;
 }
 
-/**
- * 采集备份导出模式和密码，并把保存路径交给 Rust 生成 `.ecopastebak`。
- */
+/** Collect export options and let Rust write the `.ecopastebak` archive. */
 const BackupExportModal: FC<BackupExportModalProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const { open, onCancel, onExported } = props;
@@ -54,9 +52,6 @@ const BackupExportModal: FC<BackupExportModalProps> = (props) => {
   const submitDisabled =
     loading || encryptedSubmitDisabled || plainSubmitDisabled;
 
-  /**
-   * 根据明文备份阅读确认状态返回确认按钮文案。
-   */
   const getOkText = () => {
     if (!isPlainMode) {
       return t("preferences:backup.export.ok");
@@ -100,9 +95,6 @@ const BackupExportModal: FC<BackupExportModalProps> = (props) => {
     };
   }, [isPlainMode, open, plainReadSecondsLeft]);
 
-  /**
-   * 取消导出并重置表单。
-   */
   const resetAndCancel = () => {
     if (loading) return;
 
@@ -110,9 +102,6 @@ const BackupExportModal: FC<BackupExportModalProps> = (props) => {
     onCancel();
   };
 
-  /**
-   * 打开保存对话框并生成带秒级时间戳的默认备份名。
-   */
   const pickTargetPath = async () => {
     const now = new Date();
     const stamp = [
@@ -136,9 +125,6 @@ const BackupExportModal: FC<BackupExportModalProps> = (props) => {
     });
   };
 
-  /**
-   * 校验导出表单，选择目标路径后调用 Rust 写入备份包。
-   */
   const exportBackup = async () => {
     const values = await form.validateFields();
     const targetPath = await pickTargetPath();

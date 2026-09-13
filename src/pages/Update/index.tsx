@@ -37,10 +37,7 @@ interface WindowVisibilityPayload {
 }
 
 const PROGRESS_INDETERMINATE_PERCENT = 82;
-
-/**
- * 独立软件更新窗口。Rust updater 负责检查、签名校验和安装，React 只渲染状态。
- */
+/** Standalone updater window. Rust checks, verifies, and installs; React renders state. */
 const Update: FC = () => {
   const { t } = useTranslation(["update", "common"]);
   const [state, setState] = useState<UpdateViewState>("idle");

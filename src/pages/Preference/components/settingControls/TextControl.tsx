@@ -11,9 +11,7 @@ interface TextControlProps extends ControlProps {
   value: string;
 }
 
-/**
- * 短文本输入失焦保存，主要用于快捷键字面量。
- */
+/** Save short text on blur, primarily for shortcut literals. */
 const TextControl: FC<TextControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, value } = props;

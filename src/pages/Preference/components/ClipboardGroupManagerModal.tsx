@@ -42,9 +42,7 @@ const GROUP_TREE_ACTION = {
   EDIT: "edit",
 } as const satisfies Record<string, GroupTreeAction>;
 
-/**
- * 偏好设置里的自定义分组管理弹框，复用排序 Tree 与分组新增 / 编辑弹框。
- */
+/** Manage custom groups with a sortable tree and edit dialogs. */
 const ClipboardGroupManagerModal: FC<ClipboardGroupManagerModalProps> = (
   props,
 ) => {
@@ -232,9 +230,6 @@ const ClipboardGroupManagerModal: FC<ClipboardGroupManagerModalProps> = (
 
 export default ClipboardGroupManagerModal;
 
-/**
- * 分组管理 Tree 的行内容：左侧图标和名称，右侧提供编辑 / 删除快捷动作。
- */
 const ClipboardGroupTreeTitle: FC<ClipboardGroupTreeTitleProps> = (props) => {
   const { record, onDelete, onEdit } = props;
   const { t } = useTranslation(["clipboard"]);
@@ -295,18 +290,13 @@ const ClipboardGroupTreeTitle: FC<ClipboardGroupTreeTitleProps> = (props) => {
   );
 };
 
-/**
- * 初始化 Tree 顺序，优先沿用数据库排序。
- */
+/** Initialize tree order from the database order. */
 function resolveInitialOrder(groups: ClipboardGroupRecord[]) {
   return groups.map((record) => {
     return record.id;
   });
 }
 
-/**
- * 初始化 Tree 勾选状态：勾选表示显示在剪贴板窗口分组栏。
- */
 function resolveVisibleGroupIds(groups: ClipboardGroupRecord[]) {
   return groups
     .filter((record) => {
@@ -317,9 +307,6 @@ function resolveVisibleGroupIds(groups: ClipboardGroupRecord[]) {
     });
 }
 
-/**
- * 根据当前排序生成单列 Tree 数据，缺失排序的新分组自动补到末尾。
- */
 function buildTreeData(
   groups: ClipboardGroupRecord[],
   order: string[],
@@ -359,9 +346,6 @@ function buildTreeData(
   });
 }
 
-/**
- * 构建分组 Tree 行内更多菜单。
- */
 function buildGroupTreeMenuItems(
   t: TFunction<["clipboard"]>,
 ): DropdownMenuItems {
@@ -380,9 +364,6 @@ function buildGroupTreeMenuItems(
   ];
 }
 
-/**
- * 解析分组 Tree 行内菜单动作。
- */
 function parseGroupTreeAction(key: string): GroupTreeAction | null {
   const actions = Object.values(GROUP_TREE_ACTION);
   if (!actions.includes(key as GroupTreeAction)) return null;
@@ -390,9 +371,6 @@ function parseGroupTreeAction(key: string): GroupTreeAction | null {
   return key as GroupTreeAction;
 }
 
-/**
- * 收窄根据 id 查找分组后的可选值。
- */
 function isClipboardGroupRecord(
   record: ClipboardGroupRecord | undefined,
 ): record is ClipboardGroupRecord {

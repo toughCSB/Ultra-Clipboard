@@ -25,9 +25,7 @@ interface BackupImportForm {
   overwriteConfirmed?: boolean;
 }
 
-/**
- * 采集备份导入策略和必要密码，并调用 Rust 执行导入。
- */
+/** Collect import options and let Rust restore the selected backup. */
 const BackupImportModal: FC<BackupImportModalProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const { open, target, onCancel, onImported } = props;
@@ -52,9 +50,6 @@ const BackupImportModal: FC<BackupImportModalProps> = (props) => {
   const targetPath = target?.path ?? "";
   const backupName = targetPath.split(/[/\\]/).pop() ?? "";
 
-  /**
-   * 根据覆盖导入确认状态返回确认按钮文案。
-   */
   const getOkText = () => {
     if (!isOverwriteStrategy) {
       return t("preferences:backup.import.ok");
@@ -109,9 +104,6 @@ const BackupImportModal: FC<BackupImportModalProps> = (props) => {
     };
   }, [isOverwriteStrategy, open, overwriteReadSecondsLeft]);
 
-  /**
-   * 取消导入并重置表单。
-   */
   const resetAndCancel = () => {
     if (loading) return;
 
@@ -119,9 +111,6 @@ const BackupImportModal: FC<BackupImportModalProps> = (props) => {
     onCancel();
   };
 
-  /**
-   * 调用 Rust 导入备份，成功后交给父组件刷新偏好页状态。
-   */
   const importBackup = async () => {
     if (!target) return;
 

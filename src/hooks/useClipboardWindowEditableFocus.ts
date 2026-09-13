@@ -10,9 +10,6 @@ export const prepareClipboardWindowEditableFocus = async () => {
   await setClipboardWindowEditing(true);
 };
 
-/**
- * Windows 剪贴板窗口输入控件激活期间临时允许窗口聚焦，编辑结束后恢复不可聚焦。
- */
 export const useClipboardWindowEditableFocus = () => {
   useEffect(() => {
     if (!isWinClipboardWindow()) return;

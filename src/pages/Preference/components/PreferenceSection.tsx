@@ -41,9 +41,7 @@ interface SectionVisual {
   icon: string;
 }
 
-/**
- * 偏好页主内容里的一个语义分组。
- */
+/** Semantic group in the main preferences content. */
 const PreferenceSection: FC<PreferenceSectionProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const {
@@ -149,9 +147,7 @@ const PreferenceSection: FC<PreferenceSectionProps> = (props) => {
 
 export default PreferenceSection;
 
-/**
- * 根据分组语义选择小图标，保持区块标题和设置行图标尺寸一致。
- */
+/** Choose a small icon that matches the section meaning. */
 function resolveSectionVisual(id: string): SectionVisual {
   const normalizedId = id.toLowerCase();
 
@@ -272,9 +268,6 @@ function resolveSectionVisual(id: string): SectionVisual {
   };
 }
 
-/**
- * 识别来源应用分组所需的设置项，缺失则退回通用行渲染。
- */
 function resolveSourceAppsSettings(settings: PreferenceSetting[]) {
   const excludedApps = settings.find((setting) => {
     return setting.id === "source.excludedApps";

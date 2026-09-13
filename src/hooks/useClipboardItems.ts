@@ -2,9 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listClipboardItems } from "@/commands";
 import type { ClipboardItem, ClipboardItemQuery } from "@/types/clipboard";
 
-/**
- * 后端分页大小。保持略大于一屏的原有取值，range cache 以此对齐请求边界。
- */
 const PAGE_SIZE = 30;
 const PRELOAD_ROWS = 30;
 const CACHE_MAX_ROWS = 180;
@@ -21,10 +18,6 @@ interface FetchRangeOptions {
   token: number;
 }
 
-/**
- * 剪贴板列表 range cache：Rust 仍是查询、排序、搜索和 payload 裁剪的唯一真相；
- * 前端只按 Virtuoso 的可视范围缓存少量已加载行，避免无限滚动后持有完整列表。
- */
 export const useClipboardItems = (query: ClipboardItemQuery) => {
   const queryRef = useRef(query);
 
@@ -121,7 +114,6 @@ export const useClipboardItems = (query: ClipboardItemQuery) => {
         commitTotal(nextTotal);
         commitLoadedInitial(true);
       } catch {
-        // 命令包装层已统一 log + toast；这里只避免初始请求失败后卡在 loading。
         if (
           options.token === requestTokenRef.current &&
           !loadedInitialRef.current

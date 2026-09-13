@@ -42,9 +42,7 @@ interface SourceAppTransferItem {
   title: string;
 }
 
-/**
- * 来源应用复合设置：左侧展示可忽略应用，右侧维护已忽略应用。
- */
+/** Composite source-app setting with filterable and ignored app lists. */
 const SourceAppsTransfer: FC<SourceAppsTransferProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { excludedAppsSetting, settings, onChange } = props;
@@ -68,9 +66,6 @@ const SourceAppsTransfer: FC<SourceAppsTransferProps> = (props) => {
     });
   }, [dataSource, excludedAppIds]);
 
-  /**
-   * 手动添加一个来源应用，成功后直接加入已忽略列表。
-   */
   const handleAddApp = async () => {
     setAdding(true);
 
@@ -101,16 +96,10 @@ const SourceAppsTransfer: FC<SourceAppsTransferProps> = (props) => {
     }
   };
 
-  /**
-   * 手动触发可忽略应用刷新，完成后刷新穿梭框数据。
-   */
   const handleRefreshApps = async () => {
     await refreshSourceApps(excludedAppIds);
   };
 
-  /**
-   * 根据穿梭框右侧 key 列表保存忽略应用。
-   */
   const handleTransferChange = async (nextKeys: TransferKey[]) => {
     const nextExcludedAppIds = nextKeys.map((key) => {
       return String(key);
@@ -208,9 +197,7 @@ const SourceAppsTransfer: FC<SourceAppsTransferProps> = (props) => {
 
 export default SourceAppsTransfer;
 
-/**
- * 把 Rust 返回的应用列表转换成 Transfer 数据。
- */
+/** Convert Rust source-app records to Transfer data. */
 function buildTransferItems(
   apps: ReadonlyArray<ClipboardApp>,
 ): SourceAppTransferItem[] {
@@ -235,18 +222,12 @@ function buildTransferItems(
   });
 }
 
-/**
- * 把手动添加的应用 id 追加到忽略列表，已存在时保持原列表不变。
- */
 function mergeExcludedAppIds(excludedAppIds: string[], appId: string) {
   if (excludedAppIds.includes(appId)) return excludedAppIds;
 
   return [...excludedAppIds, appId];
 }
 
-/**
- * 计算这次从已忽略列表移除的应用 id。
- */
 function diffRemovedIds(previousIds: string[], nextIds: string[]) {
   const next = new Set(nextIds);
 
@@ -255,9 +236,6 @@ function diffRemovedIds(previousIds: string[], nextIds: string[]) {
   });
 }
 
-/**
- * 搜索应用名和 bundle id / 可执行路径。
- */
 function filterTransferItem(inputValue: string, item: SourceAppTransferItem) {
   const query = inputValue.trim().toLocaleLowerCase();
   if (!query) return true;
@@ -267,9 +245,6 @@ function filterTransferItem(inputValue: string, item: SourceAppTransferItem) {
     .includes(query);
 }
 
-/**
- * 渲染应用条目，只展示对用户可识别的应用名。
- */
 function renderTransferItem(item: SourceAppTransferItem) {
   return {
     label: (
@@ -296,9 +271,6 @@ function renderTransferItem(item: SourceAppTransferItem) {
   };
 }
 
-/**
- * 格式化标题里的数量标签。
- */
 function formatCountLabel(t: TFunction<"preferences">, count: number) {
   const unitKey =
     count === 1

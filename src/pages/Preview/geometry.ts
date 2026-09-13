@@ -27,10 +27,7 @@ export interface PreviewConnector {
 const CONTROL_RATIO = 0.22;
 const MIN_CONTROL_DISTANCE = 20;
 const MAX_CONTROL_DISTANCE = 64;
-
-/**
- * 根据列表项矩形和预览面板矩形生成 cubic Bezier 连接线。
- */
+/** Build a cubic Bezier connector between the item and preview rectangles. */
 export function resolveConnector(
   sourceRect: ClipboardPreviewRect,
   targetRect: ClipboardPreviewRect,
@@ -69,10 +66,7 @@ export function resolveConnector(
     targetSide: best.target.side,
   };
 }
-
-/**
- * 用固定 `M C` 结构生成 SVG path，便于 Motion Value 持续更新同一条曲线。
- */
+/** Build a fixed `M C` SVG path so Motion Value can update one curve. */
 export function buildConnectorPath(
   source: Point,
   control1: Point,
@@ -84,10 +78,7 @@ export function buildConnectorPath(
     `C ${formatPoint(control1)} ${formatPoint(control2)} ${formatPoint(target)}`,
   ].join(" ");
 }
-
-/**
- * 把 rect 转成四边中点候选锚点。
- */
+/** Build midpoint anchor candidates for all four rectangle sides. */
 function buildAnchorCandidates(rect: ClipboardPreviewRect): AnchorCandidate[] {
   const centerX = rect.left + rect.width / 2;
   const centerY = rect.top + rect.height / 2;
@@ -101,10 +92,7 @@ function buildAnchorCandidates(rect: ClipboardPreviewRect): AnchorCandidate[] {
     { point: { x: centerX, y: bottom }, side: "bottom" },
   ];
 }
-
-/**
- * 给一组 source/target 锚点打分，优先短距离和外法线方向一致的连接。
- */
+/** Score source and target anchors by distance and outward-normal alignment. */
 function scoreCandidate(source: AnchorCandidate, target: AnchorCandidate) {
   const direction = {
     x: target.point.x - source.point.x,
@@ -121,10 +109,7 @@ function scoreCandidate(source: AnchorCandidate, target: AnchorCandidate) {
 
   return distance + sourcePenalty + targetPenalty;
 }
-
-/**
- * 返回矩形边的外法线方向。
- */
+/** Return the outward normal for a rectangle side. */
 function normalForSide(side: ConnectorSide): Point {
   switch (side) {
     case "left":
@@ -137,10 +122,7 @@ function normalForSide(side: ConnectorSide): Point {
       return { x: 0, y: 1 };
   }
 }
-
-/**
- * 沿 direction 投射 point。
- */
+/** Project a point along a direction by a distance. */
 function project(point: Point, direction: Point, distance: number): Point {
   return {
     x: point.x + direction.x * distance,
@@ -148,37 +130,22 @@ function project(point: Point, direction: Point, distance: number): Point {
   };
 }
 
-/**
- * 计算两个点之间的欧氏距离。
- */
 function pointDistance(a: Point, b: Point) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-/**
- * 点积。
- */
 function dot(a: Point, b: Point) {
   return a.x * b.x + a.y * b.y;
 }
 
-/**
- * 限制数值范围。
- */
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-/**
- * SVG path 中的点格式化，减少无意义的小数抖动。
- */
 function formatPoint(point: Point) {
   return `${formatNumber(point.x)} ${formatNumber(point.y)}`;
 }
 
-/**
- * 将坐标压到 2 位小数。
- */
 function formatNumber(value: number) {
   return Number(value.toFixed(2));
 }

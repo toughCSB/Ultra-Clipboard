@@ -27,9 +27,6 @@ export interface AppDropdownProps extends Omit<DropdownProps, "menu"> {
   tooltip?: OverlayTooltipConfig | false;
 }
 
-/**
- * 统一渲染菜单图标尺寸；字符串图标按 UnoCSS 图标类名处理。
- */
 const renderMenuIcon = (icon: ReactNode): ReactNode => {
   if (!icon) return icon;
 
@@ -52,9 +49,6 @@ const renderMenuIcon = (icon: ReactNode): ReactNode => {
   });
 };
 
-/**
- * 递归规范化 antd Menu items，并补齐图标默认样式。
- */
 const normalizeMenuItems = (
   items: DropdownMenuItems | undefined,
 ): AntdMenu["items"] => {
@@ -73,9 +67,6 @@ const normalizeMenuItems = (
   }) as AntdMenu["items"];
 };
 
-/**
- * 包装触发节点 Tooltip，并在 Dropdown 打开时强制收起 Tooltip。
- */
 const renderDropdownTrigger = (
   children: DropdownProps["children"],
   tooltip: OverlayTooltipConfig | false | undefined,
@@ -94,9 +85,6 @@ const renderDropdownTrigger = (
   );
 };
 
-/**
- * antd Dropdown 的统一封装：保留原生能力，并收口菜单项图标默认尺寸。
- */
 const Dropdown: FC<AppDropdownProps> = (props) => {
   const { children, menu, onOpenChange, open, tooltip, ...rest } = props;
   const [innerOpen, setInnerOpen] = useState(false);

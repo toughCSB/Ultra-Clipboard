@@ -1,9 +1,6 @@
 import type { ClipboardPreviewPayload } from "@/commands";
 import { PREVIEW_CACHE_LIMIT } from "./constants";
-
-/**
- * 从 LRU cache 读取同 item 的最新 payload，命中后刷新插入顺序。
- */
+/** Read the latest payload for an item from the LRU cache and refresh its order. */
 export function readCachedPayload(
   cache: Map<string, ClipboardPreviewPayload>,
   itemId: string,
@@ -25,10 +22,7 @@ export function readCachedPayload(
 
   return cached;
 }
-
-/**
- * 写入最近预览 payload，key 绑定 updatedAt 避免内容复用过期。
- */
+/** Cache a recent payload, binding its key to `updatedAt` to avoid stale reuse. */
 export function writeCachedPayload(
   cache: Map<string, ClipboardPreviewPayload>,
   nextPayload: ClipboardPreviewPayload,
@@ -43,10 +37,7 @@ export function writeCachedPayload(
     cache.delete(oldestKey);
   }
 }
-
-/**
- * 生成预览 payload 的缓存 key。
- */
+/** Build the cache key for a preview payload. */
 export function cacheKey(
   payload: ClipboardPreviewPayload,
   redactSecrets = payload.isSensitive,

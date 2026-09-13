@@ -15,9 +15,7 @@ interface PreferenceStorageUsagePanelProps {
   storageUsage: StorageUsage | null;
 }
 
-/**
- * 侧栏里的本地存储摘要，展示当前环境数据目录的递归占用。
- */
+/** Sidebar storage summary for the active data directory. */
 const PreferenceStorageUsagePanel: FC<PreferenceStorageUsagePanelProps> = (
   props,
 ) => {

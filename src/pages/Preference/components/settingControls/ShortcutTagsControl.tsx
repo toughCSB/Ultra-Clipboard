@@ -8,9 +8,7 @@ interface ShortcutTagsControlProps {
   setting: PreferenceSetting;
 }
 
-/**
- * 展示只读快捷键组合；剪贴板窗口内快捷键由代码固定，不在偏好页修改。
- */
+/** Display a read-only shortcut; clipboard-window shortcuts are code-defined. */
 const ShortcutTagsControl: FC<ShortcutTagsControlProps> = (props) => {
   const { setting } = props;
   const { t } = useTranslation("preferences");

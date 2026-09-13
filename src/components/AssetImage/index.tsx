@@ -8,9 +8,6 @@ interface AssetImageProps
   protocol?: string;
 }
 
-/**
- * 统一渲染 Tauri 本地文件图片：输入文件路径，内部转成 webview 可加载 URL。
- */
 const AssetImage: FC<AssetImageProps> = (props) => {
   const { alt, protocol, src, className, ...rest } = props;
 
@@ -26,9 +23,6 @@ const AssetImage: FC<AssetImageProps> = (props) => {
   );
 };
 
-/**
- * 把本地文件路径转为 webview 可访问地址；空路径返回空字符串以避免异常。
- */
 const toAssetUrl = (filePath?: string | null, protocol?: string) => {
   if (!filePath) return "";
 

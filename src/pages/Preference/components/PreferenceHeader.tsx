@@ -24,9 +24,7 @@ interface PreferenceHeaderProps {
   onSectionSelect: (sectionId: string) => void;
 }
 
-/**
- * 偏好窗口主区域头部：标题、全局搜索和二级分组导航。
- */
+/** Preferences header with title, global search, and section navigation. */
 const PreferenceHeader: FC<PreferenceHeaderProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const {
@@ -112,9 +110,7 @@ interface SectionTabsProps {
   onSectionSelect: (sectionId: string) => void;
 }
 
-/**
- * 偏好页二级分组导航，紧贴标题栏用于快速切换当前分类。
- */
+/** Secondary preferences navigation beneath the title bar. */
 const SectionTabs: FC<SectionTabsProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const { activeSectionId, sections, totalSettings, onSectionSelect } = props;

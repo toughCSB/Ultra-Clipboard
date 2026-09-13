@@ -7,20 +7,12 @@ import type { ClipboardItem } from "@/types/clipboard";
 import { cn } from "@/utils/cn";
 
 interface TextCardProps extends ClipboardItem {
-  /**
-   * MOD 键按下时，URL / Email 以可点击链接样式渲染。
-   */
   isLinkActive?: boolean;
-  /**
-   * 点击 URL / Email 文本时由列表层打开系统浏览器或邮件客户端。
-   */
+
   onOpenLink?: () => void;
 }
 
-/**
- * 文本类卡片：渲染 summary（列表视图 content 已置空），按设置限制最大显示行数。
- * 子类型（HTML/RTF/URL/Email/Color/Path）以小 Tag 提示。
- */
+/** Render text summaries with subtype tags and the configured line limit. */
 const TextCard: FC<TextCardProps> = (props) => {
   const { summary, subKind, colorPreview, isLinkActive, onOpenLink } = props;
   const { keyword } = useSnapshot(clipboardViewState);
@@ -83,9 +75,7 @@ const TextCard: FC<TextCardProps> = (props) => {
 
 export default TextCard;
 
-/**
- * 把用户设置夹到 UnoCSS safelist 覆盖的 line-clamp 类。
- */
+/** Map the user line limit to a class covered by the UnoCSS safelist. */
 function textLineClampClass(lines: number): string {
   if (lines <= 1) return "line-clamp-1";
   if (lines === 2) return "line-clamp-2";

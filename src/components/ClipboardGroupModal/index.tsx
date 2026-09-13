@@ -49,16 +49,10 @@ interface ClipboardGroupModalProps {
   open: boolean;
 }
 
-/**
- * 判断图标值是否为自定义 SVG。
- */
 const isCustomSvgIcon = (icon: ClipboardGroupIconValue) => {
   return icon.trimStart().startsWith("<svg");
 };
 
-/**
- * 生成分组弹框的初始表单值。
- */
 const buildInitialValues = (
   group: ClipboardGroupRecord | null,
 ): ClipboardGroupFormValues => {
@@ -68,9 +62,6 @@ const buildInitialValues = (
   };
 };
 
-/**
- * 自定义分组新增 / 编辑共享弹框。
- */
 const ClipboardGroupModal: FC<ClipboardGroupModalProps> = (props) => {
   const { group, mode, onCancel, onSubmit, open } = props;
   const { t } = useTranslation(["clipboard", "common"]);
@@ -86,9 +77,6 @@ const ClipboardGroupModal: FC<ClipboardGroupModalProps> = (props) => {
     form.setFieldsValue(buildInitialValues(group));
   }, [form, group, open]);
 
-  /**
-   * 弹框打开后聚焦名称输入框。
-   */
   const handleAfterOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) return;
 
@@ -97,9 +85,6 @@ const ClipboardGroupModal: FC<ClipboardGroupModalProps> = (props) => {
     });
   };
 
-  /**
-   * 提交表单，交由调用方决定是新增还是更新。
-   */
   const handleSubmit = async () => {
     const values = await form.validateFields();
 
@@ -116,9 +101,6 @@ const ClipboardGroupModal: FC<ClipboardGroupModalProps> = (props) => {
     }
   };
 
-  /**
-   * 选择一个预设图标。
-   */
   const handlePresetIconClick = (event: MouseEvent<HTMLButtonElement>) => {
     const nextIcon = event.currentTarget.dataset.icon;
     if (!nextIcon) return;
@@ -126,9 +108,6 @@ const ClipboardGroupModal: FC<ClipboardGroupModalProps> = (props) => {
     form.setFieldValue("icon", nextIcon);
   };
 
-  /**
-   * 使用 Tauri dialog 选择 SVG 文件，并交给 Rust 读取和校验。
-   */
   const importSvg = async () => {
     await setClipboardWindowAutoHideSuspended(true);
 
@@ -146,9 +125,6 @@ const ClipboardGroupModal: FC<ClipboardGroupModalProps> = (props) => {
     }
   };
 
-  /**
-   * 删除当前自定义 SVG，回退到默认预设图标。
-   */
   const removeCustomIcon = () => {
     form.setFieldValue("icon", DEFAULT_GROUP_ICON);
   };

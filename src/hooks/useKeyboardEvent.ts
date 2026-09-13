@@ -26,12 +26,6 @@ interface NavEventPayload {
   shiftKey?: boolean;
 }
 
-/**
- * 跨平台键盘事件监听 hook。
- *
- * macOS 与可聚焦窗口直接监听浏览器键盘事件；Windows 剪贴板窗口默认不可聚焦，
- * 导航键通常来自 Rust 低级钩子，但输入控件仍保留浏览器原生输入行为。
- */
 export const useKeyboardEvent = (
   type: KeyboardEventType,
   handler: (event: KeyboardEvent) => void,

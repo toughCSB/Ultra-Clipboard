@@ -1,8 +1,3 @@
-/**
- * 与 Rust `#[tauri::command]` 函数名一一对应的常量表。
- * 仅在 `src/commands/index.ts` 内使用——业务代码请直接 import 各命令包装函数，
- * 不要再裸写命令名字面量或在调用处引用这个表。
- */
 export const TAURI_COMMAND = {
   ACQUIRE_WINDOW_KEEPALIVE: "acquire_window_keepalive",
   ADD_CLIPBOARD_APP_FROM_PATH: "add_clipboard_app_from_path",

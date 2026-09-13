@@ -85,10 +85,7 @@ const KEY_DISPLAY: Record<string, string> = {
   Tab: isMac ? "⇥" : "Tab",
   Up: "↑",
 };
-
-/**
- * 把单个快捷键标识转成当前平台适合展示的文案或符号。
- */
+/** Convert one shortcut key to the platform-specific display label. */
 export const getShortcutKeyDisplay = (key: string) => {
   const normalizedKey = key.trim();
   const display = KEY_DISPLAY[normalizedKey];
@@ -109,10 +106,7 @@ export const getShortcutKeyDisplay = (key: string) => {
 
   return normalizedKey;
 };
-
-/**
- * 把快捷键组合拆成当前平台的按键展示数组，供 kbd 徽标逐个渲染。
- */
+/** Split a shortcut into displayable key badges. */
 export const getShortcutKeyDisplays = (shortcut: ShortcutPattern) => {
   const keys: readonly string[] =
     typeof shortcut === "string" ? shortcut.split("+") : shortcut;
@@ -121,20 +115,14 @@ export const getShortcutKeyDisplays = (shortcut: ShortcutPattern) => {
     return getShortcutKeyDisplay(key);
   });
 };
-
-/**
- * 把快捷键组合格式化成当前平台的一行展示文案。
- */
+/** Format a shortcut as one platform-specific display string. */
 export const formatShortcutDisplay = (
   shortcut: ShortcutPattern,
   separator = " + ",
 ) => {
   return getShortcutKeyDisplays(shortcut).join(separator);
 };
-
-/**
- * 归一化快捷键字面量，供冲突检测忽略大小写和多余空白。
- */
+/** Normalize a shortcut literal for case- and whitespace-insensitive conflict checks. */
 export const normalizeShortcutValue = (value: string) => {
   return value
     .split("+")
@@ -146,19 +134,13 @@ export const normalizeShortcutValue = (value: string) => {
     })
     .join("+");
 };
-
-/**
- * 判断键盘事件是否来自单独按下的修饰键。
- */
+/** Whether an event key is a standalone modifier key. */
 export const isShortcutModifierEventKey = (eventKey: string) => {
   return MODIFIER_EVENT_KEYS.some((modifierKey) => {
     return modifierKey === eventKey;
   });
 };
-
-/**
- * 把 KeyboardEvent 映射为 Tauri global shortcut 能解析的按键片段。
- */
+/** Map a keyboard event to a Tauri global-shortcut key fragment. */
 export const resolveShortcutEventKey = (
   event: KeyboardEvent | ReactKeyboardEvent,
 ) => {
@@ -200,10 +182,7 @@ export const resolveShortcutEventKey = (
     shortcutKey: namedKey,
   };
 };
-
-/**
- * 生成当前键盘事件对应的完整快捷键组合，按平台习惯稳定修饰键顺序。
- */
+/** Build a complete shortcut from a keyboard event in stable platform order. */
 export const buildShortcutFromEvent = (
   event: KeyboardEvent | ReactKeyboardEvent,
 ) => {
@@ -226,10 +205,7 @@ export const buildShortcutFromEvent = (
 
   return shortcutKeys.join("+");
 };
-
-/**
- * 生成录入态预览用的快捷键组合；允许仅包含修饰键，便于按下即显示。
- */
+/** Build the in-progress shortcut preview, including modifier-only input. */
 export const buildShortcutPreviewFromEvent = (
   event: KeyboardEvent | ReactKeyboardEvent,
 ) => {
@@ -245,19 +221,13 @@ export const buildShortcutPreviewFromEvent = (
 
   return [...modifiers, primaryKey.shortcutKey].join("+");
 };
-
-/**
- * 按当前平台习惯格式化录入中的快捷键文案。
- */
+/** Format a recorded shortcut using the platform's conventions. */
 export const formatRecordedShortcut = (value: string) => {
   if (!value) return "";
 
   return getShortcutKeyDisplays(value).join(isMac ? "" : "+");
 };
-
-/**
- * 判断录入结果是否满足全局快捷键的最低可用组合要求。
- */
+/** Whether a recorded value meets the minimum global-shortcut requirements. */
 export const isRecordableShortcut = (value: string) => {
   if (!value) return false;
 
@@ -272,10 +242,7 @@ export const isRecordableShortcut = (value: string) => {
 
   return parts.length > 1;
 };
-
-/**
- * 根据按键状态生成修饰键数组，避免把主键重复当作修饰键写入。
- */
+/** Resolve pressed modifiers without duplicating the primary key. */
 const resolvePressedShortcutModifiers = (
   event: KeyboardEvent | ReactKeyboardEvent,
   primaryKey: ShortcutKey,
@@ -289,10 +256,7 @@ const resolvePressedShortcutModifiers = (
 
   return modifiers;
 };
-
-/**
- * 在修饰键确实参与组合时写入，单独按修饰键不会形成快捷键。
- */
+/** Add a modifier only when it participates in a combination. */
 const pushShortcutModifier = (
   modifiers: string[],
   pressed: boolean,
@@ -304,10 +268,7 @@ const pushShortcutModifier = (
 
   modifiers.push(shortcutKey);
 };
-
-/**
- * 判断快捷键主键是否为可独立录入的功能键。
- */
+/** Whether the primary key is a function key that can be recorded alone. */
 const isShortcutFunctionKey = (key: string) => {
   return /^F([1-9]|1[0-2])$/.test(key);
 };

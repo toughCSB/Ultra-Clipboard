@@ -17,16 +17,10 @@ interface ClipboardGroupIconProps {
   selected?: boolean;
 }
 
-/**
- * 判断图标值是否为自定义 SVG 字符串。
- */
 const isCustomSvgIcon = (icon: ClipboardGroupIconValue) => {
   return icon.trimStart().startsWith("<svg");
 };
 
-/**
- * 清洗用户上传的 SVG，避免脚本、外部对象和行内样式进入 DOM。
- */
 const sanitizeGroupSvg = (icon: ClipboardGroupIconValue) => {
   return DOMPurify.sanitize(icon, {
     FORBID_ATTR: ["style"],
@@ -35,9 +29,6 @@ const sanitizeGroupSvg = (icon: ClipboardGroupIconValue) => {
   });
 };
 
-/**
- * 生成 SVG mask 的动态样式，内部颜色由 `bg-current` 接管。
- */
 const buildGroupSvgMaskStyle = (
   icon: ClipboardGroupIconValue,
 ): ClipboardGroupIconMaskStyle => {
@@ -47,9 +38,6 @@ const buildGroupSvgMaskStyle = (
   return { [GROUP_ICON_MASK_VARIABLE]: mask };
 };
 
-/**
- * 统一渲染自定义分组图标，兼容 lets-icons 预设图标和自定义 SVG。
- */
 const ClipboardGroupIcon: FC<ClipboardGroupIconProps> = (props) => {
   const {
     className,

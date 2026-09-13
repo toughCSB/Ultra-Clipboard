@@ -43,9 +43,6 @@ interface PreferenceSettingControlProps {
   onChange: PreferenceSettingChangeHandler;
 }
 
-/**
- * 根据 schema 声明的控件类型渲染设置控件，供偏好页和引导页共享。
- */
 const PreferenceSettingControl: FC<PreferenceSettingControlProps> = (props) => {
   const {
     disabled,

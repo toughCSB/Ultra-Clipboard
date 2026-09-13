@@ -15,9 +15,7 @@ interface SwitchControlProps extends ControlProps {
   value: boolean;
 }
 
-/**
- * 即时保存二元设置。
- */
+/** Save a boolean setting immediately. */
 const SwitchControl: FC<SwitchControlProps> = (props) => {
   const { t } = useTranslation("preferences");
   const { disabled, onChange, setting, value } = props;

@@ -40,9 +40,7 @@ interface KeyboardPreviewTarget {
   stableFrames: number;
 }
 
-/**
- * 管理剪贴板预览的 hover / keyboard 生命周期和窗口隐藏兜底。
- */
+/** Manage hover and keyboard preview lifecycles, including hidden-window cleanup. */
 export function useClipboardPreviewController(
   options: UseClipboardPreviewControllerOptions,
 ) {
@@ -140,9 +138,6 @@ export function useClipboardPreviewController(
 
   useEventListener("resize", handleWindowResize, { target: window });
 
-  /**
-   * 关闭预览窗口并清理本地预览会话。
-   */
   const closePreview = (reason: string) => {
     previewOpenRequestIdRef.current += 1;
     cancelHoverPreview();
@@ -153,9 +148,6 @@ export function useClipboardPreviewController(
     closeClipboardPreviewSilently(reason);
   };
 
-  /**
-   * 卡片指针进入：keyboard 预览直接复用键盘重定向；hover 预览按延迟打开或重定向。
-   */
   const handleItemPointerEnter = (
     item: ClipboardItem,
     event: ReactPointerEvent<HTMLDivElement>,
@@ -204,9 +196,6 @@ export function useClipboardPreviewController(
     }, HOVER_DELAY_MS[previewSettings.hoverDelayMs]);
   };
 
-  /**
-   * Hover 预览打开后，同一卡片内移动鼠标会持续重定向锚点和预览卡片。
-   */
   const handleItemPointerMove = (
     item: ClipboardItem,
     event: ReactPointerEvent<HTMLDivElement>,
@@ -241,23 +230,14 @@ export function useClipboardPreviewController(
     });
   };
 
-  /**
-   * Hover 离开单个卡片时进入准备隐藏状态；进入新卡片会取消隐藏。
-   */
   const handleItemPointerLeave = () => {
     scheduleHoverHide("itemPointerLeave");
   };
 
-  /**
-   * 指针离开列表区域时结束 hover preview，卡片间移动只做 retarget。
-   */
   const handlePreviewAreaPointerLeave = () => {
     scheduleHoverHide("hoverAreaLeave");
   };
 
-  /**
-   * 指针离开当前 document/window 时兜底关闭，避免 webview 边界漏掉元素级 leave。
-   */
   const handleDocumentPointerOut = (event: PointerEvent) => {
     if (event.relatedTarget !== null) return;
 
@@ -268,9 +248,6 @@ export function useClipboardPreviewController(
     target: document,
   });
 
-  /**
-   * 浏览器取消后续指针事件时关闭 hover preview，避免预览残留。
-   */
   const handleDocumentPointerCancel = () => {
     scheduleHoverHide("documentPointerCancel");
   };
@@ -279,9 +256,6 @@ export function useClipboardPreviewController(
     target: document,
   });
 
-  /**
-   * Space 按下打开当前 active item；忽略重复 keydown，避免重复 IPC。
-   */
   const handlePreviewSpaceDown = (event: KeyboardEvent) => {
     event.preventDefault();
 
@@ -298,9 +272,6 @@ export function useClipboardPreviewController(
     void openPreviewForItem(activeItem, "keyboard");
   };
 
-  /**
-   * Space 松开关闭 keyboard preview。
-   */
   const handlePreviewSpaceUp = (event: KeyboardEvent) => {
     if (!isSpaceKey(event)) return;
 
@@ -313,26 +284,17 @@ export function useClipboardPreviewController(
 
   useKeyboardEvent("keyup", handlePreviewSpaceUp);
 
-  /**
-   * 方向键移动到新 active item 时同步 keyboard preview。
-   */
   const handleKeyboardPreviewMove = (item: ClipboardItem) => {
     if (previewSessionRef.current?.trigger !== "keyboard") return;
 
     scheduleKeyboardPreviewMove(item);
   };
 
-  /**
-   * 取消等待中的 hover preview。
-   */
   const cancelHoverPreview = () => {
     clearHoverTimer(hoverTimerRef);
     pendingHoverTargetRef.current = null;
   };
 
-  /**
-   * 滚动列表时关闭 hover preview，保留 keyboard preview。
-   */
   const closeHoverPreviewForScroll = () => {
     if (previewSession?.trigger === "hover") {
       closePreview("scroll");
@@ -342,9 +304,6 @@ export function useClipboardPreviewController(
     cancelHoverPreview();
   };
 
-  /**
-   * 打开或重定向指定条目的预览 overlay。
-   */
   const openPreviewForItem = async (
     item: ClipboardItem,
     trigger: PreviewTrigger,
@@ -385,16 +344,10 @@ export function useClipboardPreviewController(
     }
   };
 
-  /**
-   * 取消等待中的 hover 隐藏缓冲。
-   */
   const cancelHoverHide = () => {
     clearHoverTimer(hoverHideTimerRef);
   };
 
-  /**
-   * 结束 hover preview；keyboard preview 不受指针离开影响。
-   */
   const closeHoverPreview = (reason: string) => {
     cancelHoverPreview();
     cancelHoverHide();
@@ -404,9 +357,6 @@ export function useClipboardPreviewController(
     closePreview(reason);
   };
 
-  /**
-   * 鼠标离开剪贴板项后进入准备隐藏状态，短时间内进入新项会取消隐藏。
-   */
   const scheduleHoverHide = (reason: string) => {
     cancelHoverPreview();
     cancelHoverHide();
@@ -419,9 +369,6 @@ export function useClipboardPreviewController(
     }, HOVER_HIDE_BUFFER_MS);
   };
 
-  /**
-   * 取消等待中的 mousemove retarget 帧。
-   */
   function cancelPreviewMoveFrame() {
     if (previewMoveFrameRef.current === null) return;
 
@@ -431,9 +378,6 @@ export function useClipboardPreviewController(
     pendingHoverTargetRef.current = null;
   }
 
-  /**
-   * 方向键会先触发虚拟列表滚动，等待目标卡片位置稳定后再重定向预览。
-   */
   function scheduleKeyboardPreviewMove(item: ClipboardItem) {
     cancelKeyboardPreviewFrame();
     keyboardPreviewTargetRef.current = {
@@ -445,18 +389,12 @@ export function useClipboardPreviewController(
     requestKeyboardPreviewFrame();
   }
 
-  /**
-   * 请求下一帧键盘预览位置采样。
-   */
   function requestKeyboardPreviewFrame() {
     keyboardPreviewFrameRef.current = window.requestAnimationFrame(
       handleKeyboardPreviewFrame,
     );
   }
 
-  /**
-   * 等待目标卡片 DOMRect 在滚动后稳定，再用最新位置打开预览。
-   */
   function handleKeyboardPreviewFrame() {
     keyboardPreviewFrameRef.current = null;
 
@@ -501,9 +439,6 @@ export function useClipboardPreviewController(
     requestKeyboardPreviewFrame();
   }
 
-  /**
-   * 目标卡片尚未挂载或滚动仍在进行时继续等待，超过上限后放弃旧目标。
-   */
   function retryKeyboardPreviewFrame(target: KeyboardPreviewTarget) {
     if (target.frames >= KEYBOARD_PREVIEW_MAX_FRAMES) {
       keyboardPreviewTargetRef.current = null;
@@ -513,9 +448,6 @@ export function useClipboardPreviewController(
     requestKeyboardPreviewFrame();
   }
 
-  /**
-   * 取消等待中的键盘预览位置采样。
-   */
   function cancelKeyboardPreviewFrame() {
     if (keyboardPreviewFrameRef.current !== null) {
       window.cancelAnimationFrame(keyboardPreviewFrameRef.current);
@@ -525,9 +457,6 @@ export function useClipboardPreviewController(
     keyboardPreviewTargetRef.current = null;
   }
 
-  /**
-   * 读取列表项当前 DOMRect，并转成可比较的普通对象。
-   */
   function resolveItemRect(id: string): PreviewRectSnapshot | null {
     const element = itemElementMapRef.current.get(id);
     const rect = element?.getBoundingClientRect();
@@ -542,9 +471,6 @@ export function useClipboardPreviewController(
     };
   }
 
-  /**
-   * 同步预览会话 state 与 ref，供 hover 定时器和快速切换时读取最新会话。
-   */
   function commitPreviewSession(session: PreviewSession | null) {
     previewSessionRef.current = session;
     setPreviewSession(session);
@@ -563,9 +489,7 @@ export function useClipboardPreviewController(
   };
 }
 
-/**
- * 判断两帧 DOMRect 是否已经稳定，避免 smooth scroll 中途采样旧坐标。
- */
+/** Check whether two DOMRect samples are stable during smooth scrolling. */
 function isPreviewRectStable(
   prev: PreviewRectSnapshot,
   next: PreviewRectSnapshot,
@@ -579,7 +503,4 @@ function isPreviewRectStable(
   );
 }
 
-/**
- * 判断 Space 键。
- */
 export { isSpaceKey } from "./previewController";
