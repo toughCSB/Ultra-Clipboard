@@ -1,5 +1,19 @@
 # 更新日志
 
+## [1.1.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.1-rc.1...v1.1.1) (2026-09-13)
+
+### 变更
+
+- 使用选定的 `UC` 剪贴板标志完成 Ultra Clipboard 应用和托盘图标。
+- 使用透明 PNG 源图生成桌面应用图标。
+
+### 发布说明
+
+- 本版本未签名，Windows SmartScreen 和 macOS Gatekeeper 可能显示警告。
+- 本版本关闭自动更新；后续版本请从 GitHub Releases 下载。
+- CI 会构建 macOS Intel 与 Apple Silicon 安装包，但 macOS runtime QA 尚未完成。
+- 为兼容 EcoPaste 备份，继续支持 `.ecopastebak` 格式。
+
 ## [1.1.1-rc.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.0...v1.1.1-rc.1) (2026-09-12)
 
 ### 新功能

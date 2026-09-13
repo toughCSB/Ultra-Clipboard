@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.1-rc.1...v1.1.1) (2026-09-13)
+
+### Changed
+
+- Finalize the Ultra Clipboard app and tray icons with the selected `UC` clipboard mark.
+- Generate desktop app icons from transparent PNG source artwork.
+
+### Release Notes
+
+- This release is unsigned. Windows SmartScreen and macOS Gatekeeper may display warnings.
+- Automatic updates are disabled for this release; download future versions from GitHub Releases.
+- macOS Intel and Apple Silicon packages are built in CI, but macOS runtime QA is still pending.
+- `.ecopastebak` remains supported for EcoPaste backup compatibility.
+
 ## [1.1.1-rc.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.0...v1.1.1-rc.1) (2026-09-12)
 
 ### Features
