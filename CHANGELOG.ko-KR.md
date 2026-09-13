@@ -1,5 +1,24 @@
 # 변경 기록
 
+## [1.1.3](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.2...v1.1.3) (2026-09-13)
+
+### 추가
+
+- 명시적으로 설정한 Tailscale peer 사이에서 텍스트, HTML, RTF와 PNG를 실시간 공유할 수 있습니다.
+- 정보 설정 탭에서 업데이트 확인, 다운로드, 서명 검증과 설치를 실행할 수 있습니다.
+
+### 수정
+
+- 별도의 full-canvas runtime tray icon을 사용해 설치된 Windows tray mark가 실용적인 최대 크기로 표시됩니다.
+- peer credential 또는 bind address를 사용할 수 없어도 앱은 실행하고 sync만 중지합니다.
+- 기록 백업에서 Tailscale peer 설정과 credential을 제외합니다.
+
+### 릴리즈 안내
+
+- updater artifact는 전용 Tauri minisign key로 서명합니다. Windows와 macOS 앱 package 자체는 code signing되지 않아 SmartScreen 또는 Gatekeeper 경고가 표시될 수 있습니다.
+- 기존 `v1.1.2` 설치는 `v1.1.3`으로 한 번 수동 업그레이드해야 하며, 이후 릴리즈부터 앱 안에서 업데이트할 수 있습니다.
+- macOS Intel 및 Apple Silicon 패키지는 CI에서 빌드하지만 macOS runtime QA는 아직 완료되지 않았습니다.
+
 ## [1.1.2](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.1...v1.1.2) (2026-09-13)
 
 ### 변경

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.3](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.2...v1.1.3) (2026-09-13)
+
+### Added
+
+- Add opt-in real-time text, HTML, RTF, and PNG sharing between explicitly configured Tailscale peers.
+- Add in-app update checking, download, signature verification, and installation from the About preferences tab.
+
+### Fixed
+
+- Use a dedicated full-canvas runtime tray icon so the installed Windows tray mark displays at maximum practical size.
+- Keep the app running with sync stopped when a peer credential or bind address is unavailable.
+- Exclude Tailscale peer configuration and credentials from history backups.
+
+### Release Notes
+
+- Updater artifacts are signed with a dedicated Tauri minisign key. Windows and macOS application packages remain code-unsigned and may show SmartScreen or Gatekeeper warnings.
+- Existing `v1.1.2` installations require one manual upgrade to `v1.1.3`; later releases can update in-app.
+- macOS Intel and Apple Silicon packages are built in CI, but macOS runtime QA is still pending.
+
 ## [1.1.2](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.1...v1.1.2) (2026-09-13)
 
 ### Changed

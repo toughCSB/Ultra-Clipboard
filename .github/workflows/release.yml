@@ -270,6 +270,8 @@ jobs:
           CI: false
           GITHUB_TOKEN: ${{ github.token }}
           PLATFORM: ${{ matrix.os }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.target }}
           prerelease: ${{ needs.release-metadata.outputs.prerelease }}

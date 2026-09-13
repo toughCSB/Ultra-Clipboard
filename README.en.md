@@ -35,12 +35,13 @@ This project is an independently maintained fork based on [EcoPaste by EcoPasteH
 - Protect against collecting or displaying high-confidence secrets such as private keys, service tokens, AWS keys, and JWTs
 - One-month default retention, approximately 30 days. The period can be changed in settings, and favorites and pinned items are excluded from automatic cleanup
 - Local-first storage for clipboard data, resources, and settings
+- Real-time text, rich-text, and image sharing between explicitly configured Tailscale devices
 
 ## Backup and Data Compatibility
 
 Ultra Clipboard can export and import `.ecopastebak` backups. Encrypted `.ecopastebak` backups are supported as well. Backups contain clipboard history, resources, and settings, and can be restored by merging with or overwriting current data.
 
-WebDAV backup and restore are manual actions available in settings. They are not real-time synchronization. Ultra Clipboard does not provide real-time Tailscale synchronization. Only HTTPS WebDAV endpoints are supported, and the WebDAV password is excluded from backup files.
+WebDAV backup and restore remain manual actions. Separately, configured Tailscale IPs and per-peer shared keys can exchange text, HTML, RTF, and PNG records in real time. Files and settings are not synchronized, and WebDAV passwords and Tailscale peer settings are excluded from backup files.
 
 Ultra Clipboard uses a separate data namespace from EcoPaste. To bring data from the official EcoPaste app, create an `.ecopastebak` backup in EcoPaste and import it through Ultra Clipboard's backup flow. Existing data is not migrated automatically.
 
@@ -49,13 +50,13 @@ Ultra Clipboard uses a separate data namespace from EcoPaste. To bring data from
 - Windows
 - macOS
 
-Linux is not supported. `v1.1.2` is the stable release for Windows and macOS. The macOS packages are built in CI, but macOS runtime QA has not yet been completed.
+Linux is not supported. `v1.1.3` is the stable release for Windows and macOS. The macOS packages are built in CI, but macOS runtime QA has not yet been completed.
 
 ## Download and Installation
 
 Download the latest builds from [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases).
 
-`v1.1.2` is currently unsigned. Windows SmartScreen or macOS Gatekeeper may show a warning. Verify the source and file before using it. This release does not claim code signing or notarization.
+The `v1.1.3` updater artifacts are signed with a dedicated Tauri key, but the application packages themselves are not code-signed. Windows SmartScreen or macOS Gatekeeper may show a warning; verify the source and file before installing.
 
 ## Development
 

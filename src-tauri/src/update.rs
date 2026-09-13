@@ -10,6 +10,8 @@ use crate::core::{AppError, Result};
 use crate::settings::{SettingsStore, Update as UpdateSettings, UpdateFrequency};
 
 const UPDATE_PROGRESS_EVENT: &str = "update://progress";
+const DEFAULT_STABLE_ENDPOINT: &str =
+    "https://github.com/toughCSB/Ultra-Clipboard/releases/latest/download/latest.json";
 const STABLE_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_ENDPOINT";
 const BETA_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_BETA_ENDPOINT";
 const NIGHTLY_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_NIGHTLY_ENDPOINT";
@@ -237,8 +239,10 @@ pub async fn download(app: &AppHandle, version: String) -> Result<UpdateMetadata
 pub fn install(app: &AppHandle, version: String) -> Result<()> {
     log::info!("installing downloaded update {version}");
     app.state::<UpdateState>().install_downloaded(&version)?;
-    log::info!("update {version} installed, requesting app restart");
-    app.request_restart();
+    if should_request_restart_after_install(std::env::consts::OS) {
+        log::info!("update {version} installed, requesting app restart");
+        app.request_restart();
+    }
 
     Ok(())
 }
@@ -306,48 +310,60 @@ fn metadata_from_update(update: &TauriUpdate) -> UpdateMetadata {
 }
 
 fn update_endpoints(include_beta: bool, include_nightly: bool) -> Result<Vec<Url>> {
-    let stable_endpoint = std::env::var(STABLE_ENDPOINT_ENV).unwrap_or_default();
-    let beta_endpoint = std::env::var(BETA_ENDPOINT_ENV).unwrap_or_default();
-    let nightly_endpoint = std::env::var(NIGHTLY_ENDPOINT_ENV).unwrap_or_default();
+    let stable_endpoint = std::env::var(STABLE_ENDPOINT_ENV).ok();
+    let beta_endpoint = std::env::var(BETA_ENDPOINT_ENV).ok();
+    let nightly_endpoint = std::env::var(NIGHTLY_ENDPOINT_ENV).ok();
 
     update_endpoints_from_values(
         include_beta,
         include_nightly,
-        &stable_endpoint,
-        &beta_endpoint,
-        &nightly_endpoint,
+        stable_endpoint.as_deref(),
+        beta_endpoint.as_deref(),
+        nightly_endpoint.as_deref(),
     )
 }
 
 fn update_endpoints_from_values(
     include_beta: bool,
     include_nightly: bool,
-    stable_endpoint: &str,
-    beta_endpoint: &str,
-    nightly_endpoint: &str,
+    stable_endpoint: Option<&str>,
+    beta_endpoint: Option<&str>,
+    nightly_endpoint: Option<&str>,
 ) -> Result<Vec<Url>> {
     let mut endpoints = Vec::new();
     if include_nightly {
-        endpoints.push(parse_endpoint(nightly_endpoint)?);
+        endpoints.push(parse_endpoint(
+            "nightly",
+            nightly_endpoint.unwrap_or_default(),
+        )?);
     }
     if include_beta {
-        endpoints.push(parse_endpoint(beta_endpoint)?);
+        endpoints.push(parse_endpoint("beta", beta_endpoint.unwrap_or_default())?);
     }
-    endpoints.push(parse_endpoint(stable_endpoint)?);
+    endpoints.push(parse_endpoint(
+        "stable",
+        stable_endpoint.unwrap_or(DEFAULT_STABLE_ENDPOINT),
+    )?);
 
     Ok(endpoints)
 }
 
-fn parse_endpoint(endpoint: &str) -> Result<Url> {
+fn parse_endpoint(channel: &str, endpoint: &str) -> Result<Url> {
     if endpoint.trim().is_empty() {
         return Err(AppError::Other(anyhow::anyhow!(
-            "update endpoint is not configured"
+            "{channel} update endpoint is not configured"
         )));
     }
 
-    endpoint
-        .parse::<Url>()
-        .map_err(|err| AppError::Other(anyhow::anyhow!("update endpoint is invalid: {err}")))
+    endpoint.parse::<Url>().map_err(|err| {
+        AppError::Other(anyhow::anyhow!(
+            "{channel} update endpoint is invalid: {err}"
+        ))
+    })
+}
+
+fn should_request_restart_after_install(target_os: &str) -> bool {
+    target_os == "macos"
 }
 
 fn should_auto_check(app: &AppHandle) -> bool {
@@ -503,9 +519,9 @@ mod tests {
         let endpoints = update_endpoints_from_values(
             true,
             true,
-            "https://example.com/update?channel=stable",
-            "https://example.com/update?channel=beta",
-            "https://example.com/update?channel=nightly",
+            Some("https://example.com/update?channel=stable"),
+            Some("https://example.com/update?channel=beta"),
+            Some("https://example.com/update?channel=nightly"),
         )
         .unwrap();
 
@@ -520,9 +536,33 @@ mod tests {
     }
 
     #[test]
-    fn update_endpoints_reject_an_unconfigured_stable_channel() {
-        let error = update_endpoints_from_values(false, false, "", "", "").unwrap_err();
+    fn update_endpoints_use_default_when_stable_override_is_absent() {
+        let endpoints = update_endpoints_from_values(false, false, None, None, None).unwrap();
 
-        assert!(error.to_string().contains("is not configured"));
+        assert_eq!(endpoints, [DEFAULT_STABLE_ENDPOINT.parse::<Url>().unwrap()]);
+    }
+
+    #[test]
+    fn update_endpoints_reject_enabled_beta_without_endpoint() {
+        let error = update_endpoints_from_values(true, false, None, None, None).unwrap_err();
+
+        assert!(error.to_string().contains("beta update endpoint"));
+    }
+
+    #[test]
+    fn update_endpoints_reject_enabled_nightly_without_endpoint() {
+        let error = update_endpoints_from_values(false, true, None, None, None).unwrap_err();
+
+        assert!(error.to_string().contains("nightly update endpoint"));
+    }
+
+    #[test]
+    fn restart_is_not_requested_after_windows_install() {
+        assert!(!should_request_restart_after_install("windows"));
+    }
+
+    #[test]
+    fn restart_is_requested_after_macos_install() {
+        assert!(should_request_restart_after_install("macos"));
     }
 }
