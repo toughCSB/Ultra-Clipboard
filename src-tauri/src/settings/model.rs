@@ -19,6 +19,49 @@ pub struct Settings {
     pub onboarding: Onboarding,
     pub update: Update,
     pub webdav: WebDav,
+    pub sync: SyncSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SyncSettings {
+    pub enabled: bool,
+    pub bind_address: String,
+    pub listen_port: u16,
+    pub device_id: String,
+    pub peers: Vec<SyncPeerSettings>,
+}
+
+impl Default for SyncSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: String::new(),
+            listen_port: 45_321,
+            device_id: uuid::Uuid::new_v4().to_string(),
+            peers: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SyncPeerSettings {
+    pub id: String,
+    pub address: String,
+    pub port: u16,
+    pub secret_reference: String,
+}
+
+impl Default for SyncPeerSettings {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            address: String::new(),
+            port: 45_321,
+            secret_reference: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

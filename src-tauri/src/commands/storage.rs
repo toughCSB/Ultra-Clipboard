@@ -363,6 +363,9 @@ async fn rebase_storage_states(app: &AppHandle) -> Result<Settings> {
     if let Some(registry) = app.try_state::<crate::clipboard::AppsRegistry>() {
         registry.load_from_db().await?;
     }
+    if let Err(err) = crate::sync::reconfigure(app).await {
+        log::warn!("reconfigure clipboard sync after storage rebase failed: {err}");
+    }
 
     Ok(settings)
 }

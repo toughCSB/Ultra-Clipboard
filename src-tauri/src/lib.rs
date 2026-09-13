@@ -15,6 +15,7 @@ mod menu;
 mod mouse;
 mod settings;
 mod shortcut;
+mod sync;
 mod tray;
 mod update;
 mod webdav;
@@ -80,6 +81,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(core::prevent_default::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_run_as_admin_status,
@@ -150,6 +152,10 @@ pub fn run() {
             commands::resume_global_shortcuts,
             commands::update_settings,
             commands::reset_settings,
+            commands::set_sync_peer_secret,
+            commands::replace_sync_peer_secret,
+            commands::delete_sync_peer_secret,
+            commands::test_sync_peer_secret,
             commands::export_history_backup,
             commands::inspect_history_backup,
             commands::take_pending_backup,
@@ -202,6 +208,11 @@ pub fn run() {
                 })?;
                 handle_db.manage(db::DatabaseState::new(pool));
                 clipboard::init(&handle_db)?;
+                if let Err(err) = sync::init(&handle_db).await {
+                    log::warn!(
+                        "clipboard sync initialization failed; continuing with sync stopped: {err}"
+                    );
+                }
                 Ok::<_, anyhow::Error>(())
             })?;
 

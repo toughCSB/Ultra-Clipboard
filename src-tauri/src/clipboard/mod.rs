@@ -31,7 +31,9 @@ pub use read::ClipboardReader;
 pub use sound::play_copy_sound_now;
 pub use source::detect_frontmost;
 pub use storage::ImageStore;
-pub use watcher::{init, materialize_source, persist_and_notify, WatcherPause};
+pub use watcher::{
+    init, materialize_source, persist_and_notify, WatcherPause, CLIPBOARD_UPDATED_EVENT,
+};
 pub use write::write_to_clipboard;
 
 #[cfg(test)]

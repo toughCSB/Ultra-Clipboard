@@ -66,6 +66,7 @@ export type PreferenceControl =
   | { type: "shortcutRecorder" }
   | { type: "textarea" }
   | { type: "appExclusion" }
+  | { type: "syncPeers" }
   | { type: "action"; danger?: boolean }
   | { type: "status" }
   | { type: "shortcutTags"; shortcuts: PreferenceShortcutTag[] };

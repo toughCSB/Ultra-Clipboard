@@ -210,6 +210,21 @@ export interface WebDav {
   fileName: string;
 }
 
+export interface SyncPeerSettings {
+  id: string;
+  address: string;
+  port: number;
+  secretReference: string;
+}
+
+export interface SyncSettings {
+  enabled: boolean;
+  bindAddress: string;
+  listenPort: number;
+  deviceId: string;
+  peers: SyncPeerSettings[];
+}
+
 export interface Settings {
   general: General;
   appearance: Appearance;
@@ -218,6 +233,7 @@ export interface Settings {
   onboarding: Onboarding;
   update: Update;
   webdav: WebDav;
+  sync: SyncSettings;
 }
 
 export type SettingsPatch = DeepPartial<Settings>;

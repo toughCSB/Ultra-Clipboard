@@ -408,6 +408,30 @@ export const updateSettings = (patch: SettingsPatch) => {
   );
 };
 
+export const setSyncPeerSecret = (peerId: string, secret: string) => {
+  return call<void>(
+    TAURI_COMMAND.SET_SYNC_PEER_SECRET,
+    "commands:labels.saveSyncPeer",
+    { peerId, secret },
+  );
+};
+
+export const deleteSyncPeerSecret = (peerId: string) => {
+  return call<void>(
+    TAURI_COMMAND.DELETE_SYNC_PEER_SECRET,
+    "commands:labels.deleteSyncPeer",
+    { peerId },
+  );
+};
+
+export const testSyncPeerSecret = (peerId: string) => {
+  return call<void>(
+    TAURI_COMMAND.TEST_SYNC_PEER_SECRET,
+    "commands:labels.testSyncPeer",
+    { peerId },
+  );
+};
+
 export const resetSettings = async () => {
   const settings = await call<Settings>(
     TAURI_COMMAND.RESET_SETTINGS,

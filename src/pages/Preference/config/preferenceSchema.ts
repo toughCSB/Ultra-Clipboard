@@ -804,6 +804,44 @@ export const preferenceTabs: PreferenceTab[] = [
         ],
       },
       {
+        id: "sync",
+        settings: [
+          {
+            control: { type: "switch" },
+            id: "sync.enabled",
+            keywords: ["tailscale", "sync", "realtime"],
+            path: ["sync", "enabled"],
+            value: (settings) => settings.sync.enabled,
+          },
+          {
+            control: { type: "text" },
+            id: "sync.bindAddress",
+            keywords: ["tailscale", "ip", "address"],
+            path: ["sync", "bindAddress"],
+            value: (settings) => settings.sync.bindAddress,
+          },
+          {
+            control: { max: 65535, min: 1, type: "number" },
+            id: "sync.listenPort",
+            keywords: ["tailscale", "port"],
+            path: ["sync", "listenPort"],
+            value: (settings) => settings.sync.listenPort,
+          },
+          {
+            control: { type: "text" },
+            disabled: true,
+            id: "sync.deviceId",
+            keywords: ["device", "id"],
+            value: (settings) => settings.sync.deviceId,
+          },
+          {
+            control: { type: "syncPeers" },
+            id: "sync.peers",
+            keywords: ["tailscale", "peer", "device", "secret"],
+          },
+        ],
+      },
+      {
         id: "webdav",
         settings: [
           {
@@ -899,6 +937,32 @@ export const preferenceTabs: PreferenceTab[] = [
             control: { danger: true, type: "action" },
             id: "diagnostics.resetPreferences",
             keywords: ["reset", "preferences"],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    icon: "i-lucide:info",
+    id: "about",
+    sections: [
+      {
+        id: "updates",
+        settings: [
+          {
+            control: { type: "action" },
+            id: "about.checkUpdates",
+            keywords: ["update", "version", "download", "install"],
+          },
+        ],
+      },
+      {
+        id: "about",
+        settings: [
+          {
+            control: { type: "action" },
+            id: "about.github",
+            keywords: ["github", "source", "repository"],
           },
         ],
       },

@@ -32,14 +32,9 @@ impl SettingsStore {
 
         let current = match load_from_disk(&path) {
             Some(settings) => settings,
-            None => {
-                let settings = default_settings_with_system_locale();
-                if let Err(err) = write_atomic(&path, &settings) {
-                    log::warn!("persist first-run settings failed: {err}");
-                }
-                settings
-            }
+            None => default_settings_with_system_locale(),
         };
+        write_atomic(&path, &current)?;
         log::info!("settings store ready at {path:?}");
 
         Ok(Self {
@@ -85,11 +80,20 @@ impl SettingsStore {
         Ok(next)
     }
 
+    pub(crate) fn restore(&self, settings: Settings) -> Result<Settings> {
+        validate_settings(&settings)?;
+        let path = self.path();
+        write_atomic(&path, &settings)?;
+        *self.current.write().expect("settings poisoned") = settings.clone();
+        Ok(settings)
+    }
+
     pub fn replace_from_file(&self, path: &Path) -> Result<Settings> {
         let content =
             fs::read_to_string(path).with_context(|| format!("failed to read {path:?}"))?;
-        let next: Settings = serde_json::from_str(&content)
+        let mut next: Settings = serde_json::from_str(&content)
             .map_err(|err| AppError::Other(anyhow::anyhow!("invalid settings file: {err}")))?;
+        next.sync = self.snapshot().sync;
 
         validate_settings(&next)?;
 
@@ -111,6 +115,7 @@ impl SettingsStore {
                 settings
             }
         };
+        write_atomic(&path, &current)?;
 
         *self.path.write().expect("settings path poisoned") = path;
         *self.current.write().expect("settings poisoned") = current.clone();
@@ -169,6 +174,7 @@ fn write_atomic(path: &Path, settings: &Settings) -> Result<()> {
 
 fn validate_settings(settings: &Settings) -> Result<()> {
     validate_window_open_group(&settings.clipboard.window.select_group_on_open)?;
+    crate::sync::validate_configuration(&settings.sync)?;
 
     let open_clipboard = normalize_shortcut_value(&settings.shortcuts.open_clipboard);
     let open_preference = normalize_shortcut_value(&settings.shortcuts.open_preference);
@@ -334,6 +340,10 @@ mod tests {
             parsed.clipboard.window.select_group_on_open,
             crate::settings::WINDOW_OPEN_SELECTION_PRESERVE
         );
+        assert!(!parsed.sync.enabled);
+        assert!(parsed.sync.bind_address.is_empty());
+        assert!(parsed.sync.peers.is_empty());
+        assert!(!parsed.sync.device_id.is_empty());
     }
 
     #[test]
@@ -346,6 +356,20 @@ mod tests {
         let serialized = serde_json::to_string(&parsed).unwrap();
         assert!(serialized.contains(r#""language":"ko-KR""#));
         assert!(!serialized.contains("zh-CN"));
+    }
+
+    #[test]
+    fn persisted_defaults_keep_the_same_sync_device_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let settings = Settings::default();
+        write_atomic(&path, &settings).unwrap();
+
+        let first = load_from_disk(&path).unwrap();
+        let second = load_from_disk(&path).unwrap();
+
+        assert_eq!(first.sync.device_id, second.sync.device_id);
+        assert_eq!(first.sync.device_id, settings.sync.device_id);
     }
 
     #[test]

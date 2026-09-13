@@ -24,6 +24,7 @@ import ShortcutTagsControl from "./ShortcutTagsControl";
 import SortableCheckboxTreeControl from "./SortableCheckboxTreeControl";
 import StatusControl from "./StatusControl";
 import SwitchControl from "./SwitchControl";
+import SyncPeersControl from "./SyncPeersControl";
 import TextareaControl from "./TextareaControl";
 import TextControl from "./TextControl";
 
@@ -181,6 +182,8 @@ const PreferenceSettingControl: FC<PreferenceSettingControlProps> = (props) => {
           storageLocation={storageLocation ?? null}
         />
       );
+    case "syncPeers":
+      return <SyncPeersControl disabled={disabled} settings={settings} />;
     case "status":
       return <StatusControl setting={setting} />;
     case "shortcutTags":

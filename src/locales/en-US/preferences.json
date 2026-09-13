@@ -129,6 +129,10 @@
       "source": {
         "title": "App Filters"
       },
+      "sync": {
+        "description": "Share text and images with other devices over Tailscale IPs in real time.",
+        "title": "Tailscale Live Sharing"
+      },
       "updates": {
         "title": "Updates"
       },
@@ -555,6 +559,28 @@
           "title": "Ignored Apps"
         }
       },
+      "sync": {
+        "bindAddress": {
+          "description": "This device's Tailscale IPv4 or IPv6 address.",
+          "title": "My Tailscale IP"
+        },
+        "deviceId": {
+          "description": "Use this unique ID as the peer ID on the other device.",
+          "title": "My Device ID"
+        },
+        "enabled": {
+          "description": "Share new clipboard records with configured Tailscale peers.",
+          "title": "Enable Live Sharing"
+        },
+        "listenPort": {
+          "title": "Listen Port"
+        },
+        "peers": {
+          "controlLabel": "Manage",
+          "description": "Configure each peer's device ID, Tailscale IP, and shared key.",
+          "title": "Connected Devices"
+        }
+      },
       "updates": {
         "autoCheck": {
           "description": "Periodically check whether a new Ultra Clipboard version is available.",
@@ -714,5 +740,18 @@
     "reset": "Reset to default directory",
     "resetConfirmContent": "Ultra Clipboard will move the current history database, settings, and resource cache back to the default data directory, then delete the current custom data directory after migration succeeds.",
     "resetConfirmTitle": "Reset Data Directory"
+  },
+  "syncPeers": {
+    "add": "Add device",
+    "address": "Tailscale IP",
+    "cancel": "Cancel",
+    "keyValid": "The shared key is stored",
+    "remove": "Remove",
+    "required": "Enter a Tailscale IP and a shared key for each new device",
+    "save": "Save",
+    "saved": "Connected devices saved",
+    "secret": "Shared key",
+    "testKey": "Check key",
+    "title": "Tailscale Connected Devices"
   }
 }

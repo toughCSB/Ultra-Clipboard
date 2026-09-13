@@ -129,6 +129,10 @@
       "source": {
         "title": "앱 필터"
       },
+      "sync": {
+        "description": "Tailscale IP로 텍스트와 이미지를 다른 기기와 실시간 공유합니다.",
+        "title": "Tailscale 실시간 공유"
+      },
       "updates": {
         "title": "업데이트"
       },
@@ -555,6 +559,28 @@
           "title": "무시할 앱"
         }
       },
+      "sync": {
+        "bindAddress": {
+          "description": "이 기기의 Tailscale IPv4 또는 IPv6 주소입니다.",
+          "title": "내 Tailscale IP"
+        },
+        "deviceId": {
+          "description": "상대 기기의 peer ID 입력에 사용하는 이 기기의 고유 ID입니다.",
+          "title": "내 기기 ID"
+        },
+        "enabled": {
+          "description": "설정한 Tailscale peer와 새 클립보드 기록을 공유합니다.",
+          "title": "실시간 공유 사용"
+        },
+        "listenPort": {
+          "title": "수신 포트"
+        },
+        "peers": {
+          "controlLabel": "관리",
+          "description": "상대 기기의 ID, Tailscale IP와 공유 키를 설정합니다.",
+          "title": "연결 기기"
+        }
+      },
       "updates": {
         "autoCheck": {
           "description": "주기적으로 Ultra Clipboard의 새 버전이 있는지 확인합니다.",
@@ -714,5 +740,18 @@
     "reset": "기본 폴더로 되돌리기",
     "resetConfirmContent": "Ultra Clipboard가 현재 히스토리 데이터베이스, 설정, 자원 캐시를 기본 데이터 폴더로 옮긴 뒤, 이전이 끝나면 지금 사용자 지정 데이터 폴더를 삭제합니다.",
     "resetConfirmTitle": "데이터 폴더 초기화"
+  },
+  "syncPeers": {
+    "add": "기기 추가",
+    "address": "Tailscale IP",
+    "cancel": "취소",
+    "keyValid": "공유 키가 저장되어 있습니다",
+    "remove": "삭제",
+    "required": "Tailscale IP와 새 기기의 공유 키를 입력하세요",
+    "save": "저장",
+    "saved": "연결 기기를 저장했습니다",
+    "secret": "공유 키",
+    "testKey": "키 확인",
+    "title": "Tailscale 연결 기기"
   }
 }

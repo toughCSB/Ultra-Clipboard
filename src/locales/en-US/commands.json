@@ -23,6 +23,7 @@
     "delete": "Delete",
     "deleteApps": "Delete apps",
     "deleteClipboardGroup": "Delete group",
+    "deleteSyncPeer": "Delete sync peer",
     "detectLegacyData": "Detect legacy data",
     "downloadUpdate": "Download update",
     "drag": "Drag",
@@ -68,6 +69,7 @@
     "saveNote": "Save note",
     "saveOnboarding": "Save onboarding progress",
     "saveSettings": "Save settings",
+    "saveSyncPeer": "Save sync peer",
     "setAutostart": "Set launch at login",
     "setClipboardWindowAutoHideSuspended": "Keep window visible",
     "setClipboardWindowPinned": "Pin window",
@@ -75,6 +77,7 @@
     "setTaskbarIcon": "Set taskbar icon",
     "skipUpdateVersion": "Skip update version",
     "suspendGlobalShortcuts": "Suspend global shortcuts",
+    "testSyncPeer": "Check sync shared key",
     "toggleFavorite": "Favorite",
     "unpinItem": "Unpin item"
   },

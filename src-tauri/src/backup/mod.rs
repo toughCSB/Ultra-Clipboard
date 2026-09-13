@@ -555,6 +555,9 @@ fn write_payload_zip(
         {
             webdav.remove("password");
         }
+        if let Some(settings) = settings.as_object_mut() {
+            settings.remove("sync");
+        }
 
         let archive_name = archive_path(CONFIG_ARCHIVE_DIR, Path::new(SETTINGS_FILENAME))?;
         zip.start_file(&archive_name, options)
@@ -942,7 +945,10 @@ async fn merge_import(
     emit_clipboard_imported(app);
 
     let settings_path = root.join(CONFIG_ARCHIVE_DIR).join(SETTINGS_FILENAME);
-    let patch = read_json_file(&settings_path)?;
+    let mut patch = read_json_file(&settings_path)?;
+    if let Some(settings) = patch.as_object_mut() {
+        settings.remove("sync");
+    }
     let next = app
         .state::<crate::settings::SettingsStore>()
         .update(patch)?;
@@ -991,6 +997,9 @@ async fn overwrite_import(
         .state::<crate::settings::SettingsStore>()
         .replace_from_file(&settings_path)?;
     emit_settings_updated(app, &next);
+    if let Err(err) = crate::sync::reconfigure(app).await {
+        log::warn!("reconfigure clipboard sync after backup restore failed: {err}");
+    }
 
     Ok(ImportHistoryBackupResult {
         strategy: BackupImportStrategy::Overwrite,

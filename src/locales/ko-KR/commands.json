@@ -23,6 +23,7 @@
     "delete": "삭제",
     "deleteApps": "앱 삭제",
     "deleteClipboardGroup": "그룹 삭제",
+    "deleteSyncPeer": "동기화 기기 삭제",
     "detectLegacyData": "이전 데이터 검사",
     "downloadUpdate": "업데이트 다운로드",
     "drag": "드래그",
@@ -68,6 +69,7 @@
     "saveNote": "메모 저장",
     "saveOnboarding": "초기 설정 진행 저장",
     "saveSettings": "설정 저장",
+    "saveSyncPeer": "동기화 기기 저장",
     "setAutostart": "시작 시 실행 설정",
     "setClipboardWindowAutoHideSuspended": "창 유지",
     "setClipboardWindowPinned": "창 고정",
@@ -75,6 +77,7 @@
     "setTaskbarIcon": "작업 표시줄 아이콘 설정",
     "skipUpdateVersion": "업데이트 버전 건너뛰기",
     "suspendGlobalShortcuts": "전역 단축키 일시 중지",
+    "testSyncPeer": "동기화 공유 키 확인",
     "toggleFavorite": "즐겨찾기",
     "unpinItem": "고정 해제"
   },
