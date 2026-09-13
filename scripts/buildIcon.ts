@@ -13,7 +13,7 @@ const IOS_BACKGROUND_COLOR = "#071534";
       ? "node_modules/.bin/tauri.cmd"
       : "node_modules/.bin/tauri";
 
-  const command = `"${tauriCommand}" icon src-tauri/assets/${logoName}.svg --ios-color "${IOS_BACKGROUND_COLOR}"`;
+  const command = `"${tauriCommand}" icon src-tauri/assets/${logoName}.png --ios-color "${IOS_BACKGROUND_COLOR}"`;
 
   execSync(command, { stdio: "inherit" });
 })();
