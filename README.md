@@ -49,13 +49,13 @@ Ultra Clipboard는 EcoPaste와 별도의 데이터 namespace를 사용합니다.
 - Windows
 - macOS
 
-Linux는 지원하지 않습니다. `v1.1.1-rc.1`은 prerelease이며 macOS runtime QA가 아직 완료되지 않았습니다.
+Linux는 지원하지 않습니다. `v1.1.1`은 Windows와 macOS용 안정 릴리스입니다. macOS 패키지는 CI에서 빌드되지만 실제 macOS runtime QA는 아직 완료되지 않았습니다.
 
 ## 다운로드 및 설치
 
 최신 빌드는 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases)에서 받을 수 있습니다.
 
-현재 `v1.1.1-rc.1`은 서명되지 않은 빌드입니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로, 출처와 파일을 확인한 뒤 사용하세요. 이 경고는 코드 서명이나 notarization이 완료되었다는 뜻이 아닙니다.
+현재 `v1.1.1`은 서명되지 않은 빌드입니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로, 출처와 파일을 확인한 뒤 사용하세요. 이 릴리스는 코드 서명이나 notarization이 완료됐다고 주장하지 않습니다.
 
 ## 개발
 

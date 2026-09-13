@@ -48,13 +48,13 @@ Ultra Clipboard 使用独立于 EcoPaste 的数据 namespace。要导入官方 E
 - Windows
 - macOS
 
-不支持 Linux。`v1.1.1-rc.1` 是预发布版本，macOS runtime QA 尚未完成。
+不支持 Linux。`v1.1.1` 是面向 Windows 和 macOS 的稳定版本。macOS 安装包由 CI 构建，但 macOS runtime QA 尚未完成。
 
 ## 下载与安装
 
 请从 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases) 下载构建版本。
 
-当前 `v1.1.1-rc.1` 未签名，Windows SmartScreen 或 macOS Gatekeeper 可能显示警告。使用前请核对来源和文件。本版本不声称已完成代码签名或 notarization。
+当前 `v1.1.1` 未签名，Windows SmartScreen 或 macOS Gatekeeper 可能显示警告。使用前请核对来源和文件。本版本不声称已完成代码签名或 notarization。
 
 ## 开发
 
