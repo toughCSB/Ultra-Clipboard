@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.2](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.1...v1.1.2) (2026-09-13)
+
+### Changed
+
+- Enlarge the approved `UC` artwork within the desktop icon canvas for better taskbar visibility.
+- Retain Korean and English as the supported interface, installer, documentation, and release languages.
+- Map existing `zh-CN` settings to Korean without retaining Chinese interface resources.
+- Replace inherited Chinese source comments and native fallback messages with English or Korean.
+- Generate GitHub release notes in English followed by Korean.
+
+### Release Notes
+
+- This release is unsigned. Windows SmartScreen and macOS Gatekeeper may display warnings.
+- Automatic updates remain disabled; download future versions from GitHub Releases.
+- Tailscale real-time clipboard synchronization is not included. WebDAV backup and restore remain manual actions.
+- macOS Intel and Apple Silicon packages are built in CI, but macOS runtime QA is still pending.
+
 ## [1.1.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.1-rc.1...v1.1.1) (2026-09-13)
 
 ### Changed

@@ -63,8 +63,8 @@ jobs:
             echo "::error::CHANGELOG.md is required. Run release-it before pushing the release tag."
             exit 1
           fi
-          if [[ ! -f CHANGELOG.zh-CN.md ]]; then
-            echo "::error::CHANGELOG.zh-CN.md is required. Run release-it before pushing the release tag."
+          if [[ ! -f CHANGELOG.ko-KR.md ]]; then
+            echo "::error::CHANGELOG.ko-KR.md is required. Run release-it before pushing the release tag."
             exit 1
           fi
 
@@ -104,21 +104,21 @@ jobs:
           }
 
           extract_changelog_section CHANGELOG.md release-body-en.md
-          extract_changelog_section CHANGELOG.zh-CN.md release-body-zh.md
+          extract_changelog_section CHANGELOG.ko-KR.md release-body-ko.md
 
           if [[ ! -s release-body-en.md ]]; then
             echo "::error::CHANGELOG.md does not contain a release section for ${version}."
             exit 1
           fi
-          if [[ ! -s release-body-zh.md ]]; then
-            echo "::error::CHANGELOG.zh-CN.md does not contain a release section for ${version}."
+          if [[ ! -s release-body-ko.md ]]; then
+            echo "::error::CHANGELOG.ko-KR.md does not contain a release section for ${version}."
             exit 1
           fi
 
           {
             cat release-body-en.md
             printf '\n\n<hr>\n\n'
-            cat release-body-zh.md
+            cat release-body-ko.md
           } > release-body.md
 
           prerelease=false
@@ -240,21 +240,21 @@ jobs:
           }
 
           extract_changelog_section CHANGELOG.md release-body-en.md
-          extract_changelog_section CHANGELOG.zh-CN.md release-body-zh.md
+          extract_changelog_section CHANGELOG.ko-KR.md release-body-ko.md
 
           if [[ ! -s release-body-en.md ]]; then
             echo "::error::CHANGELOG.md does not contain a release section for ${version}."
             exit 1
           fi
-          if [[ ! -s release-body-zh.md ]]; then
-            echo "::error::CHANGELOG.zh-CN.md does not contain a release section for ${version}."
+          if [[ ! -s release-body-ko.md ]]; then
+            echo "::error::CHANGELOG.ko-KR.md does not contain a release section for ${version}."
             exit 1
           fi
 
           {
             cat release-body-en.md
             printf '\n\n<hr>\n\n'
-            cat release-body-zh.md
+            cat release-body-ko.md
           } > release-body.md
 
           delimiter="CHANGELOG_BODY_${RANDOM}_${RANDOM}"
