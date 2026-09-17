@@ -36,6 +36,20 @@ This project is an independently maintained fork based on [EcoPaste by EcoPasteH
 - One-month default retention, approximately 30 days. The period can be changed in settings, and favorites and pinned items are excluded from automatic cleanup
 - Local-first storage for clipboard data, resources, and settings
 - Real-time text, rich-text, and image sharing between explicitly configured Tailscale devices
+- A system tray icon that stays legible even on a dark taskbar
+
+## Screenshot Editor
+
+Built-in screen capture with a Shottr-class editor.
+
+- 13 annotation tools: arrow, text, ruler, rectangle, backdrop, pen, magnifier, blur, highlighter, spotlight, counter, oval, and line
+- Distinct color per tool icon, with drag-to-reorder toolbar positions
+- A single click applies a tool instantly with its last-used settings; double-clicking opens a translucent options panel right under that icon
+- Hovering an icon shows a tooltip naming the tool
+- OCR to recognize and copy text from the captured area
+- Repeat capture and delayed capture
+- Paste an image from the clipboard directly into the editor
+- A one-click button that copies to the clipboard and closes the window at the same time (Ctrl/⌘+Enter shortcut)
 
 ## Backup and Data Compatibility
 
