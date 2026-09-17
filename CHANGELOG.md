@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.0](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.3...v1.2.0) (2026-09-17)
+
+### Added
+
+- Add a built-in screen capture and Shottr-class editor: area, fullscreen, window, repeat, and delayed capture from the tray menu and shortcuts.
+- Add 13 annotation tools (arrow, text, ruler, rectangle, backdrop, pen, magnifier, blur, highlighter, spotlight, counter, oval, line) with per-tool color icons and a drag-to-reorder toolbar.
+- Add a double-click options panel per tool (a single click applies the tool with its last-used settings) and hover tooltips for each toolbar icon.
+- Add OCR text recognition, clipboard image paste, and a one-click button that copies to the clipboard and closes the editor window at the same time (Ctrl/⌘+Enter).
+- Replace the system tray icon with a bolder, higher-contrast design that stays legible at 16px.
+
+### Changed
+
+- Enlarge the app logo in the preferences sidebar and split the app name across two lines next to it.
+
+### Release Notes
+
+- Updater artifacts are signed with a dedicated Tauri minisign key. Windows and macOS application packages remain code-unsigned and may show SmartScreen or Gatekeeper warnings.
+- macOS Intel and Apple Silicon packages are built in CI, but macOS runtime QA — including the screenshot editor — is still pending.
+
 ## [1.1.3](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.2...v1.1.3) (2026-09-13)
 
 ### Added
