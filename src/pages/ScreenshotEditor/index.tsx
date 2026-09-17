@@ -924,6 +924,10 @@ const ScreenshotEditor: FC = () => {
     }
   };
 
+  const handleDiscardAndClose = () => {
+    void closeWindow();
+  };
+
   const handleSave = () => {
     void runExport("save");
   };
@@ -952,6 +956,7 @@ const ScreenshotEditor: FC = () => {
         onClose={requestClose}
         onCopy={handleCopy}
         onCopyAndClose={handleCopyAndClose}
+        onDiscardAndClose={handleDiscardAndClose}
         onDragPointerDown={handleDragPointerDown}
         onDragPointerEnter={handleDragPointerEnter}
         onMaximize={toggleMaximizeWindow}

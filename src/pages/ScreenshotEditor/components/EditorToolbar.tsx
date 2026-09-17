@@ -41,6 +41,8 @@ interface EditorToolbarProps {
   onCopy: () => void;
   /** Copies the export to the clipboard, then closes the editor window. */
   onCopyAndClose: () => void;
+  /** Closes the editor window without copying or saving anything. */
+  onDiscardAndClose: () => void;
   onDragPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onDragPointerEnter: () => void;
   onMaximize: () => void;
@@ -91,6 +93,7 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
     onClose,
     onCopy,
     onCopyAndClose,
+    onDiscardAndClose,
     onDragPointerDown,
     onDragPointerEnter,
     onMaximize,
@@ -415,6 +418,15 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
         value={`${Math.round(zoom * 100)}%`}
       />
 
+      <ToolbarButton
+        className="ml-2"
+        danger
+        disabled={busy}
+        icon="i-lucide:trash-2"
+        onClick={onDiscardAndClose}
+        title={t("editor.discardAndClose")}
+      />
+
       <Tooltip
         mouseEnterDelay={0.4}
         placement="bottom"
@@ -422,7 +434,7 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
       >
         <Button
           aria-label={t("editor.copyAndClose")}
-          className="ml-2 h-9 shrink-0 gap-1.5 rounded-2 px-3 font-medium"
+          className="ml-1 h-9 shrink-0 gap-1.5 rounded-2 px-3 font-medium"
           disabled={busy}
           loading={busyAction === "copy"}
           onClick={onCopyAndClose}

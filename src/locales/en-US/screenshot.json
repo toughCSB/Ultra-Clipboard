@@ -11,6 +11,7 @@
     "copy": "Copy",
     "copyAndClose": "Copy & Close",
     "delete": "Delete",
+    "discardAndClose": "Discard & Close",
     "drag": "Drag into another app",
     "imageSizeCaption": "Image size",
     "more": "More tools",
