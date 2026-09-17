@@ -58,17 +58,27 @@ const PreferenceSidebar: FC<PreferenceSidebarProps> = (props) => {
           draggable={false}
           src="/logo.png"
         />
-        <div className="flex flex-col gap-0.5">
-          <div className="font-bold text-ant-text text-lg leading-tight">
+        <div className="flex flex-col justify-center gap-0.5">
+          <div
+            className="text-ant-text text-xl leading-tight tracking-tight"
+            style={{ fontFamily: '"Pretendard Black", Pretendard, sans-serif' }}
+          >
             {appNameFirstLine}
           </div>
           {appNameSecondLine.length > 0 && (
-            <div className="font-bold text-ant-text text-lg leading-tight">
+            <div
+              className="text-ant-text text-base leading-tight tracking-tight"
+              style={{
+                fontFamily: '"Pretendard Black", Pretendard, sans-serif',
+              }}
+            >
               {appNameSecondLine}
             </div>
           )}
           {appVersionLabel.length > 0 && (
-            <div className="text-ant-tertiary text-xs">{appVersionLabel}</div>
+            <div className="pt-0.5 text-ant-tertiary text-xs">
+              {appVersionLabel}
+            </div>
           )}
         </div>
       </div>

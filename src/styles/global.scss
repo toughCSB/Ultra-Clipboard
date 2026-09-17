@@ -1,3 +1,11 @@
+@font-face {
+  font-display: swap;
+  font-family: "Pretendard Black";
+  font-style: normal;
+  font-weight: 900;
+  src: url("/fonts/Pretendard-Black.woff2") format("woff2");
+}
+
 html,
 body,
 #root {
