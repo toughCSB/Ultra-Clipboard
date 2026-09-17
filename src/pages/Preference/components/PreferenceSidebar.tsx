@@ -34,6 +34,13 @@ const PreferenceSidebar: FC<PreferenceSidebarProps> = (props) => {
   } = props;
   const appNameLabel = appName.length > 0 ? appName : APP_NAME_PLACEHOLDER;
   const appVersionLabel = appVersion.length > 0 ? `v${appVersion}` : "";
+  const nameSplitIndex = appNameLabel.indexOf(" ");
+  const appNameFirstLine =
+    nameSplitIndex === -1
+      ? appNameLabel
+      : appNameLabel.slice(0, nameSplitIndex);
+  const appNameSecondLine =
+    nameSplitIndex === -1 ? "" : appNameLabel.slice(nameSplitIndex + 1);
 
   return (
     <aside
@@ -41,20 +48,25 @@ const PreferenceSidebar: FC<PreferenceSidebarProps> = (props) => {
       data-tauri-drag-region
     >
       <div
-        className={cn("flex items-center gap-2 px-4 py-4", {
+        className={cn("flex items-center gap-3 px-4 py-5", {
           "pt-10": isMac,
         })}
       >
         <img
           alt=""
-          className="size-10 shrink-0 object-contain"
+          className="size-16 shrink-0 object-contain"
           draggable={false}
           src="/logo.png"
         />
-        <div className="flex h-full flex-col justify-between">
-          <div className="font-semibold text-ant-text text-base leading-none">
-            {appNameLabel}
+        <div className="flex flex-col gap-0.5">
+          <div className="font-bold text-ant-text text-lg leading-tight">
+            {appNameFirstLine}
           </div>
+          {appNameSecondLine.length > 0 && (
+            <div className="font-bold text-ant-text text-lg leading-tight">
+              {appNameSecondLine}
+            </div>
+          )}
           {appVersionLabel.length > 0 && (
             <div className="text-ant-tertiary text-xs">{appVersionLabel}</div>
           )}
