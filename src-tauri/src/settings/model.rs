@@ -172,6 +172,21 @@ pub struct Shortcuts {
 
     /// Windows-only Win+V replacement for the system clipboard history panel.
     pub win_v: bool,
+
+    /// Global shortcut that freezes the screen for an area screenshot.
+    pub capture_area: String,
+
+    /// Global shortcut that captures the monitor under the cursor.
+    pub capture_fullscreen: String,
+
+    /// Global shortcut that freezes the screen for a window screenshot.
+    pub capture_window: String,
+
+    /// Global shortcut that captures the last confirmed area again.
+    pub capture_repeat: String,
+
+    /// Global shortcut that starts an area screenshot after a short delay.
+    pub capture_delayed: String,
 }
 
 impl Default for Shortcuts {
@@ -180,6 +195,11 @@ impl Default for Shortcuts {
             open_clipboard: "Alt+C".into(),
             open_preference: "Alt+X".into(),
             win_v: false,
+            capture_area: "Alt+Shift+2".into(),
+            capture_fullscreen: "Alt+Shift+1".into(),
+            capture_window: String::new(),
+            capture_repeat: String::new(),
+            capture_delayed: String::new(),
         }
     }
 }

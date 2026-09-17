@@ -744,6 +744,57 @@ export const preferenceTabs: PreferenceTab[] = [
           ...(isWin
             ? [
                 {
+                  control: { type: "shortcutRecorder" } as const,
+                  id: "shortcuts.captureArea",
+                  keywords: ["shortcut", "hotkey", "screenshot", "capture"],
+                  path: ["shortcuts", "captureArea"] as const,
+                  value: (settings: Settings) => {
+                    return settings.shortcuts.captureArea;
+                  },
+                },
+                {
+                  control: { type: "shortcutRecorder" } as const,
+                  id: "shortcuts.captureFullscreen",
+                  keywords: ["shortcut", "hotkey", "screenshot", "fullscreen"],
+                  path: ["shortcuts", "captureFullscreen"] as const,
+                  value: (settings: Settings) => {
+                    return settings.shortcuts.captureFullscreen;
+                  },
+                },
+                {
+                  control: { type: "shortcutRecorder" } as const,
+                  id: "shortcuts.captureWindow",
+                  keywords: ["shortcut", "hotkey", "screenshot", "window"],
+                  path: ["shortcuts", "captureWindow"] as const,
+                  value: (settings: Settings) => {
+                    return settings.shortcuts.captureWindow;
+                  },
+                },
+                {
+                  control: { type: "shortcutRecorder" } as const,
+                  id: "shortcuts.captureRepeat",
+                  keywords: ["shortcut", "hotkey", "screenshot", "repeat"],
+                  path: ["shortcuts", "captureRepeat"] as const,
+                  value: (settings: Settings) => {
+                    return settings.shortcuts.captureRepeat;
+                  },
+                },
+                {
+                  control: { type: "shortcutRecorder" } as const,
+                  id: "shortcuts.captureDelayed",
+                  keywords: [
+                    "shortcut",
+                    "hotkey",
+                    "screenshot",
+                    "delay",
+                    "timer",
+                  ],
+                  path: ["shortcuts", "captureDelayed"] as const,
+                  value: (settings: Settings) => {
+                    return settings.shortcuts.captureDelayed;
+                  },
+                },
+                {
                   control: { type: "switch" } as const,
                   id: "shortcuts.winV",
                   keywords: [

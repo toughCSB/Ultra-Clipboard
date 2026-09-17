@@ -389,14 +389,22 @@ pub fn start_drag_text(
     Ok(())
 }
 
-pub fn start_drag_files(
+/// `with_ghost` wraps the window's own WebView2 drop target so the OLE ghost
+/// preview renders correctly over it, by reinterpreting an internal WebView2
+/// window property as a raw COM pointer. That is undocumented behavior, so
+/// callers uncertain about a window's WebView2 setup (freshly created,
+/// borderless windows) can skip it and keep only the actual file transfer.
+pub fn start_drag_files_with_ghost(
     window: &WebviewWindow,
     paths: Vec<PathBuf>,
     preview_png: Option<Vec<u8>>,
+    with_ghost: bool,
 ) -> Result<()> {
     use drag::{DragItem, Image, Options};
 
-    super::windows_ghost::install_for_window(window);
+    if with_ghost {
+        super::windows_ghost::install_for_window(window);
+    }
 
     let image = match preview_png {
         Some(bytes) => Image::Raw(bytes),

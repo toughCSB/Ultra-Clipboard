@@ -41,29 +41,33 @@ const ShortcutRecorderControl: FC<ShortcutRecorderControlProps> = (props) => {
 
 export default ShortcutRecorderControl;
 
-/** Ensure the two global shortcuts remain mutually exclusive. */
+/** Ensure every global shortcut remains mutually exclusive. */
 function resolveGlobalShortcutConflicts(
   t: TFunction<"preferences">,
   setting: PreferenceSetting,
   settings: Settings,
 ) {
-  const openClipboardConflict = {
-    label: translateShortcutSettingTitle(t, "shortcuts.openClipboard"),
-    value: settings.shortcuts.openClipboard,
-  };
-  const openPreferenceConflict = {
-    label: translateShortcutSettingTitle(t, "shortcuts.openPreference"),
-    value: settings.shortcuts.openPreference,
+  const globalShortcuts: Record<string, string> = {
+    "shortcuts.captureArea": settings.shortcuts.captureArea,
+    "shortcuts.captureDelayed": settings.shortcuts.captureDelayed,
+    "shortcuts.captureFullscreen": settings.shortcuts.captureFullscreen,
+    "shortcuts.captureRepeat": settings.shortcuts.captureRepeat,
+    "shortcuts.captureWindow": settings.shortcuts.captureWindow,
+    "shortcuts.openClipboard": settings.shortcuts.openClipboard,
+    "shortcuts.openPreference": settings.shortcuts.openPreference,
   };
 
-  switch (setting.id) {
-    case "shortcuts.openClipboard":
-      return [openPreferenceConflict];
-    case "shortcuts.openPreference":
-      return [openClipboardConflict];
-    default:
-      return [] satisfies ShortcutRecorderConflict[];
+  if (!(setting.id in globalShortcuts)) {
+    return [] satisfies ShortcutRecorderConflict[];
   }
+
+  return Object.entries(globalShortcuts)
+    .filter(([id]) => {
+      return id !== setting.id;
+    })
+    .map(([id, value]) => {
+      return { label: translateShortcutSettingTitle(t, id), value };
+    }) satisfies ShortcutRecorderConflict[];
 }
 
 /** Get the setting title used to identify a conflicting shortcut. */

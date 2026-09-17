@@ -528,6 +528,31 @@
         }
       },
       "shortcuts": {
+        "captureArea": {
+          "description": "Freeze the screen, drag an area, then open the screenshot editor.",
+          "placeholder": "Alt+Shift+2",
+          "title": "Capture Area"
+        },
+        "captureDelayed": {
+          "description": "Freeze the screen after 3 seconds, for menus and hover states.",
+          "placeholder": "Not set",
+          "title": "Capture Area in 3 Seconds"
+        },
+        "captureFullscreen": {
+          "description": "Capture the monitor under the pointer and open the screenshot editor.",
+          "placeholder": "Alt+Shift+1",
+          "title": "Capture Full Screen"
+        },
+        "captureRepeat": {
+          "description": "Capture the last selected area again at the same position. Starts an area capture when there is none.",
+          "placeholder": "Not set",
+          "title": "Repeat Last Area"
+        },
+        "captureWindow": {
+          "description": "Freeze the screen, click a window, then open the screenshot editor.",
+          "placeholder": "Not set",
+          "title": "Capture Window"
+        },
         "openClipboard": {
           "description": "Open or hide the clipboard window.",
           "placeholder": "Alt+C",

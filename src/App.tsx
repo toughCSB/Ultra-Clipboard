@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router";
 import { useSnapshot } from "valtio";
 import { notifyWindowReady } from "@/commands";
-import { WINDOW_LABEL } from "@/constants/windows";
+import { WINDOW_LABEL, WINDOW_LABEL_PREFIX } from "@/constants/windows";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { router } from "./router";
 import { settingsReady, settingsState } from "./stores/settings";
@@ -27,6 +27,13 @@ const resolveAntdLocale = (language: Language) => {
   if (language === "en-US") return enUS;
 
   return koKR;
+};
+
+/** Screenshot windows stay dark regardless of the app theme, like Shottr's editor. */
+const isScreenshotWindow = (label: string) => {
+  return Object.values(WINDOW_LABEL_PREFIX).some((prefix) => {
+    return label.startsWith(prefix);
+  });
 };
 
 const AppContent: FC = () => {
@@ -47,7 +54,7 @@ const App: FC = () => {
   const settings = useSnapshot(settingsState);
   const windowLabel = getCurrentWebviewWindow().label;
   const mode =
-    windowLabel === WINDOW_LABEL.ONBOARDING
+    windowLabel === WINDOW_LABEL.ONBOARDING || isScreenshotWindow(windowLabel)
       ? "dark"
       : settings.appearance.theme;
   const language = settings.appearance.language;

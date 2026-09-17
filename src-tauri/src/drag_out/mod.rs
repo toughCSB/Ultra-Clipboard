@@ -26,12 +26,28 @@ pub fn start_drag_files(
     paths: Vec<PathBuf>,
     preview_png: Option<Vec<u8>>,
 ) -> Result<()> {
+    start_drag_files_with_ghost(window, paths, preview_png, true)
+}
+
+/// Same as [`start_drag_files`], but on Windows `with_ghost` controls whether
+/// the window's WebView2 drop target is wrapped for the OLE ghost preview.
+/// That wrapping reinterprets an internal WebView2 window property as a raw
+/// COM pointer, so callers unsure of a window's WebView2 setup (freshly
+/// created, borderless windows) can pass `false` to keep only the file
+/// transfer itself. macOS ignores this flag; its preview path is separate.
+pub fn start_drag_files_with_ghost(
+    window: &WebviewWindow,
+    paths: Vec<PathBuf>,
+    preview_png: Option<Vec<u8>>,
+    with_ghost: bool,
+) -> Result<()> {
     if paths.is_empty() {
         return Err(AppError::Clipboard("drag-out: empty path list".to_string()));
     }
 
     #[cfg(target_os = "macos")]
     {
+        let _ = with_ghost;
         macos::start_drag_files(window, paths, preview_png, |result| {
             log::debug!("drag-out finished: {result:?}");
         })
@@ -39,7 +55,7 @@ pub fn start_drag_files(
 
     #[cfg(target_os = "windows")]
     {
-        windows::start_drag_files(window, paths, preview_png)
+        windows::start_drag_files_with_ghost(window, paths, preview_png, with_ghost)
     }
 }
 

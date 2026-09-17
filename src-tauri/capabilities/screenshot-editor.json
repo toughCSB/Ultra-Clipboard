@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "description": "Window controls for the screenshot editor, whose toolbar replaces the native title bar.",
+  "identifier": "screenshot-editor",
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize"
+  ],
+  "windows": ["screenshot-editor-*"]
+}

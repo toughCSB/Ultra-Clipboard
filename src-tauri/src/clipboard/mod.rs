@@ -28,7 +28,7 @@ pub use ingest::build_item;
 pub use ingest::build_item_with_settings;
 pub use payload::{ClipboardPayload, ImagePayload, TextPayload};
 pub use read::ClipboardReader;
-pub use sound::play_copy_sound_now;
+pub use sound::{maybe_play_copy, play_copy_sound_now};
 pub use source::detect_frontmost;
 pub use storage::ImageStore;
 pub use watcher::{

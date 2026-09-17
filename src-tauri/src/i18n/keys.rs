@@ -28,7 +28,20 @@ pub enum CommandKey {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub enum ScreenshotMenuKey {
+    Copy,
+    Save,
+    Close,
+    SaveDialogTitle,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum TrayKey {
+    CaptureArea,
+    CaptureFullscreen,
+    CaptureWindow,
+    CaptureRepeat,
+    CaptureDelayed,
     Preference,
     StartListening,
     StopListening,

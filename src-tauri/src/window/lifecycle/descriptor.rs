@@ -9,6 +9,7 @@ use super::super::{
     PREFERENCE_WINDOW_LABEL, UPDATE_WINDOW_LABEL,
 };
 use crate::core::Result;
+use crate::screenshot::OVERLAY_WINDOW_LABEL_PREFIX;
 
 #[cfg(target_os = "windows")]
 use crate::menu::context_window::{
@@ -91,8 +92,21 @@ static DESCRIPTORS: &[WindowDescriptor] = &[
     },
 ];
 
+/// Windows created per monitor or per capture. `label` holds a prefix, and
+/// matching windows are never rebuilt by the lifecycle manager.
+static PREFIX_DESCRIPTORS: &[WindowDescriptor] = &[WindowDescriptor {
+    label: OVERLAY_WINDOW_LABEL_PREFIX,
+    emits_lifecycle: false,
+    retain_policy: RetainPolicy::DestroyWhenIdle,
+    build: None,
+}];
+
 pub fn descriptor_for(label: &str) -> Option<&'static WindowDescriptor> {
-    DESCRIPTORS.iter().find(|d| d.label == label)
+    DESCRIPTORS.iter().find(|d| d.label == label).or_else(|| {
+        PREFIX_DESCRIPTORS
+            .iter()
+            .find(|d| label.starts_with(d.label))
+    })
 }
 
 pub fn descriptors() -> &'static [WindowDescriptor] {

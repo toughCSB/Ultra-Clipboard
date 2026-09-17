@@ -13,6 +13,7 @@ mod keystroke;
 mod menu;
 #[cfg(target_os = "windows")]
 mod mouse;
+mod screenshot;
 mod settings;
 mod shortcut;
 mod sync;
@@ -175,9 +176,29 @@ pub fn run() {
             commands::download_update,
             commands::install_update,
             commands::skip_update_version,
+            commands::start_screenshot_capture,
+            commands::get_screenshot_overlay_state,
+            commands::get_screenshot_overlay_frame,
+            commands::notify_screenshot_overlay_ready,
+            commands::commit_screenshot_selection,
+            commands::cancel_screenshot_capture,
+            commands::get_screenshot_image_info,
+            commands::get_screenshot_image,
+            commands::notify_screenshot_window_ready,
+            commands::close_screenshot_window,
+            commands::export_screenshot,
+            commands::start_screenshot_drag,
+            commands::copy_screenshot_color,
+            commands::read_screenshot_clipboard_image,
+            commands::set_screenshot_pin_scale,
+            commands::show_screenshot_pin_menu,
             menu::clipboard_item::popup_clipboard_item_menu,
         ])
         .on_menu_event(|app, event| {
+            if screenshot::handle_menu_event(app, event.id().as_ref()) {
+                return;
+            }
+
             menu::clipboard_item::handle_menu_event(app, event.id().as_ref());
         })
         .setup(move |app| {
@@ -193,6 +214,7 @@ pub fn run() {
             handle.manage(window_state_store);
 
             handle.manage(window::lifecycle::WindowLifecycleManager::new());
+            screenshot::init(&handle);
             update::init(&handle);
 
             let settings = settings::init(&handle).map_err(|err| {

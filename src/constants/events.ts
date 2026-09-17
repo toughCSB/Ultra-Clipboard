@@ -8,6 +8,8 @@ export const TAURI_EVENT = {
   KEYBOARD_NAV: "keyboard://nav",
   PREFERENCE_HIGHLIGHT_SETTING: "preference://highlight-setting",
   PREVIEW_UPDATED: "preview://updated",
+  SCREENSHOT_EDITOR_CLOSE_REQUESTED: "screenshot://editor-close-requested",
+  SCREENSHOT_OVERLAY_SESSION: "screenshot://overlay-session",
   SETTINGS_UPDATED: "settings://updated",
   UPDATE_PROGRESS: "update://progress",
   WINDOW_BEFORE_DESTROY: "window://before-destroy",

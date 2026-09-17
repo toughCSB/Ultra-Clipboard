@@ -6,6 +6,7 @@ pub mod commands;
 mod en_us;
 mod keys;
 mod ko_kr;
+pub mod screenshot_menu;
 pub mod tray;
 
 use tauri::{AppHandle, Manager};

@@ -301,6 +301,11 @@ mod tests {
         assert!(!parsed.general.run_as_admin);
         assert!(parsed.general.tray_icon, "default kept");
         assert_eq!(parsed.shortcuts.open_clipboard, "Alt+C");
+        assert_eq!(parsed.shortcuts.capture_area, "Alt+Shift+2");
+        assert_eq!(parsed.shortcuts.capture_fullscreen, "Alt+Shift+1");
+        assert!(parsed.shortcuts.capture_window.is_empty());
+        assert!(parsed.shortcuts.capture_repeat.is_empty());
+        assert!(parsed.shortcuts.capture_delayed.is_empty());
         assert_eq!(
             parsed.update.frequency,
             crate::settings::UpdateFrequency::Daily

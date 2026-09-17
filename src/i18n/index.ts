@@ -6,6 +6,7 @@ import commonEnUS from "@/locales/en-US/common.json";
 import onboardingEnUS from "@/locales/en-US/onboarding.json";
 import preferencesEnUS from "@/locales/en-US/preferences.json";
 import previewEnUS from "@/locales/en-US/preview.json";
+import screenshotEnUS from "@/locales/en-US/screenshot.json";
 import updateEnUS from "@/locales/en-US/update.json";
 import clipboardKoKR from "@/locales/ko-KR/clipboard.json";
 import commandsKoKR from "@/locales/ko-KR/commands.json";
@@ -13,6 +14,7 @@ import commonKoKR from "@/locales/ko-KR/common.json";
 import onboardingKoKR from "@/locales/ko-KR/onboarding.json";
 import preferencesKoKR from "@/locales/ko-KR/preferences.json";
 import previewKoKR from "@/locales/ko-KR/preview.json";
+import screenshotKoKR from "@/locales/ko-KR/screenshot.json";
 import updateKoKR from "@/locales/ko-KR/update.json";
 import type { Language } from "@/types/settings";
 
@@ -24,6 +26,7 @@ export const I18N_NAMESPACES = [
   "onboarding",
   "preferences",
   "preview",
+  "screenshot",
   "update",
 ] as const;
 
@@ -44,6 +47,7 @@ void i18n.use(initReactI18next).init({
       onboarding: onboardingEnUS,
       preferences: preferencesEnUS,
       preview: previewEnUS,
+      screenshot: screenshotEnUS,
       update: updateEnUS,
     },
     "ko-KR": {
@@ -53,6 +57,7 @@ void i18n.use(initReactI18next).init({
       onboarding: onboardingKoKR,
       preferences: preferencesKoKR,
       preview: previewKoKR,
+      screenshot: screenshotKoKR,
       update: updateKoKR,
     },
   },

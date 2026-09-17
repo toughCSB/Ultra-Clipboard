@@ -53,7 +53,10 @@ export const useAppTheme = (mode: SettingsTheme): ThemeConfig => {
       algorithm,
       token: {
         borderRadius: 10,
-        colorBgContainer: resolvedTheme === "dark" ? "#1a1b1e" : "#ffffff",
+        colorBgContainer: resolvedTheme === "dark" ? "#232326" : "#ffffff",
+        // The default dark algorithm collapses this to pure black, which then
+        // matches colorBgContainer too closely for chrome to read against canvas.
+        colorBgLayout: resolvedTheme === "dark" ? "#141414" : "#f5f5f5",
         colorPrimary: "#0f766e",
         fontFamily:
           'Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif',

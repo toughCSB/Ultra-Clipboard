@@ -297,18 +297,40 @@ const call = async <T>(
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    const appError = toAppError(error);
-
-    log.error(`invoke ${command} failed`, appError);
-    getMessageApi().error(
-      i18n.t("commands:error", {
-        label: i18n.t(labelKey),
-        message: appError.message,
-      }),
-    );
-
-    throw appError;
+    throw reportCommandError(command, labelKey, error);
   }
+};
+
+/** Sends a raw binary body with metadata headers, avoiding JSON serialization of pixels. */
+const callRaw = async <T>(
+  command: string,
+  labelKey: string,
+  body: Uint8Array,
+  headers: Record<string, string>,
+): Promise<T> => {
+  try {
+    return await invoke<T>(command, body, { headers });
+  } catch (error) {
+    throw reportCommandError(command, labelKey, error);
+  }
+};
+
+const reportCommandError = (
+  command: string,
+  labelKey: string,
+  error: unknown,
+) => {
+  const appError = toAppError(error);
+
+  log.error(`invoke ${command} failed`, appError);
+  getMessageApi().error(
+    i18n.t("commands:error", {
+      label: i18n.t(labelKey),
+      message: appError.message,
+    }),
+  );
+
+  return appError;
 };
 
 export const getSettings = () => {
@@ -1246,4 +1268,213 @@ export const hideContextMenus = async () => {
   } catch (error) {
     log.error("hide context menus failed", toAppError(error));
   }
+};
+
+export type ScreenshotCaptureMode =
+  | "area"
+  | "fullscreen"
+  | "window"
+  | "repeat"
+  | "delayed";
+
+export interface ScreenshotPixelRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ScreenshotOverlayState {
+  sessionId: number;
+  mode: ScreenshotCaptureMode;
+  width: number;
+  height: number;
+  scaleFactor: number;
+  windows: ScreenshotPixelRect[];
+}
+
+export interface ScreenshotImageInfo {
+  width: number;
+  height: number;
+  scaleFactor: number;
+  capturedAt: string;
+}
+
+export type ScreenshotExportAction =
+  | "copy"
+  | "save"
+  | "pin"
+  | "prepareDrag"
+  | "ocr";
+
+export interface ScreenshotExportInput {
+  action: ScreenshotExportAction;
+  area: ScreenshotPixelRect;
+  label: string;
+  pixels: Uint8Array;
+}
+
+export interface ScreenshotExportResult {
+  savedPath: string | null;
+  historyRecorded: boolean;
+  /** Recognized text for `ocr`; it is already on the clipboard when not empty. */
+  text: string | null;
+}
+
+const SCREENSHOT_EXPORT_LABEL_KEYS: Record<ScreenshotExportAction, string> = {
+  copy: "commands:labels.copy",
+  ocr: "commands:labels.recognizeText",
+  pin: "commands:labels.pinScreenshot",
+  prepareDrag: "commands:labels.drag",
+  save: "commands:labels.saveImage",
+};
+
+export const startScreenshotCapture = (mode: ScreenshotCaptureMode) => {
+  return call<void>(
+    TAURI_COMMAND.START_SCREENSHOT_CAPTURE,
+    "commands:labels.captureScreenshot",
+    { mode },
+  );
+};
+
+export const getScreenshotOverlayState = (label: string) => {
+  return call<ScreenshotOverlayState | null>(
+    TAURI_COMMAND.GET_SCREENSHOT_OVERLAY_STATE,
+    "commands:labels.captureScreenshot",
+    { label },
+  );
+};
+
+export const getScreenshotOverlayFrame = (label: string, sessionId: number) => {
+  return call<ArrayBuffer>(
+    TAURI_COMMAND.GET_SCREENSHOT_OVERLAY_FRAME,
+    "commands:labels.captureScreenshot",
+    { label, sessionId },
+  );
+};
+
+export const notifyScreenshotOverlayReady = (
+  label: string,
+  sessionId: number,
+) => {
+  return call<void>(
+    TAURI_COMMAND.NOTIFY_SCREENSHOT_OVERLAY_READY,
+    "commands:labels.captureScreenshot",
+    { label, sessionId },
+  );
+};
+
+export const commitScreenshotSelection = (
+  label: string,
+  sessionId: number,
+  rect: ScreenshotPixelRect,
+) => {
+  return call<void>(
+    TAURI_COMMAND.COMMIT_SCREENSHOT_SELECTION,
+    "commands:labels.captureScreenshot",
+    { label, rect, sessionId },
+  );
+};
+
+export const cancelScreenshotCapture = (sessionId: number | null) => {
+  return call<void>(
+    TAURI_COMMAND.CANCEL_SCREENSHOT_CAPTURE,
+    "commands:labels.captureScreenshot",
+    { sessionId },
+  );
+};
+
+export const getScreenshotImageInfo = (label: string) => {
+  return call<ScreenshotImageInfo>(
+    TAURI_COMMAND.GET_SCREENSHOT_IMAGE_INFO,
+    "commands:labels.loadScreenshot",
+    { label },
+  );
+};
+
+export const getScreenshotImage = (label: string) => {
+  return call<ArrayBuffer>(
+    TAURI_COMMAND.GET_SCREENSHOT_IMAGE,
+    "commands:labels.loadScreenshot",
+    { label },
+  );
+};
+
+export const notifyScreenshotWindowReady = (label: string) => {
+  return call<void>(
+    TAURI_COMMAND.NOTIFY_SCREENSHOT_WINDOW_READY,
+    "commands:labels.openWindow",
+    { label },
+  );
+};
+
+export const closeScreenshotWindow = (label: string) => {
+  return call<void>(
+    TAURI_COMMAND.CLOSE_SCREENSHOT_WINDOW,
+    "commands:labels.closeWindow",
+    { label },
+  );
+};
+
+export const exportScreenshot = (input: ScreenshotExportInput) => {
+  const { action, area, label, pixels } = input;
+
+  return callRaw<ScreenshotExportResult>(
+    TAURI_COMMAND.EXPORT_SCREENSHOT,
+    SCREENSHOT_EXPORT_LABEL_KEYS[action],
+    pixels,
+    {
+      "x-screenshot-action": action,
+      "x-screenshot-height": String(area.height),
+      "x-screenshot-label": label,
+      "x-screenshot-offset-x": String(area.x),
+      "x-screenshot-offset-y": String(area.y),
+      "x-screenshot-width": String(area.width),
+    },
+  );
+};
+
+export const startScreenshotDrag = (label: string) => {
+  return call<void>(
+    TAURI_COMMAND.START_SCREENSHOT_DRAG,
+    "commands:labels.drag",
+    { label },
+  );
+};
+
+export const copyScreenshotColor = (color: string) => {
+  return call<void>(
+    TAURI_COMMAND.COPY_SCREENSHOT_COLOR,
+    "commands:labels.copyColor",
+    { color },
+  );
+};
+
+/** Reads the clipboard image as PNG bytes; the buffer is empty when there is no image. */
+export const readScreenshotClipboardImage = () => {
+  return call<ArrayBuffer>(
+    TAURI_COMMAND.READ_SCREENSHOT_CLIPBOARD_IMAGE,
+    "commands:labels.paste",
+  );
+};
+
+export const setScreenshotPinScale = (
+  label: string,
+  scale: number,
+  anchorX: number,
+  anchorY: number,
+) => {
+  return call<void>(
+    TAURI_COMMAND.SET_SCREENSHOT_PIN_SCALE,
+    "commands:labels.pinScreenshot",
+    { anchorX, anchorY, label, scale },
+  );
+};
+
+export const showScreenshotPinMenu = (label: string) => {
+  return call<void>(
+    TAURI_COMMAND.SHOW_SCREENSHOT_PIN_MENU,
+    "commands:labels.openMenu",
+    { label },
+  );
 };

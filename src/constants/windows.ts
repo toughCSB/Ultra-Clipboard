@@ -15,3 +15,12 @@ export const WINDOW_LABEL = {
 
   UPDATE: "update",
 } as const;
+
+/**
+ * Prefixes of windows created per capture or per monitor.
+ */
+export const WINDOW_LABEL_PREFIX = {
+  SCREENSHOT_EDITOR: "screenshot-editor-",
+  SCREENSHOT_OVERLAY: "screenshot-overlay-",
+  SCREENSHOT_PIN: "screenshot-pin-",
+} as const;

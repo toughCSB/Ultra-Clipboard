@@ -82,6 +82,11 @@ export interface Shortcuts {
   openClipboard: string;
   openPreference: string;
   winV: boolean;
+  captureArea: string;
+  captureFullscreen: string;
+  captureWindow: string;
+  captureRepeat: string;
+  captureDelayed: string;
 }
 
 export interface Content {

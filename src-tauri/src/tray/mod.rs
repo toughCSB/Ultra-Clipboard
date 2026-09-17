@@ -13,6 +13,7 @@ use crate::clipboard::WatcherPause;
 use crate::core::Result;
 use crate::i18n::tray as tray_i18n;
 use crate::i18n::tray::Key;
+use crate::screenshot::{self, CaptureMode};
 use crate::settings::{Language, Settings};
 #[cfg(target_os = "windows")]
 use crate::window::CLIPBOARD_WINDOW_LABEL;
@@ -20,6 +21,30 @@ use crate::window::{self, PREFERENCE_WINDOW_LABEL};
 
 const TRAY_ID: &str = "app-tray";
 
+/// Screenshot tray items in menu order.
+const CAPTURE_MENU: [(&str, Key, CaptureMode); 5] = [
+    ("tray::capture_area", Key::CaptureArea, CaptureMode::Area),
+    (
+        "tray::capture_fullscreen",
+        Key::CaptureFullscreen,
+        CaptureMode::Fullscreen,
+    ),
+    (
+        "tray::capture_window",
+        Key::CaptureWindow,
+        CaptureMode::Window,
+    ),
+    (
+        "tray::capture_repeat",
+        Key::CaptureRepeat,
+        CaptureMode::Repeat,
+    ),
+    (
+        "tray::capture_delayed",
+        Key::CaptureDelayed,
+        CaptureMode::Delayed,
+    ),
+];
 const MENU_PREFERENCE: &str = "tray::preference";
 const MENU_TOGGLE_LISTEN: &str = "tray::toggle_listen";
 const MENU_RELAUNCH: &str = "tray::relaunch";
@@ -171,7 +196,20 @@ fn build_menu(
     .context("build exit menu item")?;
     let sep1 = PredefinedMenuItem::separator(app).context("build separator")?;
 
-    MenuBuilder::new(app)
+    let mut builder = MenuBuilder::new(app);
+    if screenshot::is_supported() {
+        for (id, key, _) in CAPTURE_MENU {
+            let item = MenuItem::with_id(app, id, tray_i18n::label(lang, key), true, None::<&str>)
+                .with_context(|| format!("build {id} menu item"))?;
+            builder = builder.item(&item);
+        }
+
+        let capture_separator =
+            PredefinedMenuItem::separator(app).context("build capture separator")?;
+        builder = builder.item(&capture_separator);
+    }
+
+    builder
         .items(&[
             &preference,
             &toggle_listen,
@@ -186,6 +224,11 @@ fn build_menu(
 }
 
 fn handle_menu_event(app: &AppHandle, id: &str) {
+    if let Some((_, _, mode)) = CAPTURE_MENU.iter().find(|(item, _, _)| *item == id) {
+        screenshot::start_capture_from_tray(app, *mode);
+        return;
+    }
+
     match id {
         MENU_PREFERENCE => {
             if let Err(err) = window::show_window(app, PREFERENCE_WINDOW_LABEL) {

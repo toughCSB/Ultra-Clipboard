@@ -1,0 +1,92 @@
+{
+  "editor": {
+    "closeConfirm": {
+      "cancel": "계속 편집",
+      "content": "복사하거나 저장하지 않은 편집 내용은 사라집니다.",
+      "ok": "닫기",
+      "title": "편집기를 닫을까요?"
+    },
+    "colorCaption": "Tab으로 복사",
+    "colorCopied": "{{color}} 복사됨",
+    "copy": "복사",
+    "copyAndClose": "복사 후 닫기",
+    "delete": "삭제",
+    "drag": "끌어서 다른 앱에 놓기",
+    "imageSizeCaption": "이미지 크기",
+    "more": "도구 더 보기",
+    "ocrCopied": "인식한 텍스트 {{count}}자를 복사했습니다.",
+    "ocrEmpty": "인식된 텍스트가 없습니다.",
+    "options": {
+      "backdropEnabled": "배경 사용",
+      "background": "배경",
+      "backgrounds": {
+        "forest": "숲",
+        "graphite": "그래파이트",
+        "light": "밝은 회색",
+        "ocean": "바다",
+        "sunset": "노을",
+        "transparent": "투명"
+      },
+      "blur": "흐리게",
+      "blurMode": "방식",
+      "color": "색",
+      "customColor": "직접 고르기",
+      "erase": "지우기",
+      "fill": "채우기",
+      "filled": "채움",
+      "padding": "여백",
+      "pixelate": "모자이크",
+      "radius": "모서리",
+      "shadow": "그림자",
+      "shape": "모양",
+      "size": "크기",
+      "strength": "강도",
+      "stroke": "테두리",
+      "styleBackground": "배경",
+      "styleOutline": "외곽선",
+      "stylePlain": "기본",
+      "textSize": "글자 크기",
+      "textStyle": "스타일",
+      "width": "두께",
+      "zoom": "배율"
+    },
+    "pasteEmpty": "클립보드에 이미지가 없습니다.",
+    "pasteImage": "이미지 붙여넣기",
+    "pin": "화면에 고정",
+    "recognizeText": "텍스트 인식해서 복사 (OCR)",
+    "reorderHint": "아이콘을 드래그하면 순서를 바꿀 수 있어요",
+    "rulerHint": "자 · 클릭하면 가로·세로 자동 측정, 드래그하면 직접 측정",
+    "save": "저장",
+    "saved": "저장됨: {{name}}",
+    "select": "선택 · 드래그로 영역 지정, Enter로 자르기",
+    "toolbar": "스크린샷 도구",
+    "tools": {
+      "arrow": "화살표",
+      "backdrop": "배경",
+      "blur": "흐리게/지우기",
+      "counter": "번호",
+      "highlighter": "형광펜",
+      "image": "이미지",
+      "line": "선",
+      "magnifier": "돋보기",
+      "oval": "타원",
+      "pen": "펜",
+      "rect": "사각형",
+      "ruler": "자",
+      "select": "선택",
+      "spotlight": "스포트라이트",
+      "text": "텍스트"
+    },
+    "window": {
+      "close": "닫기",
+      "maximize": "최대화",
+      "minimize": "최소화",
+      "restore": "이전 크기로"
+    },
+    "zoomCaption": "줌"
+  },
+  "overlay": {
+    "areaHint": "드래그해서 영역 선택 · Space 창 선택 · Enter 전체 화면 · Esc 취소",
+    "windowHint": "캡처할 창 클릭 · Space 영역 선택 · Enter 전체 화면 · Esc 취소"
+  }
+}

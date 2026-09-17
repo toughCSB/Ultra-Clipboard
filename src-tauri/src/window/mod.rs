@@ -207,6 +207,10 @@ pub fn save_all_window_states(app_handle: &AppHandle) {
 }
 
 pub fn intercept_close_request(window: &Window) -> bool {
+    if crate::screenshot::is_screenshot_window(window.label()) {
+        return crate::screenshot::intercept_close_request(window);
+    }
+
     if window.label() == ONBOARDING_WINDOW_LABEL {
         return true;
     }

@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
 use crate::core::{AppError, Result};
+use crate::screenshot::{self, CaptureMode};
 use crate::settings::{SettingsStore, Shortcuts};
 use crate::window::{self, CLIPBOARD_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL};
 
@@ -117,19 +118,46 @@ pub fn apply(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
         return Ok(());
     }
 
-    let desired: [(&'static str, &str); 2] = [
+    let mut desired: Vec<(&'static str, &str)> = vec![
         ("open_clipboard", &shortcuts.open_clipboard),
         ("open_preference", &shortcuts.open_preference),
     ];
+    if screenshot::is_supported() {
+        desired.extend([
+            ("capture_area", shortcuts.capture_area.as_str()),
+            ("capture_fullscreen", shortcuts.capture_fullscreen.as_str()),
+            ("capture_window", shortcuts.capture_window.as_str()),
+            ("capture_repeat", shortcuts.capture_repeat.as_str()),
+            ("capture_delayed", shortcuts.capture_delayed.as_str()),
+        ]);
+    }
 
     #[cfg(target_os = "windows")]
     win_v::set_enabled(app, shortcuts.win_v);
 
     let mut active = Vec::new();
+    let mut claimed: Vec<String> = Vec::new();
     for (action, binding) in desired {
         if binding.trim().is_empty() {
             continue;
         }
+
+        // Older settings can already use a new default; the earlier action keeps the binding.
+        let normalized = normalize_binding(binding);
+        if claimed.contains(&normalized) {
+            log::warn!("skip shortcut {action}={binding}: already used by another action");
+            let _ = app.emit(
+                CONFLICT_EVENT,
+                ShortcutConflict {
+                    action,
+                    binding: binding.into(),
+                    reason: "already used by another Ultra Clipboard shortcut".into(),
+                },
+            );
+            continue;
+        }
+        claimed.push(normalized);
+
         match register_one(app, action, binding) {
             Ok(shortcut) => active.push((action, shortcut)),
             Err(err) => {
@@ -227,10 +255,33 @@ fn register_one(app: &AppHandle, action: &'static str, binding: &str) -> Result<
     Ok(shortcut)
 }
 
+fn normalize_binding(binding: &str) -> String {
+    binding
+        .split('+')
+        .map(|key| key.trim().to_ascii_lowercase())
+        .filter(|key| !key.is_empty())
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
 fn handle_event(app: &AppHandle, action: &'static str, event: ShortcutEvent) {
     if !matches!(event.state(), ShortcutState::Pressed) {
         return;
     }
+
+    let capture_mode = match action {
+        "capture_area" => Some(CaptureMode::Area),
+        "capture_fullscreen" => Some(CaptureMode::Fullscreen),
+        "capture_window" => Some(CaptureMode::Window),
+        "capture_repeat" => Some(CaptureMode::Repeat),
+        "capture_delayed" => Some(CaptureMode::Delayed),
+        _ => None,
+    };
+    if let Some(mode) = capture_mode {
+        screenshot::start_capture(app, mode);
+        return;
+    }
+
     let label = match action {
         "open_clipboard" => CLIPBOARD_WINDOW_LABEL,
         "open_preference" => PREFERENCE_WINDOW_LABEL,

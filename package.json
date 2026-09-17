@@ -34,6 +34,7 @@
     "release-rc": "release-it --verbose --preRelease=rc --preReleaseBase=1",
     "lint": "biome check",
     "format": "biome check --write",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "prepare": "simple-git-hooks",
     "preinstall": "npx only-allow pnpm"
   },

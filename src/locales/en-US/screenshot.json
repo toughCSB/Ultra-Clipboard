@@ -1,0 +1,92 @@
+{
+  "editor": {
+    "closeConfirm": {
+      "cancel": "Keep Editing",
+      "content": "Edits that were not copied or saved will be lost.",
+      "ok": "Close",
+      "title": "Close the editor?"
+    },
+    "colorCaption": "Tab to copy",
+    "colorCopied": "Copied {{color}}",
+    "copy": "Copy",
+    "copyAndClose": "Copy & Close",
+    "delete": "Delete",
+    "drag": "Drag into another app",
+    "imageSizeCaption": "Image size",
+    "more": "More tools",
+    "ocrCopied": "Copied {{count}} recognized characters.",
+    "ocrEmpty": "No text was recognized.",
+    "options": {
+      "backdropEnabled": "Use backdrop",
+      "background": "Background",
+      "backgrounds": {
+        "forest": "Forest",
+        "graphite": "Graphite",
+        "light": "Light gray",
+        "ocean": "Ocean",
+        "sunset": "Sunset",
+        "transparent": "Transparent"
+      },
+      "blur": "Blur",
+      "blurMode": "Mode",
+      "color": "Color",
+      "customColor": "Custom color",
+      "erase": "Erase",
+      "fill": "Fill",
+      "filled": "Filled",
+      "padding": "Padding",
+      "pixelate": "Pixelate",
+      "radius": "Corners",
+      "shadow": "Shadow",
+      "shape": "Shape",
+      "size": "Size",
+      "strength": "Strength",
+      "stroke": "Outline",
+      "styleBackground": "Background",
+      "styleOutline": "Outline",
+      "stylePlain": "Plain",
+      "textSize": "Text size",
+      "textStyle": "Style",
+      "width": "Width",
+      "zoom": "Zoom"
+    },
+    "pasteEmpty": "The clipboard has no image.",
+    "pasteImage": "Paste Image",
+    "pin": "Pin to screen",
+    "recognizeText": "Copy Text (OCR)",
+    "reorderHint": "Drag an icon to reorder the toolbar",
+    "rulerHint": "Ruler · click to measure automatically, drag to measure freely",
+    "save": "Save",
+    "saved": "Saved: {{name}}",
+    "select": "Select · drag an area, Enter to crop",
+    "toolbar": "Screenshot tools",
+    "tools": {
+      "arrow": "Arrow",
+      "backdrop": "Backdrop",
+      "blur": "Blur/Erase",
+      "counter": "Counter",
+      "highlighter": "Highlighter",
+      "image": "Image",
+      "line": "Line",
+      "magnifier": "Magnifier",
+      "oval": "Oval",
+      "pen": "Freehand",
+      "rect": "Rectangle",
+      "ruler": "Ruler",
+      "select": "Select",
+      "spotlight": "Spotlight",
+      "text": "Text"
+    },
+    "window": {
+      "close": "Close",
+      "maximize": "Maximize",
+      "minimize": "Minimize",
+      "restore": "Restore"
+    },
+    "zoomCaption": "Zoom"
+  },
+  "overlay": {
+    "areaHint": "Drag to select · Space for windows · Enter for full screen · Esc to cancel",
+    "windowHint": "Click a window · Space for area · Enter for full screen · Esc to cancel"
+  }
+}

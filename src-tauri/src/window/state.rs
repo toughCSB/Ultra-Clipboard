@@ -116,6 +116,11 @@ fn load_states(path: &PathBuf) -> HashMap<String, WindowState> {
 }
 
 pub fn save_window_state(app: &AppHandle, label: &str) -> Result<()> {
+    // Screenshot windows are sized from their capture and use per-capture labels.
+    if crate::screenshot::is_screenshot_window(label) {
+        return Ok(());
+    }
+
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| anyhow::anyhow!("window not found: {label}"))?;
