@@ -6,7 +6,7 @@ import { formatTrayIconReport, validateTrayIcon } from "./validateTrayIcon.ts";
 
 const IOS_BACKGROUND_COLOR = "#071534";
 const TAURI_CLI_PATH = resolve("node_modules/@tauri-apps/cli/tauri.js");
-const WINDOWS_TRAY_SOURCE_PATH = resolve("src-tauri/assets/tray-windows.svg");
+const WINDOWS_TRAY_SOURCE_PATH = resolve("src-tauri/assets/tray-windows.png");
 const WINDOWS_TRAY_ICON_PATH = resolve("src-tauri/assets/tray.ico");
 
 const runTauriIcon = (sourcePath: string, outputPath?: string) => {
