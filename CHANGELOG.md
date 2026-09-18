@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.0...v1.2.1) (2026-09-18)
+
+### Fixed
+
+- Fix an update-time hang on Windows: migration `.sql` files could be checked out with CRLF line endings, which changed the embedded sqlx checksum and made an already-applied migration look edited. Migration files are now pinned to LF via `.gitattributes`, and startup safely resyncs a stored checksum when the only difference is CRLF/LF, without weakening the check for a real content change.
+
 ## [1.2.0](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.3...v1.2.0) (2026-09-17)
 
 ### Added

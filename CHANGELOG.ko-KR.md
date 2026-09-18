@@ -1,5 +1,11 @@
 # 변경 기록
 
+## [1.2.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.0...v1.2.1) (2026-09-18)
+
+### 수정
+
+- Windows에서 업데이트 후 앱이 멈추는 문제를 수정했습니다: 마이그레이션 `.sql` 파일이 CRLF로 체크아웃되면 sqlx가 내장하는 체크섬이 달라져, 이미 적용된 마이그레이션이 수정된 것처럼 보였습니다. `.gitattributes`로 마이그레이션 파일의 줄바꿈을 LF로 고정하고, 시작할 때 저장된 체크섬이 CRLF/LF 차이로만 다른 경우 안전하게 재동기화하도록 했습니다. 실제 내용이 바뀐 경우를 막는 원래 검사는 그대로 유지됩니다.
+
 ## [1.2.0](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.1.3...v1.2.0) (2026-09-17)
 
 ### 추가
