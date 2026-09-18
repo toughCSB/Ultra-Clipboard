@@ -13,6 +13,11 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 
+# sqlx hashes migration files verbatim; a checked-out CRLF vs LF difference
+# changes the embedded checksum even though the SQL is identical, which then
+# looks like tampering to a database that already applied the migration.
+src-tauri/migrations/*.sql text eol=lf
+
 *.png binary
 *.ico binary
 *.icns binary
