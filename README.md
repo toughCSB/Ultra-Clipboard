@@ -40,7 +40,7 @@ Ultra Clipboard는 복사한 내용을 기기에 저장하고 빠르게 다시 �
 
 ## 스크린샷 편집기
 
-화면 캡처와 Shottr 수준의 편집기를 내장하고 있습니다.
+화면 캡처와 Shottr 수준의 편집기를 내장하고 있습니다. **현재 Windows에서만 동작합니다. macOS용 캡처·편집 기능은 보류 상태로, 아직 구현되어 있지 않습니다** (메뉴와 단축키 자체가 macOS에서는 나타나지 않습니다).
 
 - 화살표, 텍스트, 자, 사각형, 배경, 펜, 돋보기, 흐리게, 형광펜, 스포트라이트, 번호, 타원, 선 등 13종 주석 도구
 - 도구마다 구분되는 색상 아이콘과 드래그로 재배치 가능한 툴바
@@ -62,15 +62,33 @@ Ultra Clipboard는 EcoPaste와 별도의 데이터 namespace를 사용합니다.
 ## 지원 운영체제
 
 - Windows
-- macOS
+- macOS (클립보드 기록·검색·동기화 등 핵심 기능만. 스크린샷 캡처·편집 기능은 보류 상태로 제공하지 않습니다)
 
-Linux는 지원하지 않습니다. `v1.1.3`은 Windows와 macOS용 안정 릴리스입니다. macOS 패키지는 CI에서 빌드되지만 실제 macOS runtime QA는 아직 완료되지 않았습니다.
+Linux는 지원하지 않습니다. macOS 패키지는 CI에서 빌드되지만 실제 macOS runtime QA는 아직 완료되지 않았습니다.
 
 ## 다운로드 및 설치
 
 최신 빌드는 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases)에서 받을 수 있습니다.
 
-`v1.1.3`의 updater artifact는 전용 Tauri key로 서명하지만 앱 package 자체는 code signing되지 않았습니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로 출처와 파일을 확인한 뒤 사용하세요.
+앱 package 자체는 code signing과 공증(notarization)이 되어 있지 않습니다(updater artifact만 전용 Tauri key로 서명). Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로 출처와 파일을 확인한 뒤 사용하세요.
+
+### macOS에서 "손상되었기 때문에 열 수 없습니다" 오류
+
+macOS는 Apple Developer 인증서로 서명되지 않은 앱을 인터넷에서 받으면 격리(quarantine) 속성을 붙이고 Gatekeeper가 실행을 막습니다. 최신 macOS(Sonoma/Sequoia 이상)에서는 서명이 전혀 없는 앱에 한해 "확인되지 않은 개발자" 대신 더 강한 "손상되었기 때문에 열 수 없습니다" 문구가 뜹니다. **앱이 실제로 손상된 것은 아닙니다.**
+
+`.app`을 `/Applications`로 옮긴 뒤, 터미널에서 아래 명령을 한 번 실행하면 정상적으로 열립니다.
+
+```bash
+xattr -cr /Applications/Ultra\ Clipboard.app
+```
+
+`Operation not permitted` 오류가 뜨면, 최신 macOS는 터미널이 다른 앱의 속성을 건드리려면 별도 권한이 필요합니다:
+
+1. **시스템 설정 → 개인정보 보호 및 보안 → App 관리(App Management)** 로 이동
+2. 사용 중인 터미널 앱(Terminal.app, iTerm2 등)을 목록에서 켜기 (없으면 `+`로 추가)
+3. 터미널 앱을 완전히 종료 후 재실행하고 위 명령을 다시 실행
+
+**근본적으로 이 경고 자체를 없애려면** Apple Developer Program(유료, 연 $99) 가입 후 코드사이닝과 공증을 거쳐야 합니다. 인증서·계정 발급이 필요한 별도 작업이라 아직 적용하지 못했고, 현재로서는 위 우회 방법이 유일한 해결책입니다.
 
 ## 개발
 

@@ -40,7 +40,7 @@ This project is an independently maintained fork based on [EcoPaste by EcoPasteH
 
 ## Screenshot Editor
 
-Built-in screen capture with a Shottr-class editor.
+Built-in screen capture with a Shottr-class editor. **Currently Windows-only. Capture and editing on macOS are on hold and not implemented yet** (the menu items and shortcuts don't even appear on macOS).
 
 - 13 annotation tools: arrow, text, ruler, rectangle, backdrop, pen, magnifier, blur, highlighter, spotlight, counter, oval, and line
 - Distinct color per tool icon, with drag-to-reorder toolbar positions
@@ -62,15 +62,33 @@ Ultra Clipboard uses a separate data namespace from EcoPaste. To bring data from
 ## Platform Support
 
 - Windows
-- macOS
+- macOS (core features only — clipboard history, search, sync, etc. Screenshot capture and editing are on hold and not available)
 
-Linux is not supported. `v1.1.3` is the stable release for Windows and macOS. The macOS packages are built in CI, but macOS runtime QA has not yet been completed.
+Linux is not supported. The macOS packages are built in CI, but macOS runtime QA has not yet been completed.
 
 ## Download and Installation
 
 Download the latest builds from [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases).
 
-The `v1.1.3` updater artifacts are signed with a dedicated Tauri key, but the application packages themselves are not code-signed. Windows SmartScreen or macOS Gatekeeper may show a warning; verify the source and file before installing.
+The application packages are not code-signed or notarized (only the updater artifacts are signed with a dedicated Tauri key). Windows SmartScreen or macOS Gatekeeper may show a warning; verify the source and file before installing.
+
+### macOS: "is damaged and can't be opened"
+
+macOS quarantines anything downloaded from the internet, and Gatekeeper blocks apps that aren't signed with an Apple Developer certificate. On recent macOS (Sonoma/Sequoia and later), a fully unsigned app gets the stronger "is damaged and can't be opened" message instead of the milder "unidentified developer" one. **The app isn't actually damaged.**
+
+After moving the `.app` to `/Applications`, run this once in Terminal:
+
+```bash
+xattr -cr /Applications/Ultra\ Clipboard.app
+```
+
+If that fails with `Operation not permitted`, recent macOS requires Terminal to be granted a separate permission before it can touch another app's attributes:
+
+1. Go to **System Settings → Privacy & Security → App Management**
+2. Enable the terminal app you're using (Terminal.app, iTerm2, etc.) — add it with `+` if it isn't listed
+3. Quit and reopen the terminal app, then run the command again
+
+**Removing this warning entirely** requires enrolling in the Apple Developer Program (paid, $99/year) and code-signing plus notarizing the build. That needs a certificate and account setup that hasn't been done yet, so the workaround above is currently the only fix.
 
 ## Development
 
