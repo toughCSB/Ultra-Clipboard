@@ -1,6 +1,32 @@
 # Changelog
 
+## [1.2.2](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.1...v1.2.2) (2026-09-19)
+
+### Fixed
+
+- Keep Windows login autostart in the current user's registry. Enabling, checking, and disabling the setting no longer access HKLM, which could fail with `0x80070005` under a standard account.
+- Wait for the screenshot overlay's first paint before showing it, avoid a duplicate first-session request, and apply window bounds and topmost state before display. An overlay that never paints now times out and cancels the capture instead of showing a blank window.
+
+### Changed
+
+- Enlarge the clipboard card's delete action from 20×20px to 28×28px and give it a clearer danger-colored background, border, and hover state in light and dark themes.
+
+### Release Notes
+
+- Legacy HKLM startup entries are not removed by the current-user setting; removing one requires administrator access.
+- Windows capture flicker, mixed-DPI multi-monitor behavior, and macOS runtime behavior could not be visually verified in the available desktop session.
+- Updater artifacts are signed with a dedicated Tauri minisign key. Windows and macOS application packages remain code-unsigned and may show SmartScreen or Gatekeeper warnings.
+
 ## [1.2.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.0...v1.2.1) (2026-09-18)
+
+### Added
+
+- Add a delete-and-close action to the screenshot editor that closes the editor without copying the capture to the clipboard.
+
+### Changed
+
+- Refine the Windows tray icon with a red background and a high-contrast white clipboard mark.
+- Use Pretendard Black for the app name in the preferences sidebar.
 
 ### Fixed
 
