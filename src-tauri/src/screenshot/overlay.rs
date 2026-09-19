@@ -19,8 +19,8 @@ use crate::window::lifecycle;
 
 pub const OVERLAY_SESSION_EVENT: &str = "screenshot://overlay-session";
 
-/// Shows an overlay even if its frontend never reports the first paint.
-const READY_FALLBACK: Duration = Duration::from_millis(1500);
+/// Ends a capture whose frontend never reports the first paint.
+const READY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,18 +80,21 @@ pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
     };
 
     for label in &labels {
+        let is_new = app.get_webview_window(label).is_none();
         let window = ensure_window(app, label)?;
-        if let Err(err) = window.emit_to(
-            label.as_str(),
-            OVERLAY_SESSION_EVENT,
-            OverlaySessionPayload {
-                label,
-                session_id: Some(session_id),
-            },
-        ) {
-            log::warn!("emit screenshot overlay session to {label} failed: {err}");
+        if !is_new {
+            if let Err(err) = window.emit_to(
+                label.as_str(),
+                OVERLAY_SESSION_EVENT,
+                OverlaySessionPayload {
+                    label,
+                    session_id: Some(session_id),
+                },
+            ) {
+                log::warn!("emit screenshot overlay session to {label} failed: {err}");
+            }
         }
-        schedule_ready_fallback(app, label.clone(), session_id);
+        schedule_ready_timeout(app, label.clone(), session_id);
     }
 
     for (label, window) in app.webview_windows() {
@@ -126,12 +129,10 @@ pub fn reveal(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
     }
 
     apply_bounds(&window, bounds)?;
-    window.show().map_err(|err| anyhow::anyhow!(err))?;
-    // A newly shown window can be resized by a DPI change on another monitor.
-    apply_bounds(&window, bounds)?;
     window
         .set_always_on_top(true)
         .map_err(|err| anyhow::anyhow!(err))?;
+    window.show().map_err(|err| anyhow::anyhow!(err))?;
     if focus {
         window.set_focus().map_err(|err| anyhow::anyhow!(err))?;
     }
@@ -210,20 +211,29 @@ fn apply_bounds(window: &WebviewWindow, bounds: PixelRect) -> Result<()> {
     Ok(())
 }
 
-fn schedule_ready_fallback(app: &AppHandle, label: String, session_id: u64) {
+fn schedule_ready_timeout(app: &AppHandle, label: String, session_id: u64) {
     let app = app.clone();
 
     thread::spawn(move || {
-        thread::sleep(READY_FALLBACK);
+        thread::sleep(READY_TIMEOUT);
 
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            if let Err(err) = reveal(&main_app, &main_label, session_id) {
-                log::warn!("reveal screenshot overlay {main_label} after fallback failed: {err}");
+            let is_current = main_app
+                .state::<ScreenshotState>()
+                .with_session(|session| session.id == session_id)
+                .unwrap_or(false);
+            let is_visible = main_app
+                .get_webview_window(&main_label)
+                .and_then(|window| window.is_visible().ok())
+                .unwrap_or(false);
+            if is_current && !is_visible {
+                log::warn!("screenshot overlay {main_label} was not painted in time");
+                super::cancel_capture(&main_app, Some(session_id));
             }
         }) {
-            log::warn!("screenshot overlay fallback dispatch failed for {label}: {err}");
+            log::warn!("screenshot overlay timeout dispatch failed for {label}: {err}");
         }
     });
 }
