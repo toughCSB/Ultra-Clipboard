@@ -46,7 +46,7 @@ const ClipboardQuickActions: FC<ClipboardQuickActionsProps> = (props) => {
   } as const;
 
   return (
-    <div className="grid h-6 shrink-0 items-center justify-items-end overflow-hidden">
+    <div className="grid h-7 shrink-0 items-center justify-items-end overflow-hidden">
       <span
         className={cn(
           "col-start-1 row-start-1 transition-all duration-150 ease-out motion-reduce:transition-none",
@@ -72,7 +72,12 @@ const ClipboardQuickActions: FC<ClipboardQuickActionsProps> = (props) => {
             {availableActions.map((action) => {
               return (
                 <motion.span
-                  animate={{ opacity: 1, scale: 1, width: "1.25rem", x: 0 }}
+                  animate={{
+                    opacity: 1,
+                    scale: 1,
+                    width: action === "delete" ? "1.75rem" : "1.25rem",
+                    x: 0,
+                  }}
                   className="flex overflow-hidden"
                   exit={{
                     opacity: 0,
@@ -172,9 +177,12 @@ const QuickActionButton: FC<QuickActionButtonProps> = (props) => {
       <button
         aria-label={presentation.label}
         className={cn(
-          "flex size-5 items-center justify-center rounded-1.5 border-0 bg-transparent text-ant-secondary transition-colors hover:bg-ant-fill-tertiary hover:text-ant-text motion-reduce:transition-none",
+          "flex items-center justify-center transition-colors motion-reduce:transition-none",
           {
-            "text-ant-error hover:text-ant-error": presentation.danger,
+            "size-5 rounded-1.5 border-0 bg-transparent text-ant-secondary hover:bg-ant-fill-tertiary hover:text-ant-text":
+              !presentation.danger,
+            "size-7 rounded-2 border border-ant-error-border bg-ant-error-bg text-ant-error-text-active hover:bg-ant-error-bg-hover hover:text-ant-error-text-active focus-visible:ring-2 focus-visible:ring-ant-error focus-visible:ring-inset dark:text-ant-error-text dark:hover:text-ant-error-text":
+              presentation.danger,
             "text-ant-primary hover:text-ant-primary": activePrimary,
             "text-ant-success hover:text-ant-success": copied,
             "text-ant-warning hover:text-ant-warning": activeFavorite,
@@ -189,7 +197,13 @@ const QuickActionButton: FC<QuickActionButtonProps> = (props) => {
         tabIndex={tabIndex}
         type="button"
       >
-        <i aria-hidden="true" className={cn(presentation.icon, "text-sm")} />
+        <i
+          aria-hidden="true"
+          className={cn(presentation.icon, {
+            "text-base": presentation.danger,
+            "text-sm": !presentation.danger,
+          })}
+        />
       </button>
     </Tooltip>
   );
