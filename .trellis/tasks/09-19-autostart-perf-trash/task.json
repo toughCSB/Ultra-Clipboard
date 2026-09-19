@@ -1,0 +1,30 @@
+{
+  "assignee": "Codex",
+  "base_branch": "master",
+  "branch": "release/v1.2.2",
+  "children": [
+    "09-19-autostart",
+    "09-19-capture-performance",
+    "09-19-trash-button"
+  ],
+  "commit": null,
+  "completedAt": null,
+  "createdAt": "2026-09-19",
+  "creator": "Codex",
+  "description": "",
+  "dev_type": null,
+  "id": "autostart-perf-trash",
+  "meta": {},
+  "name": "autostart-perf-trash",
+  "notes": "",
+  "package": null,
+  "parent": null,
+  "pr_url": null,
+  "priority": "P2",
+  "relatedFiles": [],
+  "scope": null,
+  "status": "review",
+  "subtasks": [],
+  "title": "자동 실행, 캡처 반응속도, 삭제 버튼 개선",
+  "worktree_path": null
+}
