@@ -295,6 +295,9 @@ mod tests {
 
     #[test]
     fn missing_fields_fall_back_to_defaults() {
+        let missing_auto_start: Settings = serde_json::from_str(r#"{"general": {}}"#).unwrap();
+        assert!(!missing_auto_start.general.auto_start);
+
         let partial = r#"{"general": {"autoStart": true}}"#;
         let parsed: Settings = serde_json::from_str(partial).unwrap();
         assert!(parsed.general.auto_start);

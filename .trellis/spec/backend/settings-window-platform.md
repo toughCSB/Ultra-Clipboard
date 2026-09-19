@@ -403,32 +403,30 @@ task. Keep this Rust-owned; React only toggles `general.autoStart`.
   - `autostart::sync_enabled(app: &AppHandle, enabled: bool) -> Result<()>`
 - Launch-source matcher:
   - `autostart::is_autostart_launch(args: &[String]) -> bool`
-- Windows Run value name: app package name, currently `EcoPaste`.
+- Windows Run value name: app package name, currently `Ultra Clipboard`.
 - Windows autostart launch arg: `--auto-launch`.
 
 ### 3. Contracts
 
-- Normal Windows autostart uses one effective Run entry only.
-- New Run entries are written with `WindowsEnableMode::CurrentUser`, so an
-  elevated EcoPaste process must not create a fresh HKLM Run value.
+- Windows autostart reads, creates, and deletes only the current user's
+  `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` value. New values use
+  `WindowsEnableMode::CurrentUser`, including from an elevated process.
+- `is_enabled` reads HKCU Run and HKCU `StartupApproved\Run`; `auto-launch`
+  0.6.0's `is_enabled` and `disable` touch HKLM even in CurrentUser mode, so
+  do not use those library methods on Windows.
 - Startup initialization syncs the OS Run entries with
-  `settings.general.auto_start`, so upgrades can repair stale entries from older
-  versions.
+  `settings.general.auto_start` for the current user only.
 - Registry cleanup cannot prevent two legacy Run entries from racing before the
   primary instance finishes setup. The single-instance callback must ignore a
   secondary process whose arguments contain `--auto-launch`; it must not show
   the preference window for that process.
 - A regular second launch without `--auto-launch` remains an explicit user
   action and opens the default foreground window.
-- When enabling autostart and an HKLM Run value already exists, Rust first tries
-  to delete HKLM. If access is denied, Rust deletes HKCU and keeps HKLM as the
-  only effective startup entry instead of creating a duplicate.
-- When disabling autostart, Rust must remove HKCU and HKLM Run entries. If HKLM
-  cannot be removed because the process is not elevated, the direct
-  `set_autostart(false)` action fails instead of persisting a false setting while
-  Windows can still start the app.
-- Remove matching `StartupApproved\Run` shadow values best-effort when deleting
-  Run values so Task Manager and Autoruns do not keep stale EcoPaste rows.
+- Disabling removes the HKCU Run value and best-effort removes the matching
+  HKCU `StartupApproved\Run` shadow value. It never accesses HKLM.
+- Legacy HKLM Run values are outside this setting's control. A user who has one
+  may need an administrator to remove it separately; do not try to silently
+  repair it from this toggle.
 - `admin::sync_scheduled_task` owns the `EcoPasteAdmin` task for administrator
   relaunch support. Do not use that task as a second normal autostart path
   without redesigning the interaction with `general.auto_start`.
@@ -436,12 +434,11 @@ task. Keep this Rust-owned; React only toggles `general.autoStart`.
 ### 4. Validation & Error Matrix
 
 - HKCU Run missing -> cleanup succeeds.
-- HKLM Run missing -> cleanup succeeds.
-- Enable with removable HKLM Run -> delete HKLM, then create/update HKCU.
-- Enable with inaccessible HKLM Run -> delete HKCU, return success with HKLM as
-  the only startup entry.
-- Disable with inaccessible HKLM Run -> command error from registry access;
-  frontend should not persist `general.autoStart=false`.
+- Enable -> create/update HKCU Run and StartupApproved values.
+- Disable -> remove HKCU Run; an inaccessible HKCU Run key returns an error, so
+  the frontend does not persist `general.autoStart=false`.
+- HKLM inaccessible or containing an older entry -> no HKLM access or mutation;
+  report the legacy entry as a separate limitation if observed.
 - Startup sync failure after settings load -> log warning and continue app
   startup.
 - Secondary instance with `--auto-launch` -> return from the single-instance
@@ -451,30 +448,25 @@ task. Keep this Rust-owned; React only toggles `general.autoStart`.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: user enables autostart from an elevated process and only HKCU Run is
-  created.
-- Good: user upgrades with both HKCU and HKLM Run values; next startup removes
-  the duplicate when permissions allow, while the already-racing secondary
-  instance exits without opening preferences.
-- Base: user has a locked HKLM Run value from an older install; EcoPaste keeps
-  that single entry and avoids adding HKCU.
-- Base: user manually launches EcoPaste while it is running; the primary
+- Good: user enables autostart from a normal or elevated process and only the
+  HKCU Run value is created or updated.
+- Base: a legacy HKLM Run value may cause a second login launch; the
+  single-instance callback ignores a secondary `--auto-launch` process.
+- Base: user manually launches Ultra Clipboard while it is running; the primary
   instance opens preferences as expected.
-- Bad: `auto-launch` stays in dynamic Windows mode and creates HKLM when the app
-  happens to be elevated.
-- Bad: disabling autostart reports success while an inaccessible HKLM Run value
-  remains active.
+- Bad: calling `auto-launch` 0.6.0's `disable` or `is_enabled` reads or deletes
+  HKLM despite `WindowsEnableMode::CurrentUser`, causing access denied errors.
 
 ### 6. Tests Required
 
 - Backend: `cargo check`, `cargo clippy -- -D warnings`, and `cargo test`.
 - Unit tests: `is_autostart_launch` returns true when `--auto-launch` is present
   and false for a regular executable-only argument list.
-- Windows validation: enable autostart as normal user and elevated user, inspect
-  Autoruns for a single EcoPaste Run entry, then disable and verify no Run entry
-  remains.
-- Upgrade validation: seed both HKCU and HKLM `...\Run\EcoPaste` values, launch
-  EcoPaste once, and verify duplicate cleanup or single-entry fallback.
+- Windows validation: enable and disable in an isolated QA app, inspect the
+  HKCU Run and StartupApproved values and persisted setting after each action.
+- Upgrade validation: a missing `general.autoStart` field defaults to false.
+- Elevated and multi-user validation: when available, confirm CurrentUser mode
+  never writes or deletes HKLM and only changes the active user's HKCU value.
 - Administrator validation: with `general.runAsAdmin=true`, confirm
   `EcoPasteAdmin` remains a relaunch helper and does not combine with duplicate
   Run entries to start multiple processes at login.
@@ -500,6 +492,27 @@ builder
     .set_app_path(&exe_path)
     .set_args(&[AUTO_LAUNCH_ARG]);
 builder.set_windows_enable_mode(WindowsEnableMode::CurrentUser);
+```
+
+Wrong:
+
+```rust
+let enabled = auto_launch.is_enabled()?;
+auto_launch.disable()?;
+```
+
+Correct:
+
+```rust
+let registered = match CURRENT_USER
+    .open(WINDOWS_RUN_KEY)
+    .and_then(|key| key.get_string(app_name))
+{
+    Ok(_) => true,
+    Err(err) if registry_error_is_file_not_found(&err) => false,
+    Err(err) => return Err(registry_app_error("read current-user autostart entry", err)),
+};
+cleanup_current_user_run_entry(app_name)?;
 ```
 
 Wrong:

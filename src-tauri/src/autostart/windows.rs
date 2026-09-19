@@ -1,4 +1,5 @@
 use auto_launch::{AutoLaunch, AutoLaunchBuilder, WindowsEnableMode};
+use windows_registry::CURRENT_USER;
 
 use crate::core::{windows_args, AppError, Result};
 
@@ -8,7 +9,6 @@ const WINDOWS_RUN_KEY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
 const WINDOWS_STARTUP_APPROVED_RUN_KEY: &str =
     r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 const WIN32_ERROR_FILE_NOT_FOUND: u32 = 2;
-const WIN32_ERROR_ACCESS_DENIED: u32 = 5;
 
 pub(super) struct PlatformAutostart {
     inner: AutoLaunch,
@@ -33,87 +33,55 @@ impl PlatformAutostart {
     }
 
     pub(super) fn is_enabled(&self) -> Result<bool> {
-        self.inner.is_enabled().map_err(|err| {
-            log::error!("autostart is_enabled failed: {err}");
-            AppError::Other(anyhow::anyhow!("{err}"))
-        })
+        let app_name = self.inner.get_app_name();
+        let registered = match CURRENT_USER
+            .open(WINDOWS_RUN_KEY)
+            .and_then(|key| key.get_string(app_name))
+        {
+            Ok(_) => true,
+            Err(err) if registry_error_is_file_not_found(&err) => false,
+            Err(err) => return Err(registry_app_error("read current-user autostart entry", err)),
+        };
+        if !registered {
+            return Ok(false);
+        }
+
+        match CURRENT_USER
+            .open(WINDOWS_STARTUP_APPROVED_RUN_KEY)
+            .and_then(|key| key.get_value(app_name))
+        {
+            Ok(value) => {
+                Ok(value.len() < 8 || value[value.len() - 8..].iter().all(|byte| *byte == 0))
+            }
+            Err(err) if registry_error_is_file_not_found(&err) => Ok(true),
+            Err(err) => Err(registry_app_error(
+                "read current-user startup approval",
+                err,
+            )),
+        }
     }
 
     pub(super) fn set_enabled(&self, enabled: bool) -> Result<()> {
         if enabled {
-            if keep_existing_system_run_entry_if_needed(self.inner.get_app_name())? {
-                return Ok(());
-            }
-
             return self.inner.enable().map_err(|err| {
                 log::error!("autostart enable failed: {err}");
                 AppError::Other(anyhow::anyhow!("{err}"))
             });
         }
 
-        cleanup_windows_run_entries(self.inner.get_app_name())
+        cleanup_current_user_run_entry(self.inner.get_app_name())
     }
-}
-
-fn keep_existing_system_run_entry_if_needed(app_name: &str) -> Result<bool> {
-    if !system_run_entry_exists(app_name)? {
-        return Ok(false);
-    }
-
-    match cleanup_system_run_entry(app_name) {
-        Ok(()) => Ok(false),
-        Err(err) if registry_error_is_access_denied(&err) => {
-            cleanup_current_user_run_entry(app_name)?;
-            log::warn!(
-                "autostart: HKLM Run entry exists but cannot be removed; keeping it as the only startup entry"
-            );
-            Ok(true)
-        }
-        Err(err) => Err(registry_app_error("remove system autostart entry", err)),
-    }
-}
-
-fn system_run_entry_exists(app_name: &str) -> Result<bool> {
-    use windows_registry::LOCAL_MACHINE;
-
-    match LOCAL_MACHINE
-        .open(WINDOWS_RUN_KEY)
-        .and_then(|key| key.get_string(app_name))
-    {
-        Ok(_) => Ok(true),
-        Err(err) if registry_error_is_file_not_found(&err) => Ok(false),
-        Err(err) => Err(registry_app_error("read system autostart entry", err)),
-    }
-}
-
-fn cleanup_system_run_entry(app_name: &str) -> std::result::Result<(), windows_result::Error> {
-    use windows_registry::LOCAL_MACHINE;
-
-    cleanup_run_entry(LOCAL_MACHINE, app_name)?;
-    cleanup_startup_approved_entry(LOCAL_MACHINE, app_name);
-    Ok(())
 }
 
 fn cleanup_current_user_run_entry(app_name: &str) -> Result<()> {
-    use windows_registry::CURRENT_USER;
-
-    cleanup_run_entry(CURRENT_USER, app_name)
+    cleanup_run_entry(app_name)
         .map_err(|err| registry_app_error("remove current-user autostart entry", err))?;
-    cleanup_startup_approved_entry(CURRENT_USER, app_name);
+    cleanup_startup_approved_entry(app_name);
     Ok(())
 }
 
-fn cleanup_windows_run_entries(app_name: &str) -> Result<()> {
-    cleanup_current_user_run_entry(app_name)?;
-    cleanup_system_run_entry(app_name)
-        .map_err(|err| registry_app_error("remove system autostart entry", err))
-}
-
-fn cleanup_run_entry(
-    root_key: &windows_registry::Key,
-    app_name: &str,
-) -> std::result::Result<(), windows_result::Error> {
-    match root_key
+fn cleanup_run_entry(app_name: &str) -> std::result::Result<(), windows_result::Error> {
+    match CURRENT_USER
         .options()
         .write()
         .open(WINDOWS_RUN_KEY)
@@ -125,8 +93,8 @@ fn cleanup_run_entry(
     }
 }
 
-fn cleanup_startup_approved_entry(root_key: &windows_registry::Key, app_name: &str) {
-    match root_key
+fn cleanup_startup_approved_entry(app_name: &str) {
+    match CURRENT_USER
         .options()
         .write()
         .open(WINDOWS_STARTUP_APPROVED_RUN_KEY)
@@ -138,10 +106,6 @@ fn cleanup_startup_approved_entry(root_key: &windows_registry::Key, app_name: &s
             log::debug!("autostart: cleanup StartupApproved value failed: {err}");
         }
     }
-}
-
-fn registry_error_is_access_denied(err: &windows_result::Error) -> bool {
-    err.code() == windows_result::HRESULT::from_win32(WIN32_ERROR_ACCESS_DENIED)
 }
 
 fn registry_error_is_file_not_found(err: &windows_result::Error) -> bool {
