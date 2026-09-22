@@ -1,7 +1,7 @@
 import type { PixelPoint, PixelRect } from "@/utils/pixelRect";
 
 export interface OverlayMarks {
-  bitmap: ImageBitmap;
+  bitmap: HTMLCanvasElement;
   /** Device pixels per CSS pixel for this monitor. */
   ratio: number;
   pointer: PixelPoint | null;
@@ -86,7 +86,7 @@ const drawCrosshair = (
 
 const drawLoupe = (
   context: CanvasRenderingContext2D,
-  bitmap: ImageBitmap,
+  bitmap: HTMLCanvasElement,
   pointer: PixelPoint,
   ratio: number,
 ) => {

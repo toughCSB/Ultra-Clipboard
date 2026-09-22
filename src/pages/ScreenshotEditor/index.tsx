@@ -19,7 +19,6 @@ import {
 import { TAURI_EVENT } from "@/constants/events";
 import { useTauriListen } from "@/hooks/useTauriListen";
 import { getMessageApi, getModalApi } from "@/utils/feedback";
-import { isWin } from "@/utils/is";
 import { log } from "@/utils/log";
 import {
   intersectRects,
@@ -131,6 +130,7 @@ const ScreenshotEditor: FC = () => {
   const dragPreparationRef = useRef<DragPreparation | null>(null);
   const textEditRef = useRef<TextEditState | null>(null);
   const closingRef = useRef(false);
+  const loadStartedAtRef = useRef(performance.now());
   const present = history?.present ?? null;
   const shown = draft ?? present;
   const scale = Math.max(1, image?.info.scaleFactor ?? 1);
@@ -142,11 +142,21 @@ const ScreenshotEditor: FC = () => {
   useMount(async () => {
     try {
       const info = await getScreenshotImageInfo(label);
+      const infoMs = performance.now() - loadStartedAtRef.current;
       const buffer = await getScreenshotImage(label);
+      const pixelsMs = performance.now() - loadStartedAtRef.current - infoMs;
       const pixels = new Uint8ClampedArray(buffer);
       const bitmap = await createImageBitmap(
         new ImageData(pixels, info.width, info.height),
       );
+      const bitmapMs =
+        performance.now() - loadStartedAtRef.current - infoMs - pixelsMs;
+      log.info("screenshot editor image ready", {
+        bitmapMs: Math.round(bitmapMs),
+        infoMs: Math.round(infoMs),
+        label,
+        pixelsMs: Math.round(pixelsMs),
+      });
       const initial = createDocument({
         height: info.height,
         width: info.width,
@@ -234,6 +244,10 @@ const ScreenshotEditor: FC = () => {
   });
 
   const handleFirstPaint = useMemoizedFn(async () => {
+    log.info("screenshot editor painted", {
+      label,
+      totalMs: Math.round(performance.now() - loadStartedAtRef.current),
+    });
     try {
       await notifyScreenshotWindowReady(label);
     } catch (error) {
@@ -763,7 +777,7 @@ const ScreenshotEditor: FC = () => {
         });
         return;
       case "KeyO":
-        if (event.shiftKey && isWin) {
+        if (event.shiftKey) {
           run(() => {
             void runExport("ocr");
           });
@@ -964,7 +978,7 @@ const ScreenshotEditor: FC = () => {
         onMoveWindow={moveWindow}
         onPasteImage={handlePasteImage}
         onPin={handlePin}
-        onRecognizeText={isWin ? handleRecognizeText : undefined}
+        onRecognizeText={handleRecognizeText}
         onSave={handleSave}
         onToolChange={changeTool}
         onZoomToggle={toggleZoom}

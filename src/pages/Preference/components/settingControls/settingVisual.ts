@@ -55,6 +55,7 @@ const SETTING_ICON_MAP: Record<string, string> = {
   "permissions.accessibility": "i-lucide:accessibility",
   "permissions.fullDiskAccess": "i-lucide:hard-drive",
   "permissions.runAsAdministrator": "i-lucide:shield-alert",
+  "permissions.screenRecording": "i-lucide:scan",
   "preview.delay": "i-lucide:timer",
   "preview.hover": "i-lucide:mouse-pointer-2",
   "preview.space": "i-lucide:space",

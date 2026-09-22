@@ -477,6 +477,10 @@
         "runAsAdministrator": {
           "description": "Ultra Clipboard를 관리자 권한으로 다시 시작하고, 필요할 때 이후 실행도 권한을 유지합니다.",
           "title": "관리자 권한으로 실행"
+        },
+        "screenRecording": {
+          "description": "화면을 캡처하고 편집기에 불러올 때 사용합니다.",
+          "title": "화면 기록 권한"
         }
       },
       "preview": {

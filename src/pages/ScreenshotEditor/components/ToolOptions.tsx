@@ -13,6 +13,7 @@ import {
   COLOR_PRESETS,
   COUNTER_SIZE_RANGE,
   type EditorTool,
+  HIGHLIGHT_OPACITY_RANGE,
   HIGHLIGHT_PRESETS,
   MAGNIFIER_ZOOMS,
   STROKE_RANGE,
@@ -250,6 +251,26 @@ const ToolOptions: FC<ToolOptionsProps> = (props) => {
           onChange={(highlightColor) => change({ highlightColor })}
           value={style.highlightColor}
         />
+      </Row>,
+      <Row key="highlightOpacity" label={t("editor.options.intensity")}>
+        <div className="flex items-center gap-2">
+          <Slider
+            aria-label={t("editor.options.intensity")}
+            className="m-0 flex-1"
+            max={HIGHLIGHT_OPACITY_RANGE.max}
+            min={HIGHLIGHT_OPACITY_RANGE.min}
+            onChange={(highlightOpacity) => {
+              onStyleChange({ highlightOpacity }, false);
+            }}
+            onChangeComplete={(highlightOpacity) => {
+              change({ highlightOpacity });
+            }}
+            value={style.highlightOpacity}
+          />
+          <span className="w-9 text-right text-ant-secondary text-xs">
+            {style.highlightOpacity}%
+          </span>
+        </div>
       </Row>,
     );
   }

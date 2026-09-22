@@ -1,6 +1,13 @@
 {
   "bundle": {
-    "resources": ["assets/tray-mac.ico"]
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    },
+    "resources": [
+      "assets/tray-mac.ico",
+      "en.lproj/InfoPlist.strings",
+      "ko.lproj/InfoPlist.strings"
+    ]
   },
   "identifier": "com.toughcsb.ultraclipboard"
 }

@@ -6,8 +6,10 @@ import { useTranslation } from "react-i18next";
 import {
   checkAccessibilityPermission,
   checkFullDiskAccessPermission,
+  checkScreenRecordingPermission,
   requestAccessibilityPermission,
   requestFullDiskAccessPermission,
+  requestScreenRecordingPermission,
 } from "tauri-plugin-macos-permissions-api";
 import { getRunAsAdminStatus, restartAsAdmin, setRunAsAdmin } from "@/commands";
 import { getModalApi } from "@/utils/feedback";
@@ -199,6 +201,15 @@ async function readPermissionState(
     };
   }
 
+  if (kind === "screenRecording") {
+    const granted = await checkScreenRecordingPermission();
+
+    return {
+      configured: false,
+      status: granted ? "granted" : "denied",
+    };
+  }
+
   return {
     configured: false,
     status: "notRequired",
@@ -213,5 +224,10 @@ async function requestSystemPermission(kind: PermissionKind): Promise<void> {
 
   if (kind === "fullDiskAccess") {
     await requestFullDiskAccessPermission();
+    return;
+  }
+
+  if (kind === "screenRecording") {
+    await requestScreenRecordingPermission();
   }
 }

@@ -21,12 +21,33 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::core::Result;
 use crate::screenshot::geometry::{bgra_to_rgba_opaque, PixelRect};
+use crate::screenshot::state::MonitorGeometry;
 
 /// Desktop shell windows cover every monitor and would hide real windows in window mode.
 const SHELL_BACKGROUND_CLASSES: [&str; 2] = ["Progman", "WorkerW"];
 
 pub fn is_supported() -> bool {
     true
+}
+
+pub struct CaptureContext;
+
+impl CaptureContext {
+    pub fn new(_monitors: &[MonitorGeometry]) -> Result<Self> {
+        Ok(Self)
+    }
+
+    pub fn capture_rect(&self, rect: PixelRect) -> Result<Vec<u8>> {
+        capture_rect(rect)
+    }
+
+    pub fn list_windows(&self) -> Vec<PixelRect> {
+        list_windows()
+    }
+}
+
+pub fn is_permission_error(_error: &crate::core::AppError) -> bool {
+    false
 }
 
 /// Copies the composed desktop inside `rect` as opaque RGBA.

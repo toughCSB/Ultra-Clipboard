@@ -666,6 +666,20 @@ export const preferenceTabs: PreferenceTab[] = [
                   ? [
                       {
                         control: {
+                          kind: "screenRecording",
+                          type: "permission",
+                        } as const,
+                        id: "permissions.screenRecording",
+                        keywords: [
+                          "screen recording",
+                          "screenshot",
+                          "capture",
+                          "permission",
+                          "macos",
+                        ],
+                      },
+                      {
+                        control: {
                           kind: "accessibility",
                           type: "permission",
                         } as const,
@@ -741,7 +755,7 @@ export const preferenceTabs: PreferenceTab[] = [
               return settings.shortcuts.openPreference;
             },
           },
-          ...(isWin
+          ...(isMac || isWin
             ? [
                 {
                   control: { type: "shortcutRecorder" } as const,
@@ -794,6 +808,10 @@ export const preferenceTabs: PreferenceTab[] = [
                     return settings.shortcuts.captureDelayed;
                   },
                 },
+              ]
+            : []),
+          ...(isWin
+            ? [
                 {
                   control: { type: "switch" } as const,
                   id: "shortcuts.winV",

@@ -2,7 +2,7 @@
 //! select an area or window; editing always happens in the editor window.
 
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::window::Color;
@@ -68,6 +68,7 @@ pub fn state_for(session: &CaptureSession, label: &str) -> Option<OverlayState> 
 /// Prepares one hidden overlay per captured monitor and asks each frontend to paint.
 /// Windows become visible in [`reveal`] after the frozen frame is drawn.
 pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
+    let started = Instant::now();
     let state = app.state::<ScreenshotState>();
     let Some(labels) = state.with_session(|session| {
         session
@@ -102,6 +103,12 @@ pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
             hide_window(app, &label, &window);
         }
     }
+
+    log::info!(
+        "screenshot overlay windows prepared: {} in {}ms",
+        labels.len(),
+        started.elapsed().as_millis()
+    );
 
     Ok(())
 }
@@ -150,6 +157,15 @@ pub fn hide_all(app: &AppHandle) {
 }
 
 fn hide_window(app: &AppHandle, label: &str, window: &WebviewWindow) {
+    if window.is_visible().unwrap_or(false) {
+        if let Err(err) = window.hide() {
+            log::warn!("hide screenshot overlay {label} failed: {err}");
+            return;
+        }
+
+        lifecycle::on_hidden(app, label, "screenshot-overlay-hide");
+    }
+
     if let Err(err) = window.emit_to(
         label,
         OVERLAY_SESSION_EVENT,
@@ -160,17 +176,6 @@ fn hide_window(app: &AppHandle, label: &str, window: &WebviewWindow) {
     ) {
         log::warn!("emit screenshot overlay reset to {label} failed: {err}");
     }
-
-    if !window.is_visible().unwrap_or(false) {
-        return;
-    }
-
-    if let Err(err) = window.hide() {
-        log::warn!("hide screenshot overlay {label} failed: {err}");
-        return;
-    }
-
-    lifecycle::on_hidden(app, label, "screenshot-overlay-hide");
 }
 
 fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow> {
@@ -178,7 +183,7 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow> {
         return Ok(window);
     }
 
-    WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app,
         label,
         WebviewUrl::App("index.html/#/screenshot-overlay".into()),
@@ -191,13 +196,21 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow> {
     .always_on_top(true)
     .skip_taskbar(true)
     .shadow(false)
-    .background_color(Color(0, 0, 0, 255))
     .accept_first_mouse(true)
     .disable_drag_drop_handler()
     .focused(false)
-    .visible(false)
-    .build()
-    .map_err(|err| anyhow::anyhow!("build screenshot overlay window: {err}").into())
+    .visible(false);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .transparent(true)
+        .background_color(Color(0, 0, 0, 0));
+    #[cfg(target_os = "windows")]
+    let builder = builder.background_color(Color(0, 0, 0, 255));
+
+    builder
+        .build()
+        .map_err(|err| anyhow::anyhow!("build screenshot overlay window: {err}").into())
 }
 
 fn apply_bounds(window: &WebviewWindow, bounds: PixelRect) -> Result<()> {

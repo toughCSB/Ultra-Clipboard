@@ -38,7 +38,11 @@ export const styleFromShape = (
         strokeWidth: (shape.strokeWidth / scale) * 2,
       };
     case "highlighter":
-      return { ...base, highlightColor: shape.color };
+      return {
+        ...base,
+        highlightColor: shape.color,
+        highlightOpacity: shape.opacity,
+      };
     case "blur":
       return {
         ...base,
@@ -119,7 +123,11 @@ export const applyStyleToShape = (
             : Math.max(1, patch.strokeWidth / 2) * scale,
       };
     case "highlighter":
-      return { ...shape, color: patch.highlightColor ?? shape.color };
+      return {
+        ...shape,
+        color: patch.highlightColor ?? shape.color,
+        opacity: patch.highlightOpacity ?? shape.opacity,
+      };
     case "blur": {
       const mode = patch.blurMode ?? shape.mode;
       const box = snapBox(shape);

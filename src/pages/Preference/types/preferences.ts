@@ -41,7 +41,11 @@ export type PreferenceControl =
   | { type: "switch" }
   | {
       type: "permission";
-      kind: "accessibility" | "fullDiskAccess" | "runAsAdministrator";
+      kind:
+        | "accessibility"
+        | "fullDiskAccess"
+        | "runAsAdministrator"
+        | "screenRecording";
     }
   | { type: "segmented"; options: PreferenceOption[] }
   | { type: "select"; options: PreferenceOption[]; mode?: "multiple" }

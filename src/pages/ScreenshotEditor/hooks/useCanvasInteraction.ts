@@ -167,7 +167,13 @@ export const useCanvasInteraction = (
           strokeWidth,
         };
       case "highlighter":
-        return { ...box, color: style.highlightColor, id, kind: "highlighter" };
+        return {
+          ...box,
+          color: style.highlightColor,
+          id,
+          kind: "highlighter",
+          opacity: style.highlightOpacity,
+        };
       case "blur":
         return {
           ...box,

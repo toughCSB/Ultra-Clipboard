@@ -243,9 +243,22 @@ export const drawShape = (
       drawPen(context, shape);
       break;
     case "highlighter":
-      context.globalCompositeOperation = "multiply";
       context.fillStyle = shape.color;
-      context.fillRect(shape.x, shape.y, shape.width, shape.height);
+      context.beginPath();
+      context.roundRect(
+        shape.x,
+        shape.y,
+        shape.width,
+        shape.height,
+        Math.min(3, shape.width / 2, shape.height / 2),
+      );
+      // A light ink wash stays visible on dark captures; multiply keeps dark
+      // lettering readable under the vivid marker color on light captures.
+      context.globalAlpha = (shape.opacity / 100) * 0.25;
+      context.fill();
+      context.globalCompositeOperation = "multiply";
+      context.globalAlpha = shape.opacity / 100;
+      context.fill();
       break;
     case "counter":
       drawCounter(context, shape);

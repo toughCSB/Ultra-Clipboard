@@ -1,13 +1,19 @@
+import { lazy } from "react";
 import { createHashRouter } from "react-router";
-import Clipboard from "@/pages/Clipboard";
-import ContextMenu, { ContextSubmenu } from "@/pages/ContextMenu";
-import Onboarding from "@/pages/Onboarding";
-import Preference from "@/pages/Preference";
-import Preview from "@/pages/Preview";
-import ScreenshotEditor from "@/pages/ScreenshotEditor";
-import ScreenshotOverlay from "@/pages/ScreenshotOverlay";
-import ScreenshotPin from "@/pages/ScreenshotPin";
-import Update from "@/pages/Update";
+
+const Clipboard = lazy(() => import("@/pages/Clipboard"));
+const ContextMenu = lazy(() => import("@/pages/ContextMenu"));
+const ContextSubmenu = lazy(async () => {
+  const page = await import("@/pages/ContextMenu");
+  return { default: page.ContextSubmenu };
+});
+const Onboarding = lazy(() => import("@/pages/Onboarding"));
+const Preference = lazy(() => import("@/pages/Preference"));
+const Preview = lazy(() => import("@/pages/Preview"));
+const ScreenshotEditor = lazy(() => import("@/pages/ScreenshotEditor"));
+const ScreenshotOverlay = lazy(() => import("@/pages/ScreenshotOverlay"));
+const ScreenshotPin = lazy(() => import("@/pages/ScreenshotPin"));
+const Update = lazy(() => import("@/pages/Update"));
 
 export const router = createHashRouter([
   {

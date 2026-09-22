@@ -13,7 +13,7 @@ fn failure(message: impl std::fmt::Display) -> AppError {
 
 /// Small captures are enlarged before recognition because the Windows engine
 /// misses UI-sized glyphs. Returns the scale for an image of this size.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 fn upscale_factor(width: u32, height: u32, max_dimension: u32) -> u32 {
     const SMALL_SIDE: u32 = 1200;
 
@@ -107,7 +107,105 @@ mod platform {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+mod platform {
+    use std::ffi::c_void;
+
+    use image::imageops::{self, FilterType};
+    use image::{ImageBuffer, Rgba};
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2::AnyThread;
+    use objc2_foundation::{NSArray, NSData, NSDictionary};
+    use objc2_vision::{
+        VNImageOption, VNImageRequestHandler, VNRecognizeTextRequest, VNRequest,
+        VNRequestTextRecognitionLevel,
+    };
+
+    use super::{failure, upscale_factor};
+    use crate::core::Result;
+    use crate::screenshot::output;
+
+    struct RecognizedLine {
+        x: f64,
+        y: f64,
+        text: String,
+    }
+
+    pub fn recognize(width: u32, height: u32, rgba: &[u8]) -> Result<String> {
+        let source = ImageBuffer::<Rgba<u8>, &[u8]>::from_raw(width, height, rgba)
+            .ok_or_else(|| failure("image size does not match its pixels"))?;
+        let factor = upscale_factor(width, height, u32::MAX);
+        let (target_width, target_height, pixels) = if factor == 1 {
+            (width, height, source.into_raw().to_vec())
+        } else {
+            let resized = imageops::resize(
+                &source,
+                width.saturating_mul(factor),
+                height.saturating_mul(factor),
+                FilterType::CatmullRom,
+            );
+            (resized.width(), resized.height(), resized.into_raw())
+        };
+        let png = output::encode_png(target_width, target_height, &pixels)?;
+        // SAFETY: NSData copies the complete PNG buffer before this call returns.
+        let image_data =
+            unsafe { NSData::dataWithBytes_length(png.as_ptr().cast::<c_void>(), png.len()) };
+        let options: Retained<NSDictionary<VNImageOption, AnyObject>> =
+            NSDictionary::from_slices::<VNImageOption>(&[], &[]);
+        let handler = VNImageRequestHandler::initWithData_options(
+            VNImageRequestHandler::alloc(),
+            &image_data,
+            &options,
+        );
+        let request = VNRecognizeTextRequest::new();
+        request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);
+        request.setAutomaticallyDetectsLanguage(true);
+        request.setUsesLanguageCorrection(true);
+
+        let base_request: Retained<VNRequest> = request.clone().into_super().into_super();
+        let requests = NSArray::from_retained_slice(&[base_request]);
+        handler.performRequests_error(&requests).map_err(failure)?;
+
+        let mut lines = request
+            .results()
+            .map(|observations| {
+                observations
+                    .iter()
+                    .filter_map(|observation| {
+                        let candidate = observation.topCandidates(1).to_vec().into_iter().next()?;
+                        let text = candidate.string().to_string();
+                        if text.trim().is_empty() {
+                            return None;
+                        }
+                        // SAFETY: Vision returns a finite normalized rectangle for each result.
+                        let bounds = unsafe { observation.boundingBox() };
+
+                        Some(RecognizedLine {
+                            x: bounds.origin.x,
+                            y: bounds.origin.y,
+                            text,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        lines.sort_by(|left, right| {
+            right
+                .y
+                .total_cmp(&left.y)
+                .then_with(|| left.x.total_cmp(&right.x))
+        });
+
+        Ok(lines
+            .into_iter()
+            .map(|line| line.text)
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod platform {
     use super::failure;
     use crate::core::Result;
@@ -126,5 +224,18 @@ mod tests {
         assert_eq!(upscale_factor(640, 200, 10_000), 2);
         assert_eq!(upscale_factor(2160, 3840, 10_000), 1);
         assert_eq!(upscale_factor(1000, 10, 1_500), 1);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vision_recognizes_ui_text_fixture() {
+        let image = image::load_from_memory(include_bytes!("../../tests/fixtures/vision-ocr.png"))
+            .unwrap()
+            .to_rgba8();
+        let text = recognize(image.width(), image.height(), image.as_raw()).unwrap();
+
+        assert!(text.contains("ULTRA"), "recognized: {text:?}");
+        assert!(text.contains("CLIPBOARD"), "recognized: {text:?}");
+        assert!(text.contains("123"), "recognized: {text:?}");
     }
 }

@@ -2,7 +2,7 @@
 //! captured pixels until the window closes.
 
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
@@ -52,11 +52,20 @@ impl ImageInfo {
 
 /// Opens a hidden editor sized around the image on the capture monitor.
 /// The window is shown once the frontend has painted the image.
-pub fn open(app: &AppHandle, image: CapturedImage, monitor: MonitorGeometry) -> Result<()> {
+pub fn open(
+    app: &AppHandle,
+    image: CapturedImage,
+    monitor: MonitorGeometry,
+    handoff_overlay: bool,
+) -> Result<()> {
+    let started = Instant::now();
     let state = app.state::<ScreenshotState>();
     let label = format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id());
     let (width, height) = window_size(&image, &monitor);
     state.insert_image(&label, image);
+    if handoff_overlay {
+        state.begin_editor_handoff(&label);
+    }
 
     let builder = WebviewWindowBuilder::new(
         app,
@@ -91,6 +100,10 @@ pub fn open(app: &AppHandle, image: CapturedImage, monitor: MonitorGeometry) -> 
     if let Err(err) = center_on_monitor(&window, &monitor) {
         log::warn!("center screenshot editor {label} failed: {err}");
     }
+    log::info!(
+        "screenshot editor {label} window prepared in {}ms",
+        started.elapsed().as_millis()
+    );
     schedule_ready_fallback(app, label);
 
     Ok(())
@@ -99,16 +112,31 @@ pub fn open(app: &AppHandle, image: CapturedImage, monitor: MonitorGeometry) -> 
 /// Shows a painted editor or pin window and brings it to the front.
 pub fn reveal(app: &AppHandle, label: &str) -> Result<()> {
     let Some(window) = app.get_webview_window(label) else {
+        finish_overlay_handoff(app, label);
         return Ok(());
     };
     if window.is_visible().unwrap_or(false) {
+        finish_overlay_handoff(app, label);
         return Ok(());
     }
 
-    window.show().map_err(|err| anyhow::anyhow!(err))?;
+    if let Err(err) = window.show() {
+        finish_overlay_handoff(app, label);
+        return Err(anyhow::anyhow!(err).into());
+    }
+    finish_overlay_handoff(app, label);
     window.set_focus().map_err(|err| anyhow::anyhow!(err))?;
 
     Ok(())
+}
+
+fn finish_overlay_handoff(app: &AppHandle, label: &str) {
+    if app
+        .state::<ScreenshotState>()
+        .complete_editor_handoff(label)
+    {
+        super::overlay::hide_all(app);
+    }
 }
 
 /// Asks the editor frontend to run its close flow, which confirms unsaved edits.

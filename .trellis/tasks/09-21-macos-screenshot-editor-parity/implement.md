@@ -1,0 +1,116 @@
+# Implementation Plan
+
+## 1. 작업 기반 준비
+
+- [ ] Trellis task를 시작하고 `master` 기준 전용 작업 브랜치를 만든다.
+- [ ] 사용자의 기존 untracked `tmp/bd1e0fbf-d8ad-4173-8f6b-eefeb18f6144.png`를 변경하거나 삭제하지 않는다.
+- [x] Mac에 격리된 checkout을 준비하고 정식 앱 v1.2.2를 `/Applications/Ultra Clipboard.app`에 설치한다. 별도 QA 앱과 전용 데이터를 제거하고 QA bundle ID 권한 기록을 초기화한다.
+- [ ] 작업 전 Windows와 Mac의 기본 lint/type/test/build 상태를 기록한다.
+
+## 2. macOS 번들 및 의존성
+
+- [ ] `objc2-screen-capture-kit`, `objc2-core-graphics`, `objc2-vision`, `block2`를 macOS target 의존성으로 추가하고 lockfile을 갱신한다.
+- [ ] 실제 호출에 필요한 feature만 남기고 `cargo tree -d`를 확인한다.
+- [ ] macOS 최소 버전을 `14.0`으로 설정한다.
+- [ ] `NSScreenCaptureUsageDescription`과 한국어·영어 `InfoPlist.strings`를 번들에 추가한다.
+- [ ] 생성된 `.app/Contents/Info.plist`와 localization 리소스를 실제 build artifact에서 확인한다.
+
+## 3. 캡처 컨텍스트와 권한
+
+- [ ] 플랫폼 backend에 `CaptureContext` 계약을 추가하고 Windows 구현을 기존 GDI 경로에 연결한다.
+- [ ] macOS 화면 기록 권한 preflight/request와 사용자 오류 상태를 구현한다.
+- [ ] `SCShareableContent` 비동기 조회, 제한 시간, 오류 변환을 구현한다.
+- [ ] 캡처 실패나 제한 시간 초과 시 `ScreenshotState.capturing`이 항상 해제되는지 테스트한다.
+- [ ] 권한 미허용 시 Preferences의 화면 기록 설정으로 이동하고 강조한다.
+
+## 4. 디스플레이 매핑과 픽셀 캡처
+
+- [ ] SCDisplay와 Tauri monitor를 안정적으로 매칭하는 display catalog를 구현한다.
+- [ ] 물리 픽셀 rect와 display-local point sourceRect 사이의 변환을 구현한다.
+- [ ] 1x/2x, 혼합 배율, 음수 원점, 상하 배치, 경계 교차 반례의 단위 테스트를 추가한다.
+- [ ] `SCScreenshotManager`로 rect를 캡처하고 CGImage를 불투명 RGBA로 정규화한다.
+- [ ] cursor 제외, SDR/sRGB, 출력 픽셀 크기 검증을 구현한다.
+- [ ] 한 캡처에서 shareable content와 display catalog를 재사용한다.
+
+## 5. 창 선택과 포커스
+
+- [ ] Window Server 창을 앞에서 뒤 순서로 열거한다.
+- [ ] 자체 프로세스, 바탕 화면 레이어, 비가시/투명/빈 창을 제외한다.
+- [ ] 창 bounds를 공용 물리 픽셀 좌표로 변환하고 다중 모니터 교차를 테스트한다.
+- [ ] 이전 frontmost application을 저장하고 취소 시 복원한다.
+
+## 6. 화면 기록 권한 UI
+
+- [ ] permission type에 `screenRecording`을 추가한다.
+- [ ] Preferences permission section과 Onboarding에 화면 기록 항목을 추가한다.
+- [ ] 기존 macOS permission API로 상태 확인, 요청, 폴링 복귀를 연결한다.
+- [ ] 한국어·영어 설정 문구, 검색어, 아이콘을 추가하고 locale key 동기화를 확인한다.
+
+## 7. macOS Vision OCR
+
+- [ ] RGBA 입력 검증과 메모리 PNG 변환을 구현한다.
+- [ ] `VNRecognizeTextRequest`의 accurate 모드, 자동 언어 감지와 교정을 구현한다.
+- [ ] observation을 읽기 순서로 정렬하고 최상위 텍스트를 줄바꿈 문자열로 반환한다.
+- [ ] OCR 버튼과 `⌘⇧O`를 macOS에 노출한다.
+- [ ] 한국어, 영어, 혼합 언어, 작은 글자, 빈 이미지, 잘못된 입력을 검증한다.
+
+## 8. 문서와 자동 검증
+
+- [ ] README의 Windows 전용 문구를 제거하고 macOS 14 이상 지원과 화면 기록 권한을 설명한다.
+- [x] `pnpm lint`, `pnpm tsc`, `pnpm test`, `pnpm build`를 실행한다.
+- [x] Windows에서 `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-targets --all-features`를 실행한다.
+- [ ] Windows x64 Tauri build와 캡처·편집·OCR 핵심 경로를 회귀 검증한다.
+- [ ] Mac에서 같은 Rust/Frontend 검사와 Apple Silicon Tauri build를 실행한다.
+- [x] macOS Intel target build를 실행하고 `x86_64` Mach-O 실행 파일을 확인했다. 릴리스 CI 빌드는 별도 검증이 필요하다.
+
+## 9. 실제 Mac QA와 성능
+
+- [ ] 정식 앱에서 화면 기록 권한 미결정, 허용, 거부/설정 이동 상태를 검증한다. 새 ad hoc 서명에 대해 사용자가 세 권한을 다시 허용했고, 앱 재시작 후 영역 캡처 성공을 확인했다. 미결정·거부 상태의 전체 경로는 미검증이다.
+- [ ] 영역·창·전체 화면·지연·반복 캡처를 실제 화면에서 실행한다.
+- [ ] 편집 도구, 실행 취소·다시 실행, 복사, 저장, 화면 고정, 드래그 출력, OCR을 확인한다.
+- [ ] 단일 4K Retina에서 선택 좌표와 출력 픽셀을 확인한다.
+- [ ] MacBook 내장 화면을 활성화해 혼합 배율 다중 모니터를 확인한다. 사용할 수 없으면 자동 테스트 통과와 실제 미검증 상태를 명시해 release gate를 유지한다.
+- [ ] 영역 10회, 전체 화면 10회, 창·반복·지연 각 5회의 성공률과 중앙값/p95를 기록한다.
+- [ ] 검은 화면, stale frame, 오버레이 포함, 깜박임 또는 멈춤이 없는지 Orca 화면 캡처로 확인한다.
+- [x] 사용자가 정식 Mac 앱에서 영역 캡처를 반복한 뒤 캡처 시작과 편집기 인계의 깜빡임이 사라졌다고 확인했다.
+- [ ] 새 성능 빌드에서 오버레이·편집기 표시 시간과 깜빡임 부재를 반복 측정하고 실제 화면에서 확인한다. 영역 캡처 3회는 기록했고 사용자가 깜빡임 제거를 확인했다. 전체 acceptance 횟수와 p95 측정은 남아 있다.
+
+## 10. 완료와 릴리스 준비
+
+- [ ] 요구사항과 acceptance criteria를 대조하고 Trellis quality check를 수행한다.
+- [x] 다음 릴리스 후보 v1.2.3의 한국어·영어 변경 기록 초안을 `release-draft.md`에 준비한다. 버전 확정과 정식 changelog 반영은 릴리스 gate 통과 후 수행한다.
+- [ ] 관련 변경만 한국어 Conventional Commit으로 커밋한다.
+- [ ] push, tag, GitHub release 및 updater 배포는 최종 검증 결과와 실제 미검증 항목을 제시한 뒤 승인 범위에 따라 진행한다.
+
+## 11. 공통 편집기 개선
+
+- [x] CleanShot X, ShareX, Acrobat, OneNote의 공식 설명에서 형광펜 조절 방식을 조사한다.
+- [x] 형광펜 색·진하기를 도구 기본값과 개별 표시 모두에서 편집할 수 있게 한다.
+- [x] 밝고 어두운 캡처의 하이라이트 합성을 개선한다.
+- [x] 캡처 버리기 버튼을 작은 빨간 아이콘 전용 버튼으로, 주 복사 버튼을 더 크게 바꾼다.
+- [x] Mac·Windows에서 새 아이콘 배치와 화면별 지연 로딩, 선택 오버레이의 직접 캔버스 그리기를 실제 사용 경로로 확인한다. Mac은 사용자가 영역 캡처 3회와 편집기 표시·깜빡임 부재·휴지통 배치를 확인했고, Windows는 설치본의 영역·전체 화면 캡처와 편집기 배치를 Orca 화면으로 확인했다.
+- [x] Windows 설치본에서 형광펜 표시를 그린 뒤 선택 표시의 진하기 슬라이더가 75%에서 98%로 바뀌는 것을 확인했다. 테스트 캡처는 휴지통으로 버렸다.
+- [x] Mac 설치본에서 형광펜 진하기와 선택 표시 재편집을 실제 화면으로 확인한다.
+
+## 2026-09-22 검증 기록
+
+- macOS 정식 앱의 새 임시 서명에 대해 사용자가 화면 기록·손쉬운 사용·전체 디스크 접근을 다시 허용했다. 앱 재시작 후 영역 캡처 3회가 성공했고 사용자는 깜빡임 제거와 휴지통 배치를 확인했다. 약간의 체감 지연은 남는다.
+- Mac 영역 캡처 3회 중 warm 2회의 두 화면 동결은 143ms·162ms, 오버레이 창 준비는 1ms·0ms였다. 큰 화면의 프레임 수신은 99ms·140ms, 캔버스 그리기는 18ms·20ms였다. 선택 후 편집기 창 준비는 78ms·65ms, 새 WebView의 첫 그리기는 386ms·380ms였다. 전체 사용자 체감 시간의 p95는 아직 측정하지 않았다.
+- Windows 정식 설치 경로에 1.2.2 검증 빌드를 설치했고 기존 `prod` 클립보드 DB가 남아 있다. 영역 캡처의 동결은 97ms, 전체 화면 캡처의 픽셀 획득은 91ms였다. 편집기에서 휴지통 아이콘 전용 버튼과 더 큰 주 버튼을 시각 확인했고, 형광펜을 그리고 진하기 슬라이더를 조절했다.
+- Windows 표준 NSIS 빌드는 설치 파일을 생성했으나 로컬 updater 개인 키가 없어 명령의 마지막 서명 단계가 실패했다. 저장소 배포 설정은 바꾸지 않고, updater 산출물을 끄고 현재 사용자 설치 모드로 바꾼 일회성 로컬 빌드 설정으로 검증용 NSIS 빌드·설치를 완료했다. 공식 릴리스 서명과 updater 산출물 검증은 남아 있다.
+- Windows에서 `pnpm lint`, `pnpm tsc`, `pnpm test`(47개), `pnpm build`, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-targets --all-features`(230개)가 통과했다. Mac Apple Silicon 빌드와 `cargo test --all-targets --all-features`(228개)도 통과했다.
+- 최종 리뷰에서 Mac 정식 앱의 전체 화면 캡처 6720×3780과 창 캡처 998×844를 실제 편집기에서 확인했다. 테스트용 TextEdit 창의 `ULTRA CLIPBOARD QA 123` 문구를 Vision OCR이 클립보드에 복사했고, 이미지 복사 후 `public.png`·`public.tiff` 클립보드 형식을 확인했다.
+- Mac에는 동일 배율 2x 화면 두 대가 활성화되어 있어 혼합 배율 실제 QA는 아직 남아 있다. 격리된 Rust 1.96.0 도구체인으로 macOS Intel `cargo check`와 `cargo build`가 통과했고 생성된 실행 파일이 `x86_64` Mach-O임을 확인했다. 현재 Mac 설치본은 ad hoc 서명이며 `security find-identity -p codesigning -v`에서 유효한 배포 서명 identity가 0개로 확인됐다. 릴리스 CI에도 Apple Developer 서명 설정이 없어 새 버전의 TCC 권한 유지가 검증되지 않았다.
+- Mac 형광펜 버튼을 선택하고 macOS `CGEvent` 드래그로 실제 이미지를 그렸다. 표시를 선택한 뒤 진하기를 74%에서 93%로 바꾸자 캔버스 픽셀이 달라졌고, 휴지통 버튼으로 해당 캡처를 버렸다. Orca의 단순 드래그는 캔버스 입력으로 전달되지 않아 이 검증에는 사용하지 않았다.
+- Mac 정식 앱에서 테스트용 TextEdit 문서만 영역 캡처해 편집기의 저장 버튼을 눌렀다. macOS 저장 시트에서 `/tmp/ultra-clipboard-output-qa.png`를 선택했고, 생성된 파일은 실제 790×330 RGBA PNG였다. 편집기 드래그 버튼에서 TextEdit으로 놓자 캐시된 790×330 PNG의 파일 경로가 대상 문서에 입력됐다. 테스트 문서는 실행 취소로 원래 내용으로 되돌렸다. TextEdit의 일반 텍스트 문서에는 이미지가 삽입되지 않으므로 이미지 수용 앱으로의 드롭과 편집 도구 전체의 Mac 실기 검증은 남아 있다.
+- Mac 마지막 영역 반복 캡처는 998×844 이미지를 직접 편집기에 열었고, 화면 고정은 같은 크기의 `Ultra Clipboard Pin` 창 생성까지 확인했다. 지연 캡처는 3초 후 영역 선택 오버레이가 표시됐지만 원격 드래그 입력이 선택을 확정하지 못해 편집 결과는 미검증이다.
+- Mac 정식 앱 설정에 손쉬운 사용과 전체 디스크 접근이 꺼짐으로 표시된 시점에 macOS 시스템 설정을 직접 확인하니 두 권한도 실제로 꺼져 있었다. 두 항목을 다시 켜고 앱을 재시작한 뒤 앱 설정에서 화면 기록·손쉬운 사용·전체 디스크 접근이 모두 켜짐으로 표시되는 것을 확인했다. ad hoc 서명이 바뀌면 권한 재허용이 필요한 문제는 배포 서명 identity 확보 전까지 남는다.
+- GitHub Actions의 등록된 secret은 Tauri updater 서명 키 두 개뿐이며 Apple Developer 배포 서명·notarization 자격증명은 없다. Mac의 Homebrew Rust에는 `cargo-clippy`가 없어 격리된 Rust 1.96.0 도구체인으로 macOS `cargo clippy --all-targets --all-features --offline -- -D warnings`를 통과했다. Mac Rust 테스트와 Apple Silicon 빌드는 앞서 통과했다.
+- [ ] 실제 픽셀 결과와 편집기 배치를 Windows·macOS에서 검증한다.
+
+## 품질 Gate
+
+- Mac 실제 캡처·편집·출력 경로가 성공하지 않으면 완료로 처리하지 않는다.
+- Apple Silicon 실행 검증과 Intel 빌드 검증이 모두 없으면 릴리스 대상으로 처리하지 않는다.
+- Windows 자동 검사와 핵심 캡처 회귀 검증이 통과하지 않으면 병합·릴리스하지 않는다.
+- 현재 실제 Mac에 두 번째 활성 화면이 없으므로 혼합 배율 hardware QA는 내장 화면 활성화 전까지 미검증으로 표시한다.

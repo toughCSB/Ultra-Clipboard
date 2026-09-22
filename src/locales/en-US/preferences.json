@@ -477,6 +477,10 @@
         "runAsAdministrator": {
           "description": "Used to restart Ultra Clipboard with administrator privileges and keep future launches elevated when needed.",
           "title": "Run as Administrator"
+        },
+        "screenRecording": {
+          "description": "Used to capture the screen and open it in the screenshot editor.",
+          "title": "Screen Recording Permission"
         }
       },
       "preview": {

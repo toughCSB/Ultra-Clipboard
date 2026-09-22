@@ -26,6 +26,7 @@ export interface RectShape extends ShapeBase, Box {
 export interface HighlighterShape extends ShapeBase, Box {
   kind: "highlighter";
   color: string;
+  opacity: number;
 }
 
 export interface BlurShape extends ShapeBase, Box {

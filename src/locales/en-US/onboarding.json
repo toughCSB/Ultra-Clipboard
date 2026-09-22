@@ -57,7 +57,7 @@
   },
   "permissions": {
     "description": {
-      "macos": "On macOS, Ultra Clipboard needs Accessibility and Full Disk Access for the core workflow.",
+      "macos": "On macOS, Ultra Clipboard needs Screen Recording, Accessibility, and Full Disk Access for the core workflow.",
       "windows": "On Windows, Ultra Clipboard needs administrator launch for some system-level workflows."
     },
     "title": "Enable Permissions"

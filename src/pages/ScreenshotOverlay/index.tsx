@@ -14,6 +14,7 @@ import {
 import { TAURI_EVENT } from "@/constants/events";
 import { useTauriListen } from "@/hooks/useTauriListen";
 import { cn } from "@/utils/cn";
+import { isMac } from "@/utils/is";
 import { log } from "@/utils/log";
 import {
   type PixelPoint,
@@ -40,7 +41,7 @@ const ScreenshotOverlay: FC = () => {
   const label = getCurrentWebviewWindow().label;
   const frameCanvasRef = useRef<HTMLCanvasElement>(null);
   const marksCanvasRef = useRef<HTMLCanvasElement>(null);
-  const bitmapRef = useRef<ImageBitmap | null>(null);
+  const frameRef = useRef<ImageData | null>(null);
   const loadGenerationRef = useRef(0);
   const pointerRef = useRef<PixelPoint | null>(null);
   const dragOriginRef = useRef<PixelPoint | null>(null);
@@ -56,8 +57,7 @@ const ScreenshotOverlay: FC = () => {
 
   const reset = () => {
     loadGenerationRef.current += 1;
-    bitmapRef.current?.close();
-    bitmapRef.current = null;
+    frameRef.current = null;
     pointerRef.current = null;
     dragOriginRef.current = null;
     selectionRef.current = null;
@@ -68,9 +68,11 @@ const ScreenshotOverlay: FC = () => {
   const loadSession = async () => {
     const generation = loadGenerationRef.current + 1;
     loadGenerationRef.current = generation;
+    const startedAt = performance.now();
 
     try {
       const state = await getScreenshotOverlayState(label);
+      const stateMs = performance.now() - startedAt;
       if (generation !== loadGenerationRef.current) return;
       if (!state) {
         reset();
@@ -78,16 +80,21 @@ const ScreenshotOverlay: FC = () => {
       }
 
       const buffer = await getScreenshotOverlayFrame(label, state.sessionId);
-      const bitmap = await createImageBitmap(
-        new ImageData(new Uint8ClampedArray(buffer), state.width, state.height),
-      );
+      const frameMs = performance.now() - startedAt - stateMs;
       if (generation !== loadGenerationRef.current) {
-        bitmap.close();
         return;
       }
 
-      bitmapRef.current?.close();
-      bitmapRef.current = bitmap;
+      frameRef.current = new ImageData(
+        new Uint8ClampedArray(buffer),
+        state.width,
+        state.height,
+      );
+      log.info("screenshot overlay frame ready", {
+        frameMs: Math.round(frameMs),
+        label,
+        stateMs: Math.round(stateMs),
+      });
       pointerRef.current = null;
       dragOriginRef.current = null;
       selectionRef.current = null;
@@ -106,7 +113,7 @@ const ScreenshotOverlay: FC = () => {
 
   useUnmount(() => {
     cancelAnimationFrame(drawFrameRef.current);
-    bitmapRef.current?.close();
+    frameRef.current = null;
   });
 
   useTauriListen<OverlaySessionPayload>(
@@ -150,11 +157,11 @@ const ScreenshotOverlay: FC = () => {
   const drawMarks = useMemoizedFn(() => {
     const marks = marksCanvasRef.current;
     const context = marks?.getContext("2d");
-    const bitmap = bitmapRef.current;
-    if (!marks || !context || !bitmap || !session) return;
+    const frame = frameCanvasRef.current;
+    if (!marks || !context || !frame || !session) return;
 
     drawOverlay(context, {
-      bitmap,
+      bitmap: frame,
       highlight: currentHighlight(),
       pointer: pointerRef.current,
       ratio: session.width / Math.max(1, marks.clientWidth),
@@ -166,19 +173,25 @@ const ScreenshotOverlay: FC = () => {
   useLayoutEffect(() => {
     const canvas = frameCanvasRef.current;
     const marks = marksCanvasRef.current;
-    const bitmap = bitmapRef.current;
-    if (!session || !canvas || !marks || !bitmap) return;
+    const frame = frameRef.current;
+    if (!session || !canvas || !marks || !frame) return;
 
+    const startedAt = performance.now();
     canvas.width = session.width;
     canvas.height = session.height;
     marks.width = session.width;
     marks.height = session.height;
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+    canvas.getContext("2d")?.putImageData(frame, 0, 0);
+    frameRef.current = null;
     drawMarks();
+    log.info("screenshot overlay painted", {
+      label,
+      paintMs: Math.round(performance.now() - startedAt),
+    });
 
     // Animation frames can pause while the overlay is hidden, so reveal right after drawing.
     void revealWhenPainted(session.sessionId);
-  }, [drawMarks, revealWhenPainted, session]);
+  }, [drawMarks, revealWhenPainted, session, label]);
 
   useEffect(() => {
     if (!hintVisible) return;
@@ -341,7 +354,11 @@ const ScreenshotOverlay: FC = () => {
   useEventListener("contextmenu", handleContextMenu);
 
   return (
-    <div className="fixed inset-0 select-none overflow-hidden bg-black">
+    <div
+      className={cn("fixed inset-0 select-none overflow-hidden", {
+        "bg-black": !isMac,
+      })}
+    >
       <canvas
         className={cn("absolute inset-0 block h-full w-full", {
           invisible: !session,

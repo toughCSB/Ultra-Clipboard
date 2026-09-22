@@ -1,5 +1,21 @@
 # Settings, Windowing, and Platform
 
+## Screenshot overlay to editor handoff
+
+On a selection commit, keep the frozen overlays visible while creating the
+hidden editor. `ScreenshotState::begin_editor_handoff` blocks a new capture until
+the matching editor reports its first paint. `editor::reveal` shows the editor,
+then completes the handoff and hides the overlays, then focuses the editor.
+`overlay::hide_window` hides the native window before emitting a reset event;
+otherwise an empty full-screen canvas can be visible. A failed editor open or
+closed editor must release the handoff and overlays. Keep the macOS overlay
+window and its page background transparent until its captured frame is ready.
+
+For latency checks, keep the backend freeze time separate from overlay window
+creation, raw frame transfer, WebView canvas painting, and editor first paint.
+Repeat captures in the installed app on both platforms; a fast ScreenCaptureKit
+or GDI call alone does not establish fast end-to-end capture.
+
 ## Settings Model
 
 Settings live in Rust under `src-tauri/src/settings/`.

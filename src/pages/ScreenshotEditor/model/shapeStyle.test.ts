@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { applyStyleToShape, styleFromShape } from "./shapeStyle";
-import type { BlurShape, RectShape, TextShape } from "./shapes";
+import type {
+  BlurShape,
+  HighlighterShape,
+  RectShape,
+  TextShape,
+} from "./shapes";
 import { DEFAULT_TOOL_STYLE } from "./tools";
 
 const IMAGE = {
@@ -69,6 +74,35 @@ describe("shape style", () => {
 
     assert.equal(next.fontSize, 32);
     assert.equal(next.width, 96);
+  });
+
+  it("keeps each highlight's color and intensity editable", () => {
+    const shape: HighlighterShape = {
+      color: "#FFE600",
+      height: 12,
+      id: "h",
+      kind: "highlighter",
+      opacity: 75,
+      width: 60,
+      x: 2,
+      y: 3,
+    };
+    const next = applyStyleToShape(
+      shape,
+      { highlightColor: "#FF9BD2", highlightOpacity: 90 },
+      2,
+      IMAGE,
+      measure,
+    ) as HighlighterShape;
+
+    assert.equal(next.color, "#FF9BD2");
+    assert.equal(next.opacity, 90);
+    assert.equal(next.width, shape.width);
+    assert.equal(
+      styleFromShape(DEFAULT_TOOL_STYLE, next, 2).highlightOpacity,
+      90,
+    );
+    assert.equal(shape.opacity, 75);
   });
 
   it("samples a fill color when a blur switches to erase", () => {

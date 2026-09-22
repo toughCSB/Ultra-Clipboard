@@ -8,6 +8,7 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ScreenshotExportAction } from "@/commands";
+import CustomIconButton from "@/components/CustomIconButton";
 import Tooltip from "@/components/Tooltip";
 import { cn } from "@/utils/cn";
 import { isMac, isWin } from "@/utils/is";
@@ -418,14 +419,23 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
         value={`${Math.round(zoom * 100)}%`}
       />
 
-      <ToolbarButton
-        className="ml-2"
-        danger
-        disabled={busy}
-        icon="i-lucide:trash-2"
-        onClick={onDiscardAndClose}
+      <Tooltip
+        mouseEnterDelay={0.4}
+        placement="bottom"
         title={t("editor.discardAndClose")}
-      />
+      >
+        <CustomIconButton
+          aria-label={t("editor.discardCapture")}
+          className="ml-2 h-9 w-10 shrink-0 rounded-2 p-0"
+          danger
+          disabled={busy}
+          icon={
+            <span aria-hidden="true" className="i-lucide:trash-2 text-2xl" />
+          }
+          onClick={onDiscardAndClose}
+          type="primary"
+        />
+      </Tooltip>
 
       <Tooltip
         mouseEnterDelay={0.4}
@@ -434,7 +444,7 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
       >
         <Button
           aria-label={t("editor.copyAndClose")}
-          className="ml-1 h-9 shrink-0 gap-1.5 rounded-2 px-3 font-medium"
+          className="ml-1 h-11 shrink-0 gap-2 rounded-2 px-5 font-medium"
           disabled={busy}
           loading={busyAction === "copy"}
           onClick={onCopyAndClose}

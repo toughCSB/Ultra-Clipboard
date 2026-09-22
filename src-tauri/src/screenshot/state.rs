@@ -61,6 +61,7 @@ struct Inner {
     next_id: u64,
     capturing: bool,
     session: Option<CaptureSession>,
+    handoff_editor: Option<String>,
     images: HashMap<String, Arc<CapturedImage>>,
     drag_files: HashMap<String, DragFile>,
     /// Last confirmed area in virtual desktop pixels, reused by repeat capture.
@@ -103,6 +104,24 @@ impl ScreenshotState {
         let mut inner = self.lock();
         inner.capturing = false;
         inner.session = None;
+        inner.handoff_editor = None;
+    }
+
+    pub fn begin_editor_handoff(&self, label: &str) {
+        let mut inner = self.lock();
+        inner.capturing = true;
+        inner.handoff_editor = Some(label.to_owned());
+    }
+
+    pub fn complete_editor_handoff(&self, label: &str) -> bool {
+        let mut inner = self.lock();
+        if inner.handoff_editor.as_deref() != Some(label) {
+            return false;
+        }
+
+        inner.handoff_editor = None;
+        inner.capturing = false;
+        true
     }
 
     pub fn set_session(&self, session: CaptureSession) {
@@ -157,5 +176,22 @@ impl ScreenshotState {
 
     pub fn last_area(&self) -> Option<PixelRect> {
         self.lock().last_area
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ScreenshotState;
+
+    #[test]
+    fn editor_handoff_blocks_another_capture_until_the_matching_editor_is_ready() {
+        let state = ScreenshotState::default();
+        state.begin_editor_handoff("screenshot-editor-1");
+
+        assert!(!state.try_begin_capture());
+        assert!(!state.complete_editor_handoff("screenshot-editor-2"));
+        assert!(!state.try_begin_capture());
+        assert!(state.complete_editor_handoff("screenshot-editor-1"));
+        assert!(state.try_begin_capture());
     }
 }

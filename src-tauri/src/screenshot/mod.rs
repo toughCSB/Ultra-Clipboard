@@ -94,11 +94,20 @@ pub fn intercept_close_request(window: &Window) -> bool {
 }
 
 pub fn start_capture(app: &AppHandle, mode: CaptureMode) {
-    begin_capture(app, mode, capture_delay(mode, None));
+    dispatch_capture(app, mode, capture_delay(mode, None));
 }
 
 pub fn start_capture_from_tray(app: &AppHandle, mode: CaptureMode) {
-    begin_capture(app, mode, capture_delay(mode, Some(TRAY_CAPTURE_DELAY)));
+    dispatch_capture(app, mode, capture_delay(mode, Some(TRAY_CAPTURE_DELAY)));
+}
+
+fn dispatch_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
+    let capture_app = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || {
+        begin_capture(&capture_app, mode, delay);
+    }) {
+        log::error!("dispatch screenshot capture to main thread failed: {err}");
+    }
 }
 
 fn capture_delay(mode: CaptureMode, base: Option<Duration>) -> Option<Duration> {
@@ -142,51 +151,58 @@ pub fn commit_selection(
     session_id: u64,
     selection: PixelRect,
 ) -> Result<()> {
-    let Some(session) = app
-        .state::<ScreenshotState>()
-        .take_session(Some(session_id))
-    else {
+    let state = app.state::<ScreenshotState>();
+    let Some(session) = state.take_session(Some(session_id)) else {
         return Ok(());
     };
-    overlay::hide_all(app);
 
-    let frame = session
-        .frame(label)
-        .ok_or_else(|| AppError::Other(anyhow::anyhow!("capture monitor is unavailable")))?;
-    let bounds = frame.monitor.bounds;
-    let selection = selection
-        .intersect(&PixelRect::new(0, 0, bounds.width, bounds.height))
-        .ok_or_else(|| AppError::Other(anyhow::anyhow!("selection is empty")))?;
-    let rgba = geometry::crop_rgba(&frame.rgba, bounds.width, bounds.height, selection)
-        .ok_or_else(|| AppError::Other(anyhow::anyhow!("selection is outside the monitor")))?;
+    let result = (|| {
+        let frame = session
+            .frame(label)
+            .ok_or_else(|| AppError::Other(anyhow::anyhow!("capture monitor is unavailable")))?;
+        let bounds = frame.monitor.bounds;
+        let selection = selection
+            .intersect(&PixelRect::new(0, 0, bounds.width, bounds.height))
+            .ok_or_else(|| AppError::Other(anyhow::anyhow!("selection is empty")))?;
+        let rgba = geometry::crop_rgba(&frame.rgba, bounds.width, bounds.height, selection)
+            .ok_or_else(|| AppError::Other(anyhow::anyhow!("selection is outside the monitor")))?;
 
-    log::info!(
-        "screenshot selection committed: {}x{} at {},{}",
-        selection.width,
-        selection.height,
-        selection.x,
-        selection.y
-    );
-    app.state::<ScreenshotState>().set_last_area(PixelRect::new(
-        bounds.x.saturating_add(selection.x),
-        bounds.y.saturating_add(selection.y),
-        selection.width,
-        selection.height,
-    ));
+        log::info!(
+            "screenshot selection committed: {}x{} at {},{}",
+            selection.width,
+            selection.height,
+            selection.x,
+            selection.y
+        );
+        state.set_last_area(PixelRect::new(
+            bounds.x.saturating_add(selection.x),
+            bounds.y.saturating_add(selection.y),
+            selection.width,
+            selection.height,
+        ));
 
-    editor::open(
-        app,
-        CapturedImage {
-            width: selection.width,
-            height: selection.height,
-            scale_factor: frame.monitor.scale_factor,
-            origin_x: bounds.x.saturating_add(selection.x),
-            origin_y: bounds.y.saturating_add(selection.y),
-            rgba,
-            captured_at: session.captured_at,
-        },
-        frame.monitor,
-    )
+        editor::open(
+            app,
+            CapturedImage {
+                width: selection.width,
+                height: selection.height,
+                scale_factor: frame.monitor.scale_factor,
+                origin_x: bounds.x.saturating_add(selection.x),
+                origin_y: bounds.y.saturating_add(selection.y),
+                rgba,
+                captured_at: session.captured_at,
+            },
+            frame.monitor,
+            true,
+        )
+    })();
+
+    if result.is_err() {
+        overlay::hide_all(app);
+        state.finish_capture();
+    }
+
+    result
 }
 
 pub fn cancel_capture(app: &AppHandle, session_id: Option<u64>) {
@@ -218,12 +234,17 @@ pub fn reveal_window(app: &AppHandle, label: &str) -> Result<()> {
 
 /// Releases a screenshot window's pixels and temporary drag file, then destroys it.
 pub fn close_window(app: &AppHandle, label: &str) {
-    if let Some(drag_file) = app.state::<ScreenshotState>().remove_window(label) {
+    let state = app.state::<ScreenshotState>();
+    if let Some(drag_file) = state.remove_window(label) {
         if let Some(directory) = drag_file.path.parent() {
             if let Err(err) = std::fs::remove_dir_all(directory) {
                 log::warn!("remove screenshot drag directory failed: {err}");
             }
         }
+    }
+
+    if state.complete_editor_handoff(label) {
+        overlay::hide_all(app);
     }
 
     if let Some(window) = app.get_webview_window(label) {
@@ -321,6 +342,24 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
             if let Err(err) = capture(&capture_app, mode, monitors, cursor, previous_foreground) {
                 log::error!("screenshot capture failed: {err}");
                 capture_app.state::<ScreenshotState>().finish_capture();
+
+                if backend::is_permission_error(&err) {
+                    let preference_app = capture_app.clone();
+                    if let Err(dispatch_err) = capture_app.run_on_main_thread(move || {
+                        if let Err(open_err) = crate::window::open_preference_with_highlight(
+                            &preference_app,
+                            "permissions.screenRecording".to_owned(),
+                        ) {
+                            log::error!(
+                                "open screen recording permission preference failed: {open_err}"
+                            );
+                        }
+                    }) {
+                        log::error!(
+                            "dispatch screen recording permission preference failed: {dispatch_err}"
+                        );
+                    }
+                }
             }
         });
 
@@ -339,6 +378,7 @@ fn capture(
 ) -> Result<()> {
     let started = Instant::now();
     let captured_at = Local::now();
+    let backend = backend::CaptureContext::new(&monitors)?;
     let cursor_index = cursor
         .and_then(|cursor| {
             monitors
@@ -360,7 +400,7 @@ fn capture(
     };
 
     if let Some((monitor, area)) = direct {
-        let rgba = backend::capture_rect(area)?;
+        let rgba = backend.capture_rect(area)?;
         log::info!(
             "screenshot {mode:?} captured {}x{} in {}ms",
             area.width,
@@ -382,7 +422,7 @@ fn capture(
         return app
             .run_on_main_thread(move || {
                 main_app.state::<ScreenshotState>().finish_capture();
-                if let Err(err) = editor::open(&main_app, image, monitor) {
+                if let Err(err) = editor::open(&main_app, image, monitor, false) {
                     log::error!("open screenshot editor failed: {err}");
                 }
             })
@@ -402,7 +442,7 @@ fn capture(
         frames.push(MonitorFrame {
             label: overlay::label_for(index),
             monitor: *monitor,
-            rgba: Arc::new(backend::capture_rect(monitor.bounds)?),
+            rgba: Arc::new(backend.capture_rect(monitor.bounds)?),
         });
     }
 
@@ -412,7 +452,7 @@ fn capture(
         id: session_id,
         mode,
         frames,
-        windows: backend::list_windows(),
+        windows: backend.list_windows(),
         cursor_label: overlay::label_for(cursor_index),
         previous_foreground,
         captured_at,
@@ -450,6 +490,12 @@ fn repeat_target(
         .max_by_key(|(_, visible)| u64::from(visible.width) * u64::from(visible.height))
 }
 
+#[cfg(target_os = "macos")]
+fn monitor_geometries(_app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    backend::monitor_geometries()
+}
+
+#[cfg(target_os = "windows")]
 fn monitor_geometries(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
     let monitors = app
         .available_monitors()

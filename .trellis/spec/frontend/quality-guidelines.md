@@ -45,6 +45,21 @@ rather than hand-sorting in a different style.
 
 ## UI Verification
 
+### Screenshot window startup
+
+`src/router/index.ts` keeps route components lazy so a new screenshot overlay or
+editor WebView does not parse unrelated clipboard and preference pages. The
+top-level `Suspense` in `src/main.tsx` covers route loading. Check the production
+bundle output when changing these imports; an eager page import can silently
+restore the single large startup bundle.
+
+`ScreenshotOverlay` receives raw RGBA from the existing Rust command, paints it
+with `ImageData`/`putImageData`, and gives the painted frame canvas to the loupe.
+Rust retains the original RGBA for selection cropping, so preview painting must
+not change exported pixels. Report overlay readiness only after both canvases
+are painted. Measure frame transfer, canvas painting, and editor first paint on
+the actual Windows and macOS apps before claiming capture latency improved.
+
 For UI changes, manually verify the main path and at least one boundary case:
 
 - Clipboard list: empty state, search, scroll pagination, pinned/favorite item,

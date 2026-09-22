@@ -4,6 +4,7 @@ import {
   ALL_TOOLS,
   DEFAULT_TOOL_ORDER,
   DEFAULT_TOOL_STYLE,
+  HIGHLIGHT_OPACITY_RANGE,
   parseToolOrder,
   parseToolStyle,
   STROKE_RANGE,
@@ -23,15 +24,25 @@ describe("tools", () => {
     const parsed = parseToolStyle({
       blurMode: "smudge",
       color: "#00ff00",
+      highlightOpacity: 999,
       strokeWidth: 999,
       textStyle: "background",
     });
 
     assert.equal(parsed.blurMode, DEFAULT_TOOL_STYLE.blurMode);
     assert.equal(parsed.color, "#00ff00");
+    assert.equal(parsed.highlightOpacity, HIGHLIGHT_OPACITY_RANGE.max);
     assert.equal(parsed.strokeWidth, STROKE_RANGE.max);
     assert.equal(parsed.textStyle, "background");
     assert.deepEqual(parseToolStyle(null), DEFAULT_TOOL_STYLE);
+    assert.equal(
+      parseToolStyle({ highlightOpacity: "opaque" }).highlightOpacity,
+      DEFAULT_TOOL_STYLE.highlightOpacity,
+    );
+    assert.equal(
+      parseToolStyle({ highlightOpacity: -1 }).highlightOpacity,
+      HIGHLIGHT_OPACITY_RANGE.min,
+    );
   });
 
   it("gives every tool a distinct icon color", () => {
