@@ -40,7 +40,7 @@ Ultra Clipboard는 복사한 내용을 기기에 저장하고 빠르게 다시 �
 
 ## 스크린샷 편집기
 
-화면 캡처와 편집기를 내장하고 있습니다. Windows에서는 영역·창·전체 화면·지연·반복 캡처와 편집, OCR, 복사, 저장, 화면 고정, 드래그 출력을 사용할 수 있습니다. macOS 14 이상용 캡처·편집 기능은 실제 기기에서 검증 중이며, 처음 캡처할 때 화면 기록 권한이 필요합니다.
+화면 캡처와 편집기를 내장하고 있습니다. Windows와 macOS 14 이상에서 영역·창·전체 화면·지연·반복 캡처와 편집, OCR, 복사, 저장, 화면 고정, 드래그 출력을 사용할 수 있습니다. macOS에서는 처음 캡처할 때 화면 기록 권한이 필요하며, 혼합 배율 모니터의 실제 동작은 아직 검증되지 않았습니다.
 
 - 화살표, 텍스트, 자, 사각형, 배경, 펜, 돋보기, 흐리게, 형광펜, 스포트라이트, 번호, 타원, 선 등 13종 주석 도구
 - 도구마다 구분되는 색상 아이콘과 드래그로 재배치 가능한 툴바
@@ -64,13 +64,15 @@ Ultra Clipboard는 EcoPaste와 별도의 데이터 namespace를 사용합니다.
 - Windows
 - macOS 14 이상
 
-Linux는 지원하지 않습니다. macOS Apple Silicon과 Intel 패키지는 빌드 대상으로 설정되어 있으며, 새 캡처 기능의 Intel 빌드 검증이 남아 있습니다.
+Linux는 지원하지 않습니다. macOS Apple Silicon과 Intel 패키지는 빌드 대상으로 설정되어 있습니다.
 
 ## 다운로드 및 설치
 
 최신 빌드는 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases)에서 받을 수 있습니다.
 
 앱 package 자체는 code signing과 공증(notarization)이 되어 있지 않습니다(updater artifact만 전용 Tauri key로 서명). Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로 출처와 파일을 확인한 뒤 사용하세요.
+
+macOS에서는 앱 업데이트로 임시 서명이 바뀌면 화면 기록·손쉬운 사용·전체 디스크 접근 권한을 다시 허용해야 할 수 있습니다. 권한이 꺼진 것으로 표시되면 macOS 시스템 설정에서 `Ultra Clipboard`의 해당 항목을 확인하고 앱을 다시 시작하세요. 기존 클립보드 기록과 앱 설정은 업데이트로 삭제되지 않습니다.
 
 ### macOS에서 "손상되었기 때문에 열 수 없습니다" 오류
 

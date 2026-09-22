@@ -81,7 +81,7 @@
 - [x] 다음 릴리스 후보 v1.2.3의 한국어·영어 변경 기록 초안을 `release-draft.md`에 준비한다. 버전 확정과 정식 changelog 반영은 릴리스 gate 통과 후 수행한다.
 - [x] 관련 변경만 한국어 Conventional Commit `80a6096`으로 커밋하고 `master`에 fast-forward 병합했다.
 - [x] `master`를 `origin/master`에 푸시하고 원격 커밋이 일치하는지 확인했다.
-- [ ] tag, GitHub release 및 updater 배포는 macOS 배포 서명과 남은 실제 기기 검증을 마친 뒤 진행한다.
+- [ ] tag, GitHub release 및 updater 배포는 남은 실제 기기 검증과 unsigned macOS 업데이트의 권한 재허용 안내를 확인한 뒤 진행한다. Apple Developer 계정이 없으므로 기존 v1.2.2와 같은 배포 정책을 유지한다.
 
 ## 11. 공통 편집기 개선
 

@@ -22,7 +22,7 @@ This is a draft for the next release. Do not tag or publish until the task's rel
 ### Release notes
 
 - macOS display coordinates on mixed-scale hardware and repeated end-to-end capture latency still require device verification.
-- A stable macOS distribution signature and notarization are required before publishing this update so system permission grants remain valid across app updates.
+- The app remains unsigned under the existing distribution policy. A changed ad hoc signature can require users to grant macOS privacy permissions again after updating; this must be disclosed in the public release notes.
 
 ## 한국어
 
@@ -44,4 +44,4 @@ This is a draft for the next release. Do not tag or publish until the task's rel
 ### 릴리즈 안내
 
 - 배율이 서로 다른 실제 디스플레이의 좌표와 캡처 전체 흐름의 반복 지연 측정은 기기 검증이 남아 있습니다.
-- 앱 업데이트 후 시스템 권한이 유지되도록 안정적인 macOS 배포 서명과 공증을 갖춘 뒤 이 업데이트를 배포해야 합니다.
+- 기존 배포 방식대로 앱 자체는 서명·공증되지 않습니다. 업데이트로 임시 서명이 바뀌면 macOS 권한을 다시 허용해야 할 수 있으므로 공개 릴리스에 이 점을 안내해야 합니다.

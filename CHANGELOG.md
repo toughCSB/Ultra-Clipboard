@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.3](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.2...v1.2.3) (2026-09-22)
+
+### Added
+
+- Enable area, window, full-screen, delayed, and repeat capture on macOS 14 and later, with the screenshot editor and Vision OCR.
+- Show screen recording permission in macOS onboarding and preferences.
+- Add highlighter intensity controls for new and selected annotations on Windows and macOS.
+
+### Changed
+
+- Keep the frozen capture visible until the editor paints to avoid desktop flicker, and load screenshot pages separately to shorten window startup.
+- Replace the editor discard action with a larger red trash icon and make the primary copy action more prominent.
+
+### Fixed
+
+- Recreate the preferences window when reopening the app from the macOS Dock after idle window cleanup.
+
+### Release Notes
+
+- Windows and macOS application packages remain unsigned by Apple or Microsoft. Updater artifacts are signed with the existing Tauri key. macOS Gatekeeper may warn on first launch, and macOS screen recording, accessibility, and full disk access permissions may need to be granted again after an update because the app's ad hoc signature changes.
+- Mixed-scale display coordinates and repeated end-to-end capture latency have automated and limited device coverage; mixed-scale hardware behavior has not been verified.
+
 ## [1.2.2](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.1...v1.2.2) (2026-09-19)
 
 ### Fixed
