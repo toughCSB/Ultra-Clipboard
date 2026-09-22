@@ -1,9 +1,9 @@
 {
   "assignee": "Codex",
   "base_branch": "master",
-  "branch": "feat/macos-screenshot-editor-parity",
+  "branch": "master",
   "children": [],
-  "commit": null,
+  "commit": "80a6096be09ef79fd2c7e4bf9b210fe0bc85ef26",
   "completedAt": null,
   "createdAt": "2026-09-21",
   "creator": "Codex",

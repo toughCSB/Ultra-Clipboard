@@ -79,8 +79,9 @@
 
 - [ ] 요구사항과 acceptance criteria를 대조하고 Trellis quality check를 수행한다.
 - [x] 다음 릴리스 후보 v1.2.3의 한국어·영어 변경 기록 초안을 `release-draft.md`에 준비한다. 버전 확정과 정식 changelog 반영은 릴리스 gate 통과 후 수행한다.
-- [ ] 관련 변경만 한국어 Conventional Commit으로 커밋한다.
-- [ ] push, tag, GitHub release 및 updater 배포는 최종 검증 결과와 실제 미검증 항목을 제시한 뒤 승인 범위에 따라 진행한다.
+- [x] 관련 변경만 한국어 Conventional Commit `80a6096`으로 커밋하고 `master`에 fast-forward 병합했다.
+- [x] `master`를 `origin/master`에 푸시하고 원격 커밋이 일치하는지 확인했다.
+- [ ] tag, GitHub release 및 updater 배포는 macOS 배포 서명과 남은 실제 기기 검증을 마친 뒤 진행한다.
 
 ## 11. 공통 편집기 개선
 
