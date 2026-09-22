@@ -69,6 +69,19 @@ For UI changes, manually verify the main path and at least one boundary case:
   effects such as shortcut/tray/autostart.
 - Window changes: main, preference, and preview windows on the affected platform.
 
+### macOS permission display
+
+`tauri-plugin-macos-permissions` 2.3.0 implements
+`checkFullDiskAccessPermission()` by attempting `read_dir` on
+`~/Library/Containers/com.apple.stocks` and `~/Library/Safari`. Its boolean is
+only the result of those probes; it is not the Full Disk Access switch in macOS
+System Settings. The installed app can show false while System Settings shows
+Ultra Clipboard enabled, including after an app restart. Render Full Disk Access
+as an action that opens `Privacy_AllFiles`, without a checked/unchecked claim or
+status polling. Keep the separate screen recording and accessibility checks for
+their respective controls. Verify the preferences UI and System Settings on a
+Mac before claiming that an actual grant is effective.
+
 If a change affects macOS NSPanel timing or Windows non-focusable keyboard
 navigation, manual desktop validation is required. Type checks cannot cover
 those paths.

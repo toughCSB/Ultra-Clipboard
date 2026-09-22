@@ -471,7 +471,8 @@
           "title": "Restart required"
         },
         "fullDiskAccess": {
-          "description": "Used to read required local data and access system-protected app resources.",
+          "description": "Used to read some protected files. Check or change this permission in macOS System Settings.",
+          "openSettings": "Open System Settings",
           "title": "Full Disk Access Permission"
         },
         "runAsAdministrator": {

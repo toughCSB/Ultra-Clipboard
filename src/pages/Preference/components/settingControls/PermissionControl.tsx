@@ -1,11 +1,10 @@
 import { useMount } from "ahooks";
-import { Switch } from "antd";
+import { Button, Switch } from "antd";
 import type { FC } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   checkAccessibilityPermission,
-  checkFullDiskAccessPermission,
   checkScreenRecordingPermission,
   requestAccessibilityPermission,
   requestFullDiskAccessPermission,
@@ -34,7 +33,7 @@ interface PermissionControlProps {
   setting: PreferenceSetting;
 }
 
-/** Show system permission controls and refresh them from the actual state. */
+/** Show permission controls and refresh states that the app can check. */
 const PermissionControl: FC<PermissionControlProps> = (props) => {
   const { t } = useTranslation(["preferences", "common"]);
   const { disabled, setting } = props;
@@ -49,6 +48,7 @@ const PermissionControl: FC<PermissionControlProps> = (props) => {
 
   const checkPermission = useCallback(async () => {
     if (!isPermissionControl) return;
+    if (kind === "fullDiskAccess") return;
     if (checkingRef.current) return;
 
     checkingRef.current = true;
@@ -123,12 +123,25 @@ const PermissionControl: FC<PermissionControlProps> = (props) => {
     }
   };
 
+  const openFullDiskAccessSettings = async () => {
+    setAuthorizing(true);
+
+    try {
+      await requestFullDiskAccessPermission();
+    } catch (error) {
+      log.warn("open full disk access settings failed", error);
+    } finally {
+      setAuthorizing(false);
+    }
+  };
+
   useMount(() => {
     void checkPermission();
   });
 
   useEffect(() => {
     if (!isPermissionControl) return;
+    if (kind === "fullDiskAccess") return;
     if (permissionState.status === "granted") return;
 
     const timer = window.setInterval(() => {
@@ -138,9 +151,24 @@ const PermissionControl: FC<PermissionControlProps> = (props) => {
     return () => {
       window.clearInterval(timer);
     };
-  }, [checkPermission, isPermissionControl, permissionState.status]);
+  }, [checkPermission, isPermissionControl, kind, permissionState.status]);
 
   if (!isPermissionControl) return null;
+
+  if (kind === "fullDiskAccess") {
+    return (
+      <ControlFrame>
+        <Button
+          disabled={disabled}
+          loading={authorizing}
+          onClick={openFullDiskAccessSettings}
+          size="small"
+        >
+          {t("schema.settings.permissions.fullDiskAccess.openSettings")}
+        </Button>
+      </ControlFrame>
+    );
+  }
 
   const checked =
     kind === "runAsAdministrator"
@@ -192,15 +220,6 @@ async function readPermissionState(
     };
   }
 
-  if (kind === "fullDiskAccess") {
-    const granted = await checkFullDiskAccessPermission();
-
-    return {
-      configured: false,
-      status: granted ? "granted" : "denied",
-    };
-  }
-
   if (kind === "screenRecording") {
     const granted = await checkScreenRecordingPermission();
 
@@ -219,11 +238,6 @@ async function readPermissionState(
 async function requestSystemPermission(kind: PermissionKind): Promise<void> {
   if (kind === "accessibility") {
     await requestAccessibilityPermission();
-    return;
-  }
-
-  if (kind === "fullDiskAccess") {
-    await requestFullDiskAccessPermission();
     return;
   }
 
