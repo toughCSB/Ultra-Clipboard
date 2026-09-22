@@ -177,3 +177,52 @@ replace the prompt with its recommended bump.
 
 The command stays interactive while keeping changelog generation separate from
 version selection.
+
+## Scenario: macOS Release Bundle Signing
+
+### 1. Scope / Trigger
+
+- Trigger: macOS release packaging without an Apple Developer ID certificate.
+
+### 2. Signatures
+
+- `src-tauri/tauri.macos.conf.json` sets `bundle.macOS.signingIdentity` to `"-"`.
+- `TAURI_SIGNING_PRIVATE_KEY` signs updater archives separately; it does not
+  code-sign the `.app` bundle.
+
+### 3. Contracts
+
+- The macOS updater archive must contain an ad hoc signed `.app` with sealed
+  resources and the configured `com.toughcsb.ultraclipboard` identifier.
+- Ad hoc signing changes the designated requirement when code changes, so
+  Screen Recording and Accessibility grants may need to be repeated after an
+  update. It does not provide Developer ID signing or notarization.
+
+### 4. Validation & Error Matrix
+
+- `codesign --verify --deep --strict` fails with `code has no resources but
+  signature indicates they must be present` -> the bundle was not signed; a
+  linker-signed executable inside it is insufficient.
+- `codesign --verify --deep --strict` succeeds -> bundle integrity passes, but
+  this alone does not establish Gatekeeper acceptance or TCC grant retention.
+
+### 5. Good/Base/Bad Cases
+
+- Good: CI updater archive extracts to a bundle with sealed resources and a
+  successful strict verification on macOS.
+- Bad: CI publishes an archive whose executable is ad hoc linker-signed but
+  whose `.app` has no sealed resources.
+
+### 6. Tests Required
+
+- Inspect the built Apple Silicon and Intel updater archives with
+  `codesign --verify --deep --strict` before publishing.
+- Install the Apple Silicon build on the actual Mac, check version and existing
+  clipboard data, and exercise capture after any necessary user permission
+  grant.
+
+### 7. Wrong vs Correct
+
+- Wrong: infer that a Tauri updater `.sig` proves macOS app code signing.
+- Correct: verify the updater `.sig` and extracted `.app` code signature as
+  separate artifacts.

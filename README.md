@@ -70,7 +70,7 @@ Linux는 지원하지 않습니다. macOS Apple Silicon과 Intel 패키지는 �
 
 최신 빌드는 [Releases](https://github.com/toughCSB/Ultra-Clipboard/releases)에서 받을 수 있습니다.
 
-앱 package 자체는 code signing과 공증(notarization)이 되어 있지 않습니다(updater artifact만 전용 Tauri key로 서명). Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로 출처와 파일을 확인한 뒤 사용하세요.
+Windows 앱 패키지는 코드 서명을 받지 않았고, macOS 앱은 Apple 인증서 없이 임시 서명되어 공증(notarization)을 받지 않았습니다. 업데이트 파일은 별도의 Tauri 키로 서명합니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고를 표시할 수 있으므로 출처와 파일을 확인한 뒤 사용하세요.
 
 macOS에서는 앱 업데이트로 임시 서명이 바뀌면 화면 기록·손쉬운 사용 권한을 다시 허용해야 할 수 있습니다. macOS 시스템 설정에서 `Ultra Clipboard`의 해당 항목을 확인하고 앱을 다시 시작하세요. 전체 디스크 접근은 일반 캡처·클립보드 사용에 필요하지 않으며, 앱 설정에서도 허용 여부를 확정적인 스위치로 표시하지 않습니다. 기존 클립보드 기록과 앱 설정은 업데이트로 삭제되지 않습니다.
 

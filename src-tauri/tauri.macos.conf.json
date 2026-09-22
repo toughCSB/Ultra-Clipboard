@@ -1,7 +1,8 @@
 {
   "bundle": {
     "macOS": {
-      "minimumSystemVersion": "14.0"
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "-"
     },
     "resources": [
       "assets/tray-mac.ico",

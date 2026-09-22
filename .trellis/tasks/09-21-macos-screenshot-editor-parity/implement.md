@@ -115,6 +115,7 @@
 - 전체 디스크 접근 설정을 확정적인 스위치 대신 시스템 설정으로 이동하는 버튼으로 바꾸고 두 언어의 설명을 수정했다. Windows에서 `pnpm lint`, `pnpm tsc`, `pnpm test`(47개), `pnpm build`가 통과했다. 기존 Mac 앱의 권한을 또 무효화하지 않도록 새 앱 설치는 보류했고, 새 화면의 Mac 실기 확인과 보류 중인 v1.2.3 릴리스 정리는 남아 있다.
 - 실제 Mac 설치본 v1.2.2의 `codesign -dv -r-`에서 `Signature=adhoc`, `TeamIdentifier=not set`, `designated => cdhash H"d9287df9ee84662596e35bb9a349ce4e0ab243db"`를 확인했다. `security find-identity -p codesigning -v`에는 유효한 인증서가 0개다. 이 서명 형태는 버전이 바뀌면 권한 식별이 유지되지 않는다는 Apple TN3127의 설명과 일치한다. 현재 설치본은 교체하지 않았다.
 - 전체 디스크 접근은 앱 코드에서 권한 검사와 설정 링크 외에 직접 요구하는 핵심 경로가 없고, 시작 안내가 필수라고 잘못 설명하고 있었다. 시작 권한 카드에서 제외하고 설정에는 선택 권한으로 설명했다. 두 언어와 README를 동기화했으며 Windows에서 `pnpm lint`, `pnpm tsc`, `pnpm test`(47개), `pnpm build`가 통과했다. 화면 기록·손쉬운 사용의 업데이트 후 권한 유지 문제는 서명 identity를 고정해 실제 두 버전 업데이트로 검증하기 전까지 미해결이다.
+- 사용자가 최종 설치·배포까지 진행하라고 명시했다. 공개되지 않은 v1.2.3 태그는 그대로 두고 최신 수정이 포함된 v1.2.4를 첫 공개 업데이트로 준비한다. CI의 v1.2.3 Apple Silicon updater archive를 풀어 보니 번들은 `code has no resources but signature indicates they must be present`로 strict 검증에 실패했고 실행 파일만 linker-signed 상태였다. 복사본을 `codesign --force --deep --sign -`로 서명한 뒤 strict 검증과 정식 bundle ID가 통과했다. 사용자가 Mac 릴리스 설정의 `signingIdentity: "-"` 변경을 승인했고, 다음 CI 산출물의 실제 `.app` 서명을 다시 검증한다.
 - [ ] 실제 픽셀 결과와 편집기 배치를 Windows·macOS에서 검증한다.
 
 ## 품질 Gate
