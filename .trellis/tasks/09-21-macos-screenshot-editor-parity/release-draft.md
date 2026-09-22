@@ -15,6 +15,10 @@ This is a draft for the next release. Do not tag or publish until the task's rel
 - Keep the frozen capture visible until the editor paints to avoid desktop flicker, and load screenshot pages separately to shorten window startup.
 - Replace the editor discard action with a larger red trash icon and make the primary copy action more prominent.
 
+### Fixed
+
+- Recreate the preferences window when reopening the app from the macOS Dock after idle window cleanup.
+
 ### Release notes
 
 - macOS display coordinates on mixed-scale hardware and repeated end-to-end capture latency still require device verification.
@@ -32,6 +36,10 @@ This is a draft for the next release. Do not tag or publish until the task's rel
 
 - 편집기 첫 화면이 그려질 때까지 캡처 화면을 유지해 바탕 화면 깜빡임을 줄이고, 캡처 화면을 분리해 창 시작 시간을 줄였습니다.
 - 편집기의 버리기 동작을 더 큰 빨간 휴지통 아이콘으로 바꾸고 주 복사 버튼을 강조했습니다.
+
+### 수정
+
+- 유휴 상태에서 설정 창이 정리된 뒤 macOS Dock에서 앱을 다시 열어도 설정 창이 생성되도록 했습니다.
 
 ### 릴리즈 안내
 

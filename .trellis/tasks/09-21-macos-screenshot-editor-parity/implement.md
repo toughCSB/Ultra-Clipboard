@@ -107,6 +107,8 @@
 - Mac 마지막 영역 반복 캡처는 998×844 이미지를 직접 편집기에 열었고, 화면 고정은 같은 크기의 `Ultra Clipboard Pin` 창 생성까지 확인했다. 지연 캡처는 3초 후 영역 선택 오버레이가 표시됐지만 원격 드래그 입력이 선택을 확정하지 못해 편집 결과는 미검증이다.
 - Mac 정식 앱 설정에 손쉬운 사용과 전체 디스크 접근이 꺼짐으로 표시된 시점에 macOS 시스템 설정을 직접 확인하니 두 권한도 실제로 꺼져 있었다. 두 항목을 다시 켜고 앱을 재시작한 뒤 앱 설정에서 화면 기록·손쉬운 사용·전체 디스크 접근이 모두 켜짐으로 표시되는 것을 확인했다. ad hoc 서명이 바뀌면 권한 재허용이 필요한 문제는 배포 서명 identity 확보 전까지 남는다.
 - GitHub Actions의 등록된 secret은 Tauri updater 서명 키 두 개뿐이며 Apple Developer 배포 서명·notarization 자격증명은 없다. Mac의 Homebrew Rust에는 `cargo-clippy`가 없어 격리된 Rust 1.96.0 도구체인으로 macOS `cargo clippy --all-targets --all-features --offline -- -D warnings`를 통과했다. Mac Rust 테스트와 Apple Silicon 빌드는 앞서 통과했다.
+- 최종 재점검에서 Mac Dock 재열기 시 `window not found: preference`가 기록됐다. 설정 WebView가 유휴 정리된 후 `macos::handle_reopen`이 다시 생성하지 않는 플랫폼 표시 함수를 직접 호출한 것이 원인이었다. 공통 `window::show_window`로 변경하고 Mac clippy를 통과했다. 새 Apple Silicon `.app`의 실행 파일과 번들을 생성했으나 로컬 Tauri 명령은 updater 개인 키가 없어 마지막 서명 단계에서 종료됐다. 검증용 임시 서명 후 설치해 설정 창을 닫고 70초 이상 지난 뒤 Dock 재열기로 새 설정 창이 생성되는 것을 확인했다.
+- 검증용 앱의 새 ad hoc 서명으로 Mac 앱 설정의 화면 기록·손쉬운 사용 권한은 다시 꺼짐으로 표시됐다. 기존 설치본을 복구하고 앱을 재시작했으며, 화면 기록 권한 확인과 영역 캡처 오버레이 표시가 성공했다. 임시 서명 앱을 새 릴리스로 배포하지 않는다.
 - [ ] 실제 픽셀 결과와 편집기 배치를 Windows·macOS에서 검증한다.
 
 ## 품질 Gate

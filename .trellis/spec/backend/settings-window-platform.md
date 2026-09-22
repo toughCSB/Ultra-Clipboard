@@ -16,6 +16,16 @@ creation, raw frame transfer, WebView canvas painting, and editor first paint.
 Repeat captures in the installed app on both platforms; a fast ScreenCaptureKit
 or GDI call alone does not establish fast end-to-end capture.
 
+## macOS Dock reopen after idle window destruction
+
+`macos::handle_reopen` must call the shared `window::show_window` for onboarding
+and preferences. The shared path rebuilds a missing `DestroyWhenIdle` WebView
+through `lifecycle::rebuild_fn` before platform display and reports visibility.
+`macos::show_window` assumes the WebView already exists; calling it directly
+after the preference window is destroyed fails with `window not found: preference`.
+After changing Dock reopen behavior, close preferences, let idle destruction run,
+and verify that clicking the Dock icon creates and displays preferences again.
+
 ## Settings Model
 
 Settings live in Rust under `src-tauri/src/settings/`.
