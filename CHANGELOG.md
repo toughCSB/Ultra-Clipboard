@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.4](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.3...v1.2.4) (2026-09-22)
+
+### Added
+
+- Bring area, window, full-screen, delayed, and repeat capture to macOS 14 and later, including the screenshot editor and Vision OCR.
+- Add highlighter intensity controls for new and selected annotations on Windows and macOS.
+
+### Changed
+
+- Keep the frozen capture visible until the editor paints to avoid desktop flicker, load screenshot pages separately, and make the red discard icon clearer beside the primary copy action.
+
+### Fixed
+
+- Recreate the preferences window when reopening the app from the macOS Dock after idle cleanup.
+- Replace the unreliable macOS Full Disk Access status switch with a button that opens System Settings. The previous check could show off while macOS showed the permission enabled.
+- Remove Full Disk Access from required onboarding permissions. Screen Recording is needed for capture and Accessibility for quick paste; Full Disk Access is optional for protected files.
+
+### Release Notes
+
+- macOS builds remain without Apple Developer ID signing or notarization. Because the app identity can change between ad hoc signed builds, macOS may require Screen Recording and Accessibility permissions again after this update. Existing clipboard history and app settings are preserved.
+- v1.2.3 was an unpublished build candidate. v1.2.4 is the first public update after v1.2.2.
+
 ## [1.2.3](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.2...v1.2.3) (2026-09-22)
 
 ### Added
