@@ -12,7 +12,11 @@ import type { Settings } from "@/types/settings";
 import OnboardingPreferenceCard from "./OnboardingPreferenceCard";
 import OnboardingStepLayout from "./OnboardingStepLayout";
 
-const PERMISSION_SETTINGS = findPreferenceSectionSettings("permissions");
+const PERMISSION_SETTINGS = findPreferenceSectionSettings("permissions").filter(
+  (setting) => {
+    return setting.id !== "permissions.fullDiskAccess";
+  },
+);
 const DESCRIPTION_PLATFORM = PERMISSION_SETTINGS.some((setting) => {
   return setting.id === "permissions.runAsAdministrator";
 })

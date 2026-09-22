@@ -471,7 +471,7 @@
           "title": "Restart required"
         },
         "fullDiskAccess": {
-          "description": "Used to read some protected files. Check or change this permission in macOS System Settings.",
+          "description": "Not needed for regular capture or clipboard use. Grant it in macOS System Settings only when you need to read protected files.",
           "openSettings": "Open System Settings",
           "title": "Full Disk Access Permission"
         },

@@ -113,6 +113,8 @@
 - CI의 Apple Silicon `.app.tar.gz`를 실제 Mac에서 설치·실행했고, 앱 설정에서 `v1.2.3`과 기존 로컬 저장량 41 MB를 확인했다. 번들의 `Info.plist`는 최소 macOS 14.0이고 실행 파일은 arm64다. 번들 전체는 유효한 배포 서명이 없어 `codesign --verify --deep --strict`가 실패했으며, 실행에 성공한 뒤 앱 설정의 화면 기록·손쉬운 사용·전체 디스크 접근 세 권한이 모두 꺼짐으로 표시됐다. 기존 설치본을 복구하고 코드 서명 검사와 프로세스 재실행을 확인했다. 초안 릴리스는 아직 공개하지 않았다.
 - 복구한 정식 Mac 앱 v1.2.2를 재시작한 뒤 macOS 시스템 설정에서 Ultra Clipboard의 전체 디스크 접근 스위치가 켜진 화면을 확인했지만 앱 설정에는 꺼짐으로 표시됐다. 같은 화면에서 화면 기록·손쉬운 사용은 켜짐이었다. 사용 중인 `tauri-plugin-macos-permissions` 2.3.0의 전체 디스크 접근 확인은 Safari·Stocks 보호 폴더의 `read_dir` 성공 여부만 확인하므로 시스템 설정 스위치의 대리 지표가 아니다. 실제 특정 보호 파일 접근 가능 여부는 아직 검증하지 않았다.
 - 전체 디스크 접근 설정을 확정적인 스위치 대신 시스템 설정으로 이동하는 버튼으로 바꾸고 두 언어의 설명을 수정했다. Windows에서 `pnpm lint`, `pnpm tsc`, `pnpm test`(47개), `pnpm build`가 통과했다. 기존 Mac 앱의 권한을 또 무효화하지 않도록 새 앱 설치는 보류했고, 새 화면의 Mac 실기 확인과 보류 중인 v1.2.3 릴리스 정리는 남아 있다.
+- 실제 Mac 설치본 v1.2.2의 `codesign -dv -r-`에서 `Signature=adhoc`, `TeamIdentifier=not set`, `designated => cdhash H"d9287df9ee84662596e35bb9a349ce4e0ab243db"`를 확인했다. `security find-identity -p codesigning -v`에는 유효한 인증서가 0개다. 이 서명 형태는 버전이 바뀌면 권한 식별이 유지되지 않는다는 Apple TN3127의 설명과 일치한다. 현재 설치본은 교체하지 않았다.
+- 전체 디스크 접근은 앱 코드에서 권한 검사와 설정 링크 외에 직접 요구하는 핵심 경로가 없고, 시작 안내가 필수라고 잘못 설명하고 있었다. 시작 권한 카드에서 제외하고 설정에는 선택 권한으로 설명했다. 두 언어와 README를 동기화했으며 Windows에서 `pnpm lint`, `pnpm tsc`, `pnpm test`(47개), `pnpm build`가 통과했다. 화면 기록·손쉬운 사용의 업데이트 후 권한 유지 문제는 서명 identity를 고정해 실제 두 버전 업데이트로 검증하기 전까지 미해결이다.
 - [ ] 실제 픽셀 결과와 편집기 배치를 Windows·macOS에서 검증한다.
 
 ## 품질 Gate

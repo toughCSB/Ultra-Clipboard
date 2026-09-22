@@ -79,8 +79,10 @@ System Settings. The installed app can show false while System Settings shows
 Ultra Clipboard enabled, including after an app restart. Render Full Disk Access
 as an action that opens `Privacy_AllFiles`, without a checked/unchecked claim or
 status polling. Keep the separate screen recording and accessibility checks for
-their respective controls. Verify the preferences UI and System Settings on a
-Mac before claiming that an actual grant is effective.
+their respective controls. Full Disk Access is optional for protected files and
+must not appear in the onboarding list of core permissions. Verify the
+preferences UI and System Settings on a Mac before claiming that an actual
+grant is effective.
 
 If a change affects macOS NSPanel timing or Windows non-focusable keyboard
 navigation, manual desktop validation is required. Type checks cannot cover
