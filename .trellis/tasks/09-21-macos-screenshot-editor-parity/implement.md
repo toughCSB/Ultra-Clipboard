@@ -109,6 +109,8 @@
 - GitHub Actions의 등록된 secret은 Tauri updater 서명 키 두 개뿐이며 Apple Developer 배포 서명·notarization 자격증명은 없다. Mac의 Homebrew Rust에는 `cargo-clippy`가 없어 격리된 Rust 1.96.0 도구체인으로 macOS `cargo clippy --all-targets --all-features --offline -- -D warnings`를 통과했다. Mac Rust 테스트와 Apple Silicon 빌드는 앞서 통과했다.
 - 최종 재점검에서 Mac Dock 재열기 시 `window not found: preference`가 기록됐다. 설정 WebView가 유휴 정리된 후 `macos::handle_reopen`이 다시 생성하지 않는 플랫폼 표시 함수를 직접 호출한 것이 원인이었다. 공통 `window::show_window`로 변경하고 Mac clippy를 통과했다. 새 Apple Silicon `.app`의 실행 파일과 번들을 생성했으나 로컬 Tauri 명령은 updater 개인 키가 없어 마지막 서명 단계에서 종료됐다. 검증용 임시 서명 후 설치해 설정 창을 닫고 70초 이상 지난 뒤 Dock 재열기로 새 설정 창이 생성되는 것을 확인했다.
 - 검증용 앱의 새 ad hoc 서명으로 Mac 앱 설정의 화면 기록·손쉬운 사용 권한은 다시 꺼짐으로 표시됐다. 기존 설치본을 복구하고 앱을 재시작했으며, 화면 기록 권한 확인과 영역 캡처 오버레이 표시가 성공했다. 임시 서명 앱을 새 릴리스로 배포하지 않는다.
+- `v1.2.3` 배포 후보 `753087e`를 `master`에 푸시하고 태그를 생성했다. [Release CI run 35689588299](https://github.com/toughCSB/Ultra-Clipboard/actions/runs/35689588299)의 Windows x64/ARM64 및 macOS Apple Silicon/Intel 빌드가 모두 통과했고, GitHub 초안 릴리스에 11개 파일이 생성됐다. `latest.json`의 8개 플랫폼 URL이 해당 asset을 가리키며 서명 문자열이 각 `.sig`와 일치한다. 암호학적 서명 검증은 아직 수행하지 않았다.
+- CI의 Apple Silicon `.app.tar.gz`를 실제 Mac에서 설치·실행했고, 앱 설정에서 `v1.2.3`과 기존 로컬 저장량 41 MB를 확인했다. 번들의 `Info.plist`는 최소 macOS 14.0이고 실행 파일은 arm64다. 번들 전체는 유효한 배포 서명이 없어 `codesign --verify --deep --strict`가 실패했으며, 실행에 성공한 뒤 앱 설정의 화면 기록·손쉬운 사용·전체 디스크 접근 세 권한이 모두 꺼짐으로 표시됐다. 기존 설치본을 복구하고 코드 서명 검사와 프로세스 재실행을 확인했다. 초안 릴리스는 아직 공개하지 않았다.
 - [ ] 실제 픽셀 결과와 편집기 배치를 Windows·macOS에서 검증한다.
 
 ## 품질 Gate

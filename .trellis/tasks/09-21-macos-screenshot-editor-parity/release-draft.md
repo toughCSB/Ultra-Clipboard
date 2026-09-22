@@ -1,6 +1,6 @@
 # Release draft: v1.2.3 candidate
 
-This is a draft for the next release. Do not tag or publish until the task's release gates pass. When the version is chosen, move the English section to `CHANGELOG.md`, synchronize `CHANGELOG.ko-KR.md`, and update the version files together.
+Version `1.2.3` is tagged and the CI artifacts are in a GitHub draft release. Do not publish the draft until the remaining release decision is resolved. The English and Korean sections below are preserved as the original planning draft; the published candidate text is in the two root changelog files.
 
 ## English
 
