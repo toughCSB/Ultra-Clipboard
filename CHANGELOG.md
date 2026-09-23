@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.5](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.4...v1.2.5) (2026-09-23)
+
+### Fixed
+
+- Stop repeated Windows UAC prompts after an administrator launch is cancelled or fails. The app restores the previous setting and continues under the current user when elevation cannot start.
+
+### Changed
+
+- Explain that administrator launch is optional and intended for pasting into apps already running as administrator.
+
+### Release Notes
+
+- macOS packages are ad hoc signed because an Apple Developer ID is unavailable. Updating may require Screen Recording and Accessibility permissions again. Existing clipboard history and app settings are preserved.
+
 ## [1.2.4](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.3...v1.2.4) (2026-09-22)
 
 ### Added
