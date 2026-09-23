@@ -26,7 +26,7 @@ use tauri::{Manager, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    admin::handle_startup_auto_elevation();
+    let should_disable_admin_launch = admin::handle_startup_auto_elevation();
 
     let mut log_targets = vec![tauri_plugin_log::Target::new(
         tauri_plugin_log::TargetKind::LogDir { file_name: None },
@@ -217,10 +217,22 @@ pub fn run() {
             screenshot::init(&handle);
             update::init(&handle);
 
-            let settings = settings::init(&handle).map_err(|err| {
+            let mut settings = settings::init(&handle).map_err(|err| {
                 log::error!("settings initialization failed: {err:?}");
                 err
             })?;
+
+            if should_disable_admin_launch && settings.general.run_as_admin {
+                settings = handle.state::<settings::SettingsStore>().update(serde_json::json!({
+                    "general": {
+                        "runAsAdmin": false,
+                    },
+                }))?;
+                admin::sync_scheduled_task(false);
+                log::warn!(
+                    "administrator launch was disabled after elevation failed; continuing as the current user"
+                );
+            }
 
             let handle_db = handle.clone();
             tauri::async_runtime::block_on(async move {

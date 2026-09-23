@@ -581,18 +581,19 @@ not a frontend-only permission prompt.
   - `AdminLaunchStatus.runningAsAdmin: bool`
   - `AdminLaunchStatus.taskReady: bool`
 - Internal restart marker:
-  - `--ecopaste-admin-restarted`
+  - `--ultra-clipboard-admin-restarted`
 
 ### 3. Contracts
 
 - `runAsAdmin` records persistent user intent. The current Windows access token
-  is the source of truth for whether EcoPaste is actually elevated.
+  is the source of truth for whether Ultra Clipboard is actually elevated.
 - Windows elevation detection uses `OpenProcessToken` and
   `GetTokenInformation(TokenElevation)`.
 - Release startup calls the admin auto-elevation check before normal Tauri setup
   initializes windows, tray, database, clipboard watcher, or hooks.
-- If `runAsAdmin=true` and the process is already elevated, Rust best-effort
-  syncs the highest-privilege scheduled task and continues startup.
+- If `runAsAdmin=true` and the process is already elevated, Rust syncs the
+  highest-privilege scheduled task. If task creation fails, the current session
+  continues elevated but setup persists `runAsAdmin=false` for future launches.
 - If `runAsAdmin=true` and the process is not elevated, Rust tries to launch an
   elevated process and exits the unelevated process only after launch succeeds.
 - Relaunch prefers a valid scheduled task only when current arguments are safe
@@ -602,13 +603,24 @@ not a frontend-only permission prompt.
   be preserved.
 - React renders `AdminLaunchStatus` and sends user intent through command
   wrappers. It must not call Windows APIs or infer token elevation itself.
+- React sends one enable intent through `restart_as_admin`; it must not persist
+  `runAsAdmin=true` in a separate command first. The Rust command persists the
+  intent, launches the elevated child, and restores the previous settings
+  snapshot plus `settings://updated` if UAC is cancelled or launch fails.
+- Failed startup elevation or an unelevated process carrying the restart marker
+  continues as the current user and setup persists `runAsAdmin=false`. This
+  prevents the same UAC prompt from returning on every launch.
 
 ### 4. Validation & Error Matrix
 
 - `restart_as_admin` on non-Windows -> command error `administrator launch is only available on Windows`.
-- UAC cancelled or elevated launch fails -> command error
-  `administrator permission request was cancelled or failed`; current process
-  remains open.
+- UAC cancelled or elevated launch fails -> restore the previous setting, emit
+  `settings://updated`, return `administrator permission request was cancelled
+  or failed`, and keep the current process open.
+- Startup launch fails -> continue as the current user and persist
+  `runAsAdmin=false` before normal initialization.
+- Elevated startup cannot create `UltraClipboardAdmin` -> continue elevated for
+  this session and persist `runAsAdmin=false` for future launches.
 - Scheduled task path mismatch -> task is not considered ready; fallback to UAC.
 - `set_run_as_admin(false)` while elevated -> Rust deletes the scheduled task
   best-effort after settings update.
@@ -617,41 +629,48 @@ not a frontend-only permission prompt.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: onboarding on Windows shows the administrator card as actionable, the
-  user grants access, Rust persists `runAsAdmin`, launches an elevated instance,
-  exits the old process, and the elevated instance reopens onboarding with the
-  card granted.
+- Good: onboarding on Windows shows the optional administrator card as
+  actionable, the user grants access, Rust persists `runAsAdmin`, launches an
+  elevated instance, exits the old process, and the elevated instance reopens
+  onboarding with the card granted.
 - Base: app already runs elevated; onboarding reports granted and startup keeps
   the scheduled task aligned with the current executable.
-- Bad: frontend marks administrator permission granted because `runAsAdmin=true`
-  even though `runningAsAdmin=false`.
+- Bad: the frontend stores `runAsAdmin=true` before restart, UAC is cancelled,
+  and every later launch requests UAC again because the intent was never reset.
 
 ### 6. Tests Required
 
 - Backend: unit-test Windows command-line quoting for scheduled task / UAC
   arguments.
+- Backend: unit-test cancelled startup elevation, successful relaunch, scheduled
+  task failure, and disabled administrator launch outcomes.
 - Backend: `cargo clippy -- -D warnings` must pass on Windows-specific code.
 - Backend: `cargo test` must include settings default coverage for
   `general.run_as_admin`.
 - Frontend: `pnpm tsc` must cover `AdminLaunchStatus` and the mirrored
   `runAsAdmin` setting.
 - Manual Windows validation is required for UAC approval/cancel and scheduled
-  task launch behavior.
+  task launch behavior. Also launch the installed app repeatedly with
+  `runAsAdmin=false` and confirm the process token is not elevated.
 
 ### 7. Wrong vs Correct
 
 Wrong:
 
-```tsx
-const granted = settings.general.runAsAdmin;
+```ts
+await setRunAsAdmin(true);
+await restartAsAdmin();
 ```
 
 Correct:
 
-```tsx
-const status = await getRunAsAdminStatus();
-const granted = status.runningAsAdmin;
+```ts
+await restartAsAdmin();
 ```
+
+The Rust command owns persistence, rollback, UAC launch, and settings emission
+as one operation. UI status still uses `AdminLaunchStatus.runningAsAdmin` for
+the current process and `configured` for the persistent switch.
 
 ## Scenario: Auto Updater Window
 

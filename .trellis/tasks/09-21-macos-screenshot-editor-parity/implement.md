@@ -98,6 +98,14 @@
 - macOS 정식 앱의 새 임시 서명에 대해 사용자가 화면 기록·손쉬운 사용·전체 디스크 접근을 다시 허용했다. 앱 재시작 후 영역 캡처 3회가 성공했고 사용자는 깜빡임 제거와 휴지통 배치를 확인했다. 약간의 체감 지연은 남는다.
 - Mac 영역 캡처 3회 중 warm 2회의 두 화면 동결은 143ms·162ms, 오버레이 창 준비는 1ms·0ms였다. 큰 화면의 프레임 수신은 99ms·140ms, 캔버스 그리기는 18ms·20ms였다. 선택 후 편집기 창 준비는 78ms·65ms, 새 WebView의 첫 그리기는 386ms·380ms였다. 전체 사용자 체감 시간의 p95는 아직 측정하지 않았다.
 - Windows 정식 설치 경로에 1.2.2 검증 빌드를 설치했고 기존 `prod` 클립보드 DB가 남아 있다. 영역 캡처의 동결은 97ms, 전체 화면 캡처의 픽셀 획득은 91ms였다. 편집기에서 휴지통 아이콘 전용 버튼과 더 큰 주 버튼을 시각 확인했고, 형광펜을 그리고 진하기 슬라이더를 조절했다.
+
+## 2026-09-23 Windows UAC 반복 요청 수정
+
+- [x] 설치본 manifest, 바로가기, AppCompatFlags, 예약 작업, 실제 process token과 `general.runAsAdmin` 값을 점검했다.
+- [x] UAC를 취소해도 `runAsAdmin=true`가 먼저 저장되던 명령 순서를 Rust 단일 동작으로 묶고 실패 시 이전 설정을 복원했다.
+- [x] 시작 시 승격이나 예약 작업 준비가 실패하면 일반 권한으로 계속 실행하고 이후 자동 관리자 실행을 해제하도록 했다.
+- [x] UAC 취소, 정상 승격 요청, 예약 작업 실패의 startup 결과를 Rust 회귀 테스트로 추가했다.
+- [x] 새 Windows 설치본을 일반 권한으로 3회 반복 실행했다. 세 프로세스 모두 비승격 토큰이었고 `consent.exe`는 나타나지 않았으며 `runAsAdmin=false`가 유지됐다.
 - Windows 표준 NSIS 빌드는 설치 파일을 생성했으나 로컬 updater 개인 키가 없어 명령의 마지막 서명 단계가 실패했다. 저장소 배포 설정은 바꾸지 않고, updater 산출물을 끄고 현재 사용자 설치 모드로 바꾼 일회성 로컬 빌드 설정으로 검증용 NSIS 빌드·설치를 완료했다. 공식 릴리스 서명과 updater 산출물 검증은 남아 있다.
 - Windows에서 `pnpm lint`, `pnpm tsc`, `pnpm test`(47개), `pnpm build`, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-targets --all-features`(230개)가 통과했다. Mac Apple Silicon 빌드와 `cargo test --all-targets --all-features`(228개)도 통과했다.
 - 최종 리뷰에서 Mac 정식 앱의 전체 화면 캡처 6720×3780과 창 캡처 998×844를 실제 편집기에서 확인했다. 테스트용 TextEdit 창의 `ULTRA CLIPBOARD QA 123` 문구를 Vision OCR이 클립보드에 복사했고, 이미지 복사 후 `public.png`·`public.tiff` 클립보드 형식을 확인했다.

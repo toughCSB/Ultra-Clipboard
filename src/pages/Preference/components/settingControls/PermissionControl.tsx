@@ -85,7 +85,6 @@ const PermissionControl: FC<PermissionControlProps> = (props) => {
         setAuthorizing(true);
 
         try {
-          await setRunAsAdmin(true);
           await restartAsAdmin();
         } catch (error) {
           log.warn("enable administrator launch failed", error);

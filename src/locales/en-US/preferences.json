@@ -466,7 +466,7 @@
           "title": "Accessibility Permission"
         },
         "adminRestartConfirm": {
-          "content": "Ultra Clipboard needs to restart with administrator privileges for this change to take effect. Windows may show a User Account Control prompt.",
+          "content": "Use this only when pasting into apps that run as administrator. Ultra Clipboard will restart and Windows will show one User Account Control prompt. Cancelling it leaves this setting off.",
           "ok": "Restart",
           "title": "Restart required"
         },
@@ -476,7 +476,7 @@
           "title": "Full Disk Access Permission"
         },
         "runAsAdministrator": {
-          "description": "Used to restart Ultra Clipboard with administrator privileges and keep future launches elevated when needed.",
+          "description": "Optional. Use it only when pasting into apps that run as administrator.",
           "title": "Run as Administrator"
         },
         "screenRecording": {

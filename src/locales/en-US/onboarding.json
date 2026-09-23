@@ -58,7 +58,7 @@
   "permissions": {
     "description": {
       "macos": "On macOS, screen capture needs Screen Recording and quick paste needs Accessibility.",
-      "windows": "On Windows, Ultra Clipboard needs administrator launch for some system-level workflows."
+      "windows": "Administrator access is not needed for regular use. Enable it only when pasting into apps that run as administrator."
     },
     "title": "Enable Permissions"
   },

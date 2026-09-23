@@ -28,7 +28,21 @@ pub async fn set_run_as_admin(app: AppHandle, enabled: bool) -> Result<Settings>
 
 #[tauri::command]
 pub async fn restart_as_admin(app: AppHandle) -> Result<()> {
-    admin::launch_elevated_current_process()?;
+    let store = app.state::<SettingsStore>();
+    let previous = store.snapshot();
+    let next = store.update(json!({
+        "general": {
+            "runAsAdmin": true,
+        },
+    }))?;
+
+    if let Err(err) = admin::launch_elevated_current_process() {
+        let restored = store.restore(previous)?;
+        super::settings::emit_settings_updated(&app, &restored);
+        return Err(err);
+    }
+
+    super::settings::emit_settings_updated(&app, &next);
     app.exit(0);
 
     Ok(())

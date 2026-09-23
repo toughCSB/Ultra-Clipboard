@@ -60,6 +60,14 @@ struct StorageManifest {
     version: u16,
 }
 
+#[cfg(target_os = "windows")]
+#[derive(Debug, PartialEq, Eq)]
+enum StartupElevationOutcome {
+    Continue,
+    ExitCurrentProcess,
+    DisableAdminLaunch,
+}
+
 pub fn status(configured: bool) -> AdminLaunchStatus {
     AdminLaunchStatus {
         configured,
@@ -158,35 +166,73 @@ pub fn launch_elevated_current_process() -> Result<()> {
     }
 }
 
-pub fn handle_startup_auto_elevation() {
+/// Returns true when a failed elevation attempt must be cleared after settings
+/// initialization so the next regular launch does not request UAC again.
+pub fn handle_startup_auto_elevation() -> bool {
     #[cfg(target_os = "windows")]
     {
         if cfg!(debug_assertions) {
-            return;
+            return false;
         }
 
         let Ok(configured) = early_run_as_admin_enabled() else {
-            return;
+            return false;
         };
-        if !configured {
-            return;
-        }
+        let outcome = attempt_startup_elevation(
+            configured,
+            is_running_as_admin(),
+            has_admin_restart_marker(),
+            create_scheduled_task,
+            try_launch_elevated_current_process,
+        );
 
-        if is_running_as_admin() {
-            if let Err(err) = create_scheduled_task() {
-                log::warn!("startup admin scheduled task sync failed: {err}");
-            }
-            return;
-        }
-
-        if has_admin_restart_marker() {
-            return;
-        }
-
-        if try_launch_elevated_current_process() {
-            std::process::exit(0);
+        match outcome {
+            StartupElevationOutcome::Continue => false,
+            StartupElevationOutcome::ExitCurrentProcess => std::process::exit(0),
+            StartupElevationOutcome::DisableAdminLaunch => true,
         }
     }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn attempt_startup_elevation<SyncTask, Relaunch>(
+    configured: bool,
+    running_as_admin: bool,
+    has_restart_marker: bool,
+    sync_task: SyncTask,
+    relaunch: Relaunch,
+) -> StartupElevationOutcome
+where
+    SyncTask: FnOnce() -> Result<()>,
+    Relaunch: FnOnce() -> bool,
+{
+    if !configured {
+        return StartupElevationOutcome::Continue;
+    }
+
+    if running_as_admin {
+        if let Err(err) = sync_task() {
+            log::warn!("startup admin scheduled task sync failed: {err}");
+            return StartupElevationOutcome::DisableAdminLaunch;
+        }
+
+        return StartupElevationOutcome::Continue;
+    }
+
+    if has_restart_marker {
+        return StartupElevationOutcome::DisableAdminLaunch;
+    }
+
+    if relaunch() {
+        return StartupElevationOutcome::ExitCurrentProcess;
+    }
+
+    StartupElevationOutcome::DisableAdminLaunch
 }
 
 #[cfg(target_os = "windows")]
@@ -428,4 +474,47 @@ fn wide_null(value: &str) -> Vec<u16> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect()
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_startup_elevation_disables_future_admin_launch() {
+        let outcome = attempt_startup_elevation(true, false, false, || Ok(()), || false);
+
+        assert_eq!(outcome, StartupElevationOutcome::DisableAdminLaunch);
+    }
+
+    #[test]
+    fn successful_startup_elevation_exits_current_process() {
+        let outcome = attempt_startup_elevation(true, false, false, || Ok(()), || true);
+
+        assert_eq!(outcome, StartupElevationOutcome::ExitCurrentProcess);
+    }
+
+    #[test]
+    fn failed_task_sync_disables_future_admin_launch() {
+        let outcome = attempt_startup_elevation(
+            true,
+            true,
+            false,
+            || {
+                Err(AppError::Other(anyhow::anyhow!(
+                    "scheduled task unavailable"
+                )))
+            },
+            || false,
+        );
+
+        assert_eq!(outcome, StartupElevationOutcome::DisableAdminLaunch);
+    }
+
+    #[test]
+    fn disabled_admin_launch_continues_without_elevation() {
+        let outcome = attempt_startup_elevation(false, false, false, || Ok(()), || true);
+
+        assert_eq!(outcome, StartupElevationOutcome::Continue);
+    }
 }

@@ -466,7 +466,7 @@
           "title": "손쉬운 사용 권한"
         },
         "adminRestartConfirm": {
-          "content": "이 변경을 적용하려면 Ultra Clipboard를 관리자 권한으로 다시 시작해야 합니다. Windows에서 사용자 계정 컨트롤 창이 뜰 수 있습니다.",
+          "content": "관리자 권한으로 실행 중인 앱에 붙여넣어야 할 때만 사용하세요. Ultra Clipboard가 다시 시작되며 Windows 사용자 계정 컨트롤 창이 한 번 표시됩니다. 취소하면 이 설정은 켜지지 않습니다.",
           "ok": "다시 시작",
           "title": "다시 시작 필요"
         },
@@ -476,7 +476,7 @@
           "title": "전체 디스크 접근 권한"
         },
         "runAsAdministrator": {
-          "description": "Ultra Clipboard를 관리자 권한으로 다시 시작하고, 필요할 때 이후 실행도 권한을 유지합니다.",
+          "description": "관리자 권한으로 실행 중인 앱에 붙여넣을 때만 선택적으로 사용합니다.",
           "title": "관리자 권한으로 실행"
         },
         "screenRecording": {
