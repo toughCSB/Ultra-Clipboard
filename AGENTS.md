@@ -157,6 +157,20 @@ cargo test
 - UnoCSS: <https://unocss.dev/> and <https://unocss.dev/presets/wind4>
 - Tauri v2: <https://tauri.app/llms-full.txt>
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as local markdown under `.scratch/`, which is git-ignored because this repository is public. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary, recorded as a `Status:` line in each issue file. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.
+
 <!-- TRELLIS:START -->
 
 # Trellis Instructions
