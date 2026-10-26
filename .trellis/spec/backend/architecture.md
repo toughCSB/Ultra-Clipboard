@@ -40,8 +40,8 @@ Examples:
   `read_clipboard`, so manual and automatic capture have the same dedupe and
   event semantics.
 - `settings::SettingsStore::update` performs deep merge, validation, and atomic
-  persistence; `commands::settings::update_settings` adds side effects and emits
-  `settings://updated`.
+  persistence; `settings::change::commit` is the only runtime write path. It
+  applies the OS effects of what changed and emits `settings://updated`.
 
 Avoid moving these decisions into React. If the frontend starts checking whether
 an item can reveal in Finder, parsing file entries, or deciding sensitive

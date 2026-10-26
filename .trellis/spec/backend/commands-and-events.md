@@ -38,8 +38,8 @@ Commands should not:
 Good local examples:
 - `commands::clipboard::paste_clipboard_item` handles the writeback, hide/resign
   timing, paste simulation, and reuse update.
-- `commands::settings::update_settings` applies `SettingsStore::update`, then
-  re-registers shortcuts and tray behavior when relevant sections changed.
+- `commands::settings::update_settings` delegates to `settings::change`, which
+  diffs previous and next settings and re-applies only the affected OS state.
 - `commands::window::open_preference_with_highlight` delegates to the Rust
   pending-slot mechanism instead of asking React to emit into a rebuilding
   window.
@@ -55,7 +55,7 @@ Current high-value events:
 | --- | --- | --- |
 | `clipboard://updated` | `clipboard/watcher.rs`, `commands/clipboard.rs`, `commands/storage.rs`, `backup/mod.rs` | Clipboard list refresh and deferred reload logic |
 | `clipboard-groups://updated` | `commands/clipboard.rs` | Group lists and empty state labels |
-| `settings://updated` | `commands/settings.rs`, `commands/storage.rs`, `backup/mod.rs` | `src/stores/settings.ts` mirror |
+| `settings://updated` | `settings/change.rs` (every runtime settings write) | `src/stores/settings.ts` mirror |
 | `window://visibility` | `window/mod.rs` | Clipboard focus/search and dormant refresh gates |
 | `window://lifecycle` and `window://before-destroy` | `window/lifecycle/mod.rs` | Window lifecycle mirror and destroy protection |
 | `keyboard://nav` | `keyboard/windows.rs` | `useKeyboardEvent` on Windows clipboard window |

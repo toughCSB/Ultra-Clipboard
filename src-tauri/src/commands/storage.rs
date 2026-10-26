@@ -11,9 +11,8 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::core::Result;
 use crate::db::DatabaseState;
-use crate::settings::Settings;
+use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
 
-const SETTINGS_UPDATED_EVENT: &str = "settings://updated";
 const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
 const STORAGE_CONTENT_DIRS: [&str; 4] = ["db", "resources", "config", "state"];
 const CUSTOM_STORAGE_CONTAINER_DIR: &str = "UltraClipboardData";
@@ -216,9 +215,8 @@ async fn switch_storage_location(
         return Err(anyhow::anyhow!(message).into());
     }
 
-    let settings = rebase_storage_states(&app).await?;
+    rebase_storage_states(&app).await?;
     remove_old_storage_data(&app, &current)?;
-    emit_settings_updated(&app, &settings);
     emit_clipboard_imported(&app);
 
     Ok(ChangeStorageLocationResult {
@@ -353,8 +351,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn rebase_storage_states(app: &AppHandle) -> Result<Settings> {
-    let settings = app.state::<crate::settings::SettingsStore>().rebase(app)?;
+async fn rebase_storage_states(app: &AppHandle) -> Result<()> {
     app.state::<crate::window::WindowStateStore>().rebase(app)?;
     app.state::<crate::clipboard::ImageStore>().rebase(app)?;
     app.state::<crate::clipboard::AppIconStore>().rebase(app)?;
@@ -363,17 +360,11 @@ async fn rebase_storage_states(app: &AppHandle) -> Result<Settings> {
     if let Some(registry) = app.try_state::<crate::clipboard::AppsRegistry>() {
         registry.load_from_db().await?;
     }
-    if let Err(err) = crate::sync::reconfigure(app).await {
-        log::warn!("reconfigure clipboard sync after storage rebase failed: {err}");
-    }
 
-    Ok(settings)
-}
+    // Settings go last: the sync effect reads the rebased image store and pool.
+    change::commit(app, SettingsWrite::Rebase, OnEffectFailure::LogOnly).await?;
 
-fn emit_settings_updated(app: &AppHandle, settings: &Settings) {
-    if let Err(err) = app.emit(SETTINGS_UPDATED_EVENT, settings) {
-        log::warn!("emit settings updated event failed: {err}");
-    }
+    Ok(())
 }
 
 fn emit_clipboard_imported(app: &AppHandle) {

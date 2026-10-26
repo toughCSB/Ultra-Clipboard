@@ -70,7 +70,6 @@ export const TAURI_COMMAND = {
   RESUME_GLOBAL_SHORTCUTS: "resume_global_shortcuts",
   REVEAL_CLIPBOARD_ITEM: "reveal_clipboard_item",
   SAVE_CLIPBOARD_IMAGE_TO_FILE: "save_clipboard_image_to_file",
-  SET_AUTOSTART: "set_autostart",
   SET_CLIPBOARD_WINDOW_AUTO_HIDE_SUSPENDED:
     "set_clipboard_window_auto_hide_suspended",
   SET_CLIPBOARD_WINDOW_EDITING: "set_clipboard_window_editing",
@@ -83,7 +82,6 @@ export const TAURI_COMMAND = {
   SHOW_CLIPBOARD_PREVIEW: "show_clipboard_preview",
   SHOW_CONTEXT_SUBMENU: "show_context_submenu",
   SHOW_SCREENSHOT_PIN_MENU: "show_screenshot_pin_menu",
-  SHOW_TASKBAR_ICON: "show_taskbar_icon",
   SHOW_WINDOW: "show_window",
   SKIP_UPDATE_VERSION: "skip_update_version",
   START_DRAG_CLIPBOARD_ITEM: "start_drag_clipboard_item",

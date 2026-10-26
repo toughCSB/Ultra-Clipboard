@@ -1,4 +1,3 @@
-import { setAutostart, showTaskbarIcon } from "@/commands";
 import { updateSettings } from "@/stores/settings";
 import type { SettingsPatch } from "@/types/settings";
 import type {
@@ -13,7 +12,6 @@ export async function commitSettingChange(
 ) {
   if (!setting.path) return;
 
-  await applySideEffects(setting, value);
   await updateSettings(buildSettingPatch(setting, value));
 }
 
@@ -110,18 +108,4 @@ function buildNestedPatch(
   return {
     [head]: buildNestedPatch(rest, value),
   };
-}
-
-async function applySideEffects(
-  setting: PreferenceSetting,
-  value: SettingValue,
-) {
-  if (setting.id === "control.autoStart") {
-    await setAutostart(Boolean(value));
-    return;
-  }
-
-  if (setting.id === "control.dockIcon") {
-    await showTaskbarIcon(Boolean(value));
-  }
 }

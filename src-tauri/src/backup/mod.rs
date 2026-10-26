@@ -22,6 +22,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::core::{AppError, Result};
+use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
 
 pub const BACKUP_EXTENSION: &str = "ecopastebak";
 pub const BACKUP_RECEIVED_EVENT: &str = "backup://received";
@@ -949,10 +950,7 @@ async fn merge_import(
     if let Some(settings) = patch.as_object_mut() {
         settings.remove("sync");
     }
-    let next = app
-        .state::<crate::settings::SettingsStore>()
-        .update(patch)?;
-    emit_settings_updated(app, &next);
+    change::commit(app, SettingsWrite::Patch(patch), OnEffectFailure::LogOnly).await?;
 
     Ok(ImportHistoryBackupResult {
         strategy: BackupImportStrategy::Merge,
@@ -993,13 +991,12 @@ async fn overwrite_import(
     emit_clipboard_imported(app);
 
     let settings_path = root.join(CONFIG_ARCHIVE_DIR).join(SETTINGS_FILENAME);
-    let next = app
-        .state::<crate::settings::SettingsStore>()
-        .replace_from_file(&settings_path)?;
-    emit_settings_updated(app, &next);
-    if let Err(err) = crate::sync::reconfigure(app).await {
-        log::warn!("reconfigure clipboard sync after backup restore failed: {err}");
-    }
+    change::commit(
+        app,
+        SettingsWrite::ReplaceFromFile(&settings_path),
+        OnEffectFailure::LogOnly,
+    )
+    .await?;
 
     Ok(ImportHistoryBackupResult {
         strategy: BackupImportStrategy::Overwrite,
@@ -1387,12 +1384,6 @@ fn emit_clipboard_imported(app: &AppHandle) {
         }),
     ) {
         log::warn!("emit clipboard import update failed: {err}");
-    }
-}
-
-fn emit_settings_updated(app: &AppHandle, settings: &crate::settings::Settings) {
-    if let Err(err) = app.emit("settings://updated", settings) {
-        log::warn!("emit settings import update failed: {err}");
     }
 }
 

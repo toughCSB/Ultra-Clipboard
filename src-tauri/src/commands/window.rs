@@ -76,11 +76,6 @@ pub async fn take_pending_preference_highlight() -> Option<String> {
 }
 
 #[tauri::command]
-pub async fn show_taskbar_icon(app: AppHandle, visible: bool) -> Result<()> {
-    window::show_taskbar_icon(&app, visible)
-}
-
-#[tauri::command]
 pub async fn position_window(
     app: AppHandle,
     label: String,

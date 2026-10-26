@@ -17,6 +17,7 @@ use crate::clipboard::{
 };
 use crate::core::{AppError, Result};
 use crate::db::DatabaseState;
+use crate::settings::change;
 use crate::settings::{Settings, SettingsStore};
 use crate::window;
 
@@ -86,7 +87,7 @@ pub async fn open_onboarding(app: AppHandle) -> Result<()> {
 
 #[tauri::command]
 pub async fn set_onboarding_step(app: AppHandle, step: u32) -> Result<Settings> {
-    update_onboarding_settings(
+    change::commit_patch(
         &app,
         json!({
             "onboarding": {
@@ -94,11 +95,12 @@ pub async fn set_onboarding_step(app: AppHandle, step: u32) -> Result<Settings> 
             },
         }),
     )
+    .await
 }
 
 #[tauri::command]
 pub async fn finish_onboarding(app: AppHandle) -> Result<Settings> {
-    let next = update_onboarding_settings(
+    let next = change::commit_patch(
         &app,
         json!({
             "onboarding": {
@@ -106,7 +108,8 @@ pub async fn finish_onboarding(app: AppHandle) -> Result<Settings> {
                 "lastStep": 0,
             },
         }),
-    )?;
+    )
+    .await?;
 
     if let Err(err) = window::hide_window(&app, window::ONBOARDING_WINDOW_LABEL) {
         log::warn!("hide onboarding window after finish failed: {err}");
@@ -121,7 +124,7 @@ pub async fn finish_onboarding(app: AppHandle) -> Result<Settings> {
 pub async fn detect_legacy_data(app: AppHandle) -> Result<OnboardingLegacyDataDetection> {
     let detection = inspect_legacy_data().await?;
 
-    update_onboarding_settings(
+    change::commit_patch(
         &app,
         json!({
             "onboarding": {
@@ -130,7 +133,8 @@ pub async fn detect_legacy_data(app: AppHandle) -> Result<OnboardingLegacyDataDe
                 },
             },
         }),
-    )?;
+    )
+    .await?;
 
     Ok(detection)
 }
@@ -211,7 +215,7 @@ pub async fn import_legacy_data(
     }
 
     let imported_at = Utc::now().to_rfc3339();
-    update_onboarding_settings(
+    change::commit_patch(
         &app,
         json!({
             "onboarding": {
@@ -223,7 +227,8 @@ pub async fn import_legacy_data(
                 },
             },
         }),
-    )?;
+    )
+    .await?;
 
     if let Err(err) = app.emit(
         CLIPBOARD_UPDATED_EVENT,
@@ -242,14 +247,6 @@ pub async fn import_legacy_data(
         selected_types,
         imported_at,
     })
-}
-
-fn update_onboarding_settings(app: &AppHandle, patch: serde_json::Value) -> Result<Settings> {
-    let next = app.state::<SettingsStore>().update(patch)?;
-
-    super::settings::emit_settings_updated(app, &next);
-
-    Ok(next)
 }
 
 async fn inspect_legacy_data() -> Result<OnboardingLegacyDataDetection> {

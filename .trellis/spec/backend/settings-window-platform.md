@@ -47,9 +47,8 @@ When adding a setting, update:
 - Preference schema in `src/pages/Preference/config/preferenceSchema.ts` if the
   setting is user-visible.
 - ko-KR and en-US locale entries.
-- Side effects in `commands/settings.rs` or
-  `src/pages/Preference/services/preferenceSettings.ts` when OS state changes
-  immediately.
+- An effect trigger in `settings/change.rs` (`plan` and `apply_effect`) when OS
+  state changes immediately. React only sends the patch.
 
 ### Window Open Selection Settings
 
@@ -117,8 +116,10 @@ Correct:
 
 ## Settings Events and Mirrors
 
-Rust is the source of truth. `commands::settings::update_settings` and
-`reset_settings` emit `settings://updated` after persistence and side effects.
+Rust is the source of truth. Every runtime settings write goes through
+`settings::change::commit`, which emits `settings://updated` once after
+persistence and side effects. `lib.rs` startup initialization is the only write
+outside it.
 `src/stores/settings.ts` listens to that event and updates the Valtio mirror.
 
 Do not mutate `settingsState` directly from UI components. Even the initiating
@@ -397,8 +398,8 @@ Correct:
 
 ## Native Integration Side Effects
 
-Settings changes that affect OS state must be applied in Rust or through the
-existing command layer:
+Settings changes that affect OS state are applied by `settings::change`, which
+diffs the previous and next `Settings` and runs only the affected effects:
 
 - Global shortcuts: `shortcut::apply`, `suspend`, and `resume`.
 - Tray menu and language: `tray::apply`.
@@ -407,9 +408,13 @@ existing command layer:
 - Windows administrator launch: `admin::sync_scheduled_task` and
   `admin::launch_elevated_current_process`.
 
-Failures in side-effect refresh after a successful settings write are logged and
-do not roll back the persisted settings unless the called command itself is the
-direct user action, such as `set_autostart`.
+Effects run reversible-first. With `OnEffectFailure::RollBack` (direct user
+writes), a failed sync, autostart, or dock/taskbar effect restores the previous
+settings, re-applies the effects already attempted, and returns the error.
+Shortcut, tray, and admin-task failures are logged and never roll back. Writes
+that follow an irreversible step (backup import, storage rebase, the
+`restart_as_admin` failure restore) use `OnEffectFailure::LogOnly`. Backup
+overwrite and storage rebase always reconfigure sync because the pool changed.
 
 ## Scenario: Windows Autostart Entry Deduplication and Duplicate Launches
 
@@ -424,7 +429,8 @@ task. Keep this Rust-owned; React only toggles `general.autoStart`.
 - Setting: `Settings.general.auto_start: bool`.
 - Commands:
   - `get_autostart() -> bool`
-  - `set_autostart(enabled: bool) -> ()`
+  - Enabling or disabling goes through `update_settings` with
+    `general.autoStart`; there is no separate setter command.
 - Startup sync:
   - `autostart::sync_enabled(app: &AppHandle, enabled: bool) -> Result<()>`
 - Launch-source matcher:
@@ -462,7 +468,7 @@ task. Keep this Rust-owned; React only toggles `general.autoStart`.
 - HKCU Run missing -> cleanup succeeds.
 - Enable -> create/update HKCU Run and StartupApproved values.
 - Disable -> remove HKCU Run; an inaccessible HKCU Run key returns an error, so
-  the frontend does not persist `general.autoStart=false`.
+  `settings::change` rolls back and `general.autoStart` stays `true`.
 - HKLM inaccessible or containing an older entry -> no HKLM access or mutation;
   report the legacy entry as a separate limitation if observed.
 - Startup sync failure after settings load -> log warning and continue app

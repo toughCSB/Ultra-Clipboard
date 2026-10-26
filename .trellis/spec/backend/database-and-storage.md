@@ -97,8 +97,10 @@ names remain owned by the modules that write them, such as `settings.json`,
 
 `commands/storage.rs` can move the data root while the app is running. It pauses
 the clipboard watcher, copies known content directories, replaces the database
-pool through `DatabaseState::close_and_replace`, rebases settings and resource
-stores, emits `settings://updated`, and emits a clipboard import refresh.
+pool through `DatabaseState::close_and_replace`, rebases the resource stores,
+then rebases settings last through `settings::change` (which reconfigures sync
+against the new pool and emits `settings://updated`), and emits a clipboard
+import refresh.
 
 `backup/mod.rs` exports `.ecopastebak` packages in two modes:
 

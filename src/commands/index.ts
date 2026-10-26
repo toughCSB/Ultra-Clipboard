@@ -735,16 +735,6 @@ export const getAutostart = () => {
   );
 };
 
-export const setAutostart = (enabled: boolean) => {
-  return call<void>(
-    TAURI_COMMAND.SET_AUTOSTART,
-    "commands:labels.setAutostart",
-    {
-      enabled,
-    },
-  );
-};
-
 export const listAllApps = () => {
   return call<ClipboardApp[]>(
     TAURI_COMMAND.LIST_ALL_APPS,
@@ -1116,16 +1106,6 @@ export const getWindowLifecycleSnapshot = async () => {
 
     return [];
   }
-};
-
-export const showTaskbarIcon = (visible: boolean) => {
-  return call<void>(
-    TAURI_COMMAND.SHOW_TASKBAR_ICON,
-    "commands:labels.setTaskbarIcon",
-    {
-      visible,
-    },
-  );
 };
 
 export const setClipboardWindowPinned = (pinned: boolean) => {

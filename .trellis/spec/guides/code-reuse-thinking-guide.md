@@ -36,8 +36,8 @@ Check all mirrors instead of adding local one-offs:
 
 - Rust model/defaults in `settings/model.rs`.
 - Rust validation in `settings/store.rs` if fields interact.
-- Rust side effects in `commands/settings.rs`, `tray`, `shortcut`, `window`, or
-  `autostart` when needed.
+- Rust side effects: add a trigger to `plan` in `settings/change.rs` and an arm
+  to its `apply_effect`; never apply them from a caller or from React.
 - TypeScript mirror in `src/types/settings.ts`.
 - Preference schema/control in `src/pages/Preference/config/preferenceSchema.ts`.
 - Commit behavior in `Preference/services/preferenceSettings.ts` for immediate

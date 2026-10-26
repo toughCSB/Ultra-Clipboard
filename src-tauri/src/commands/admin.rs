@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::admin::{self, AdminLaunchStatus};
 use crate::core::Result;
+use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
 use crate::settings::{Settings, SettingsStore};
 
 #[tauri::command]
@@ -14,35 +15,35 @@ pub async fn get_run_as_admin_status(app: AppHandle) -> Result<AdminLaunchStatus
 
 #[tauri::command]
 pub async fn set_run_as_admin(app: AppHandle, enabled: bool) -> Result<Settings> {
-    let next = app.state::<SettingsStore>().update(json!({
+    let patch = json!({
         "general": {
             "runAsAdmin": enabled,
         },
-    }))?;
+    });
 
-    admin::sync_scheduled_task(enabled);
-    super::settings::emit_settings_updated(&app, &next);
-
-    Ok(next)
+    change::commit_patch(&app, patch).await
 }
 
 #[tauri::command]
 pub async fn restart_as_admin(app: AppHandle) -> Result<()> {
-    let store = app.state::<SettingsStore>();
-    let previous = store.snapshot();
-    let next = store.update(json!({
+    let previous = app.state::<SettingsStore>().snapshot();
+    let patch = json!({
         "general": {
             "runAsAdmin": true,
         },
-    }))?;
+    });
+    change::commit_patch(&app, patch).await?;
 
     if let Err(err) = admin::launch_elevated_current_process() {
-        let restored = store.restore(previous)?;
-        super::settings::emit_settings_updated(&app, &restored);
+        change::commit(
+            &app,
+            SettingsWrite::Restore(Box::new(previous)),
+            OnEffectFailure::LogOnly,
+        )
+        .await?;
         return Err(err);
     }
 
-    super::settings::emit_settings_updated(&app, &next);
     app.exit(0);
 
     Ok(())

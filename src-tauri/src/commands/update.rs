@@ -26,7 +26,7 @@ pub async fn install_update(app: AppHandle, version: String) -> Result<()> {
 
 #[tauri::command]
 pub async fn skip_update_version(app: AppHandle, version: String) -> Result<AppUpdateStatus> {
-    update::skip(&app, version)
+    update::skip(&app, version).await
 }
 
 #[tauri::command]
