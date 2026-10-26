@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -22,7 +22,6 @@ use crate::settings::{Settings, SettingsStore};
 use crate::window;
 
 const MAX_ONBOARDING_STEP: u32 = 20;
-const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
 const LEGACY_HISTORY_TABLE: &str = "history";
 
 #[derive(Clone, Serialize)]
@@ -230,14 +229,12 @@ pub async fn import_legacy_data(
     )
     .await?;
 
-    if let Err(err) = app.emit(
-        CLIPBOARD_UPDATED_EVENT,
-        json!({
-            "imported": imported > 0,
-        }),
-    ) {
-        log::warn!("emit {CLIPBOARD_UPDATED_EVENT} after legacy import failed: {err}");
-    }
+    crate::clipboard::emit_clipboard_updated(
+        &app,
+        crate::clipboard::ClipboardUpdated::Imported {
+            imported: imported > 0,
+        },
+    );
 
     Ok(OnboardingLegacyImportResult {
         imported,

@@ -1,7 +1,6 @@
 use tauri::AppHandle;
 
 use crate::core::Result;
-use crate::settings::WindowPosition;
 use crate::window;
 
 pub use window::lifecycle::LifecycleSnapshot;
@@ -15,11 +14,6 @@ pub async fn show_window(app: AppHandle, label: String) -> Result<()> {
 #[tauri::command]
 pub async fn hide_window(app: AppHandle, label: String) -> Result<()> {
     window::hide_window(&app, &label)
-}
-
-#[tauri::command]
-pub async fn toggle_window(app: AppHandle, label: String) -> Result<()> {
-    window::toggle_window(&app, &label)
 }
 
 #[tauri::command]
@@ -73,15 +67,6 @@ pub async fn open_preference_with_highlight(app: AppHandle, setting_id: String) 
 #[tauri::command]
 pub async fn take_pending_preference_highlight() -> Option<String> {
     window::take_pending_preference_highlight()
-}
-
-#[tauri::command]
-pub async fn position_window(
-    app: AppHandle,
-    label: String,
-    position: WindowPosition,
-) -> Result<()> {
-    window::position_window(&app, &label, position)
 }
 
 #[tauri::command]

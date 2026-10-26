@@ -20,25 +20,6 @@ pub async fn find_app_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Clipbo
     Ok(row)
 }
 
-pub async fn list_apps_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<Vec<ClipboardApp>> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT_APP);
-    qb.push(" WHERE id IN (");
-    let mut sep = qb.separated(", ");
-    for id in ids {
-        sep.push_bind(id.clone());
-    }
-    qb.push(")");
-    let rows = qb
-        .build_query_as::<ClipboardApp>()
-        .fetch_all(pool)
-        .await
-        .context("failed to list clipboard apps by ids")?;
-    Ok(rows)
-}
-
 pub async fn list_all_apps(pool: &SqlitePool) -> Result<Vec<ClipboardApp>> {
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(SELECT_APP);
     qb.push(" ORDER BY name COLLATE NOCASE ASC, id ASC");

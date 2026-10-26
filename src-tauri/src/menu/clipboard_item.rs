@@ -8,9 +8,6 @@ use crate::core::Result;
 use crate::db::DatabaseState;
 use crate::settings::Language;
 
-#[cfg(target_os = "macos")]
-pub const CLIPBOARD_MENU_ACTION_EVENT: &str = "clipboard://menu-action";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ClipboardMenuAction {
@@ -172,13 +169,14 @@ mod native {
     };
     use tauri::{AppHandle, Emitter, Manager, Wry};
 
+    use crate::core::events;
     use crate::core::{AppError, Result};
     use crate::settings::Language;
     use crate::window::CLIPBOARD_WINDOW_LABEL;
 
     use super::{
         ClipboardItemMenuRequest, ClipboardMenuAction, ClipboardMenuGroup, MenuActionPayload,
-        ACTION_GROUPS, CLIPBOARD_MENU_ACTION_EVENT,
+        ACTION_GROUPS,
     };
 
     const MENU_PREFIX: &str = "cim::";
@@ -440,8 +438,8 @@ mod native {
             log::warn!("clipboard window missing on clipboard menu dispatch");
             return;
         };
-        if let Err(err) = main.emit(CLIPBOARD_MENU_ACTION_EVENT, payload) {
-            log::warn!("emit {CLIPBOARD_MENU_ACTION_EVENT} failed: {err}");
+        if let Err(err) = main.emit(events::CLIPBOARD_MENU_ACTION, payload) {
+            log::warn!("emit {} failed: {err}", events::CLIPBOARD_MENU_ACTION);
         }
     }
 }

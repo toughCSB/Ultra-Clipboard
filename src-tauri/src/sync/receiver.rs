@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use serde_json::json;
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use super::auth::VerifiedAuth;
 use super::persistence::{self, ReplayRecord, Reservation};
@@ -26,16 +25,14 @@ impl AppEventSink {
 
 impl EventSink for AppEventSink {
     fn clipboard_updated(&self, result: &UpsertResult, kind: ClipboardKind) {
-        if let Err(error) = self.0.emit(
-            crate::clipboard::CLIPBOARD_UPDATED_EVENT,
-            json!({
-                "id": result.id,
-                "kind": kind,
-                "deduplicated": result.deduplicated,
-            }),
-        ) {
-            log::warn!("emit remote clipboard update failed: {error}");
-        }
+        crate::clipboard::emit_clipboard_updated(
+            &self.0,
+            crate::clipboard::ClipboardUpdated::Captured {
+                id: &result.id,
+                kind,
+                deduplicated: result.deduplicated,
+            },
+        );
     }
 }
 

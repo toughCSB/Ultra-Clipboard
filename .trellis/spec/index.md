@@ -27,7 +27,8 @@ handles ordinary interactions, and calls Rust through typed command wrappers.
   Rust.
 - Search for existing constants and contracts before adding strings. Command
   names are mirrored by `src-tauri/src/lib.rs` and `src/constants/commands.ts`;
-  event names are mirrored by Rust constants and `src/constants/events.ts`.
+  event names are mirrored by `core::events` and `src/constants/events.ts`;
+  `core::ipc_contract` tests enforce both mirrors.
 - Keep frontend business data as command results, not as a local database copy.
   `src/stores/clipboardView.ts` and `src/stores/settings.ts` are examples of UI
   state and settings mirrors only.

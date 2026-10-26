@@ -1,11 +1,9 @@
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use serde_json::json;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 use super::storage::ImageStore;
-use super::watcher::CLIPBOARD_UPDATED_EVENT;
 use crate::db::items::cleanup_history;
 use crate::settings::{Retention, RetentionUnit, SettingsStore};
 
@@ -53,12 +51,12 @@ async fn run_once(app: &AppHandle) {
         Ok(outcome) => {
             remove_images(app, &outcome.image_files);
             log::info!("history cleanup removed {} item(s)", outcome.removed);
-            if let Err(err) = app.emit(
-                CLIPBOARD_UPDATED_EVENT,
-                json!({ "cleanup": outcome.removed }),
-            ) {
-                log::warn!("emit cleanup event failed: {err}");
-            }
+            super::emit_clipboard_updated(
+                app,
+                super::ClipboardUpdated::Cleanup {
+                    removed: outcome.removed,
+                },
+            );
         }
         Err(err) => log::warn!("history cleanup failed: {err}"),
     }

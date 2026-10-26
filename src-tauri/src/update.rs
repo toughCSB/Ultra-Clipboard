@@ -6,11 +6,11 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update as TauriUpdate, UpdaterExt};
 use url::Url;
 
+use crate::core::events;
 use crate::core::{AppError, Result};
 use crate::settings::change;
 use crate::settings::{SettingsStore, Update as UpdateSettings, UpdateFrequency};
 
-const UPDATE_PROGRESS_EVENT: &str = "update://progress";
 const DEFAULT_STABLE_ENDPOINT: &str =
     "https://github.com/toughCSB/Ultra-Clipboard/releases/latest/download/latest.json";
 const STABLE_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_ENDPOINT";
@@ -428,7 +428,7 @@ fn emit_progress(app: &AppHandle, downloaded: u64, total: Option<u64>) {
     });
 
     if let Err(err) = app.emit(
-        UPDATE_PROGRESS_EVENT,
+        events::UPDATE_PROGRESS,
         UpdateDownloadProgress {
             downloaded,
             total,

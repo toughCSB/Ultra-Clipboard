@@ -147,22 +147,6 @@ pub async fn find_item_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Clipb
     Ok(item)
 }
 
-pub async fn find_item_for_list_by_id(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<Option<ClipboardItem>> {
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(LIST_SELECT_ITEM);
-    qb.push(" WHERE clipboard_items.id = ")
-        .push_bind(id.to_owned());
-
-    let item = qb
-        .build_query_as::<ClipboardItem>()
-        .fetch_optional(pool)
-        .await
-        .context("failed to find clipboard item (list view) by id")?;
-    Ok(item)
-}
-
 pub async fn toggle_item_favorite(pool: &SqlitePool, id: &str) -> Result<bool> {
     let new_value: bool = sqlx::query_scalar(
         "UPDATE clipboard_items SET is_favorite = NOT is_favorite WHERE id = ? RETURNING is_favorite",

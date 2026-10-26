@@ -21,11 +21,11 @@ use zeroize::Zeroizing;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+use crate::core::events;
 use crate::core::{AppError, Result};
 use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
 
 pub const BACKUP_EXTENSION: &str = "ecopastebak";
-pub const BACKUP_RECEIVED_EVENT: &str = "backup://received";
 
 const MAGIC: &[u8; 12] = b"ECOPASTEBAK1";
 const ZIP_MAGIC: &[u8; 2] = b"PK";
@@ -285,7 +285,7 @@ pub fn emit_received_backup(
     crate::window::show_window(app, crate::window::PREFERENCE_WINDOW_LABEL)?;
 
     if exists {
-        app.emit(BACKUP_RECEIVED_EVENT, payload)
+        app.emit(events::BACKUP_RECEIVED, payload)
             .context("failed to emit backup received event")?;
     }
 
@@ -1375,16 +1375,10 @@ fn replace_dir(src: &Path, dst: &Path) -> Result<()> {
 }
 
 fn emit_clipboard_imported(app: &AppHandle) {
-    if let Err(err) = app.emit(
-        "clipboard://updated",
-        serde_json::json!({
-            "id": null,
-            "deduplicated": false,
-            "imported": true,
-        }),
-    ) {
-        log::warn!("emit clipboard import update failed: {err}");
-    }
+    crate::clipboard::emit_clipboard_updated(
+        app,
+        crate::clipboard::ClipboardUpdated::Imported { imported: true },
+    );
 }
 
 fn copy_file_into_writer<W: Write>(path: &Path, writer: &mut W) -> Result<()> {

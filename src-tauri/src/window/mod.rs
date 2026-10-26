@@ -17,6 +17,7 @@ use std::sync::{LazyLock, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window};
 
+use crate::core::events;
 use crate::core::Result;
 use crate::settings::{SettingsStore, WindowPosition};
 
@@ -25,8 +26,6 @@ pub const PREFERENCE_WINDOW_LABEL: &str = "preference";
 pub const CLIPBOARD_PREVIEW_WINDOW_LABEL: &str = "clipboard-preview";
 pub const ONBOARDING_WINDOW_LABEL: &str = "onboarding";
 pub const UPDATE_WINDOW_LABEL: &str = "update";
-
-const PREFERENCE_HIGHLIGHT_EVENT: &str = "preference://highlight-setting";
 
 static PENDING_PREFERENCE_HIGHLIGHT: LazyLock<Mutex<Option<String>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -71,8 +70,6 @@ pub fn set_clipboard_window_editing(app_handle: &AppHandle, editing: bool) -> Re
     }
 }
 
-const WINDOW_VISIBILITY_EVENT: &str = "window://visibility";
-
 #[derive(Clone, serde::Serialize)]
 struct WindowVisibilityPayload<'a> {
     label: &'a str,
@@ -81,7 +78,7 @@ struct WindowVisibilityPayload<'a> {
 
 pub(super) fn emit_visibility(app_handle: &AppHandle, label: &str, visible: bool) {
     if let Err(err) = app_handle.emit(
-        WINDOW_VISIBILITY_EVENT,
+        events::WINDOW_VISIBILITY,
         WindowVisibilityPayload { label, visible },
     ) {
         log::error!("emit window visibility failed: {err:?}");
@@ -356,7 +353,7 @@ pub fn open_preference_with_highlight(app_handle: &AppHandle, setting_id: String
         app_handle
             .emit_to(
                 PREFERENCE_WINDOW_LABEL,
-                PREFERENCE_HIGHLIGHT_EVENT,
+                events::PREFERENCE_HIGHLIGHT_SETTING,
                 PreferenceHighlightPayload { setting_id },
             )
             .map_err(|err| anyhow::anyhow!("emit preference highlight: {err}"))?;

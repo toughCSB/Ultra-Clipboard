@@ -15,9 +15,11 @@ OS clipboard change
   -> React list fetches enriched item/page
 ```
 
-Manual `read_clipboard` reuses the same `build_item_with_settings` and
-`persist_and_notify` path, so manual and automatic capture share dedupe,
-source-app upsert, copy sound, and event semantics.
+The `clipboard://updated` payload is the `clipboard::ClipboardUpdated` enum,
+emitted only through `clipboard::emit_clipboard_updated`. Its untagged JSON
+shapes are `{id, kind, deduplicated}` (captured, reused, or synced),
+`{cleanup}` (removed count), and `{imported}`; `List.tsx` branches on which key
+is present, and `clipboard/updated.rs` tests pin each shape.
 
 Reference files:
 - `src-tauri/src/clipboard/watcher.rs`

@@ -6,14 +6,13 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::core::Result;
 use crate::db::DatabaseState;
 use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
 
-const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
 const STORAGE_CONTENT_DIRS: [&str; 4] = ["db", "resources", "config", "state"];
 const CUSTOM_STORAGE_CONTAINER_DIR: &str = "UltraClipboardData";
 
@@ -368,12 +367,10 @@ async fn rebase_storage_states(app: &AppHandle) -> Result<()> {
 }
 
 fn emit_clipboard_imported(app: &AppHandle) {
-    if let Err(err) = app.emit(
-        CLIPBOARD_UPDATED_EVENT,
-        serde_json::json!({ "imported": true }),
-    ) {
-        log::warn!("emit clipboard imported event failed: {err}");
-    }
+    crate::clipboard::emit_clipboard_updated(
+        app,
+        crate::clipboard::ClipboardUpdated::Imported { imported: true },
+    );
 }
 
 fn pause_watcher(app: &AppHandle) -> WatcherPauseRestore {

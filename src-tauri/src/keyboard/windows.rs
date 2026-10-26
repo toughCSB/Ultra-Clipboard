@@ -14,7 +14,7 @@ use winapi::um::winuser::{
     WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
-use super::NAV_EVENT;
+use crate::core::events;
 
 static NAV_ENABLED: AtomicBool = AtomicBool::new(false);
 static HOOK_THREAD_ID: Mutex<Option<u32>> = Mutex::new(None);
@@ -105,7 +105,7 @@ pub fn disable_navigation_keys() {
 
     if let Some(app) = APP_HANDLE.get() {
         if let Err(err) = app.emit(
-            NAV_EVENT,
+            events::KEYBOARD_NAV,
             json!({ "type": "keyup", "key": "Control", "ctrlKey": false }),
         ) {
             log::warn!("emit nav event failed: {err:?}");
@@ -147,7 +147,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 
             if let Some(event_type) = event_type {
                 if let Err(err) = app.emit(
-                    NAV_EVENT,
+                    events::KEYBOARD_NAV,
                     json!({ "type": event_type, "key": "Control", "ctrlKey": event_type == "keydown" }),
                 ) {
                     log::warn!("emit nav event failed: {err:?}");
@@ -170,7 +170,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         if let Some(shortcut_key) = shortcut_key {
             if let Some(app) = APP_HANDLE.get() {
                 if let Err(err) = app.emit(
-                    NAV_EVENT,
+                    events::KEYBOARD_NAV,
                     json!({ "type": "keydown", "key": shortcut_key, "ctrlKey": true }),
                 ) {
                     log::warn!("emit nav event failed: {err:?}");
@@ -195,7 +195,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 
             if let Some(app) = APP_HANDLE.get() {
                 if let Err(err) = app.emit(
-                    NAV_EVENT,
+                    events::KEYBOARD_NAV,
                     json!({ "type": "keydown", "key": preview_key, "code": "Space" }),
                 ) {
                     log::warn!("emit nav event failed: {err:?}");
@@ -214,7 +214,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                 };
 
                 if let Err(err) = app.emit(
-                    NAV_EVENT,
+                    events::KEYBOARD_NAV,
                     json!({ "type": "keydown", "key": nav_key, "shiftKey": shift_down }),
                 ) {
                     log::warn!("emit nav event failed: {err:?}");
@@ -236,7 +236,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             {
                 if let Some(app) = APP_HANDLE.get() {
                     if let Err(err) = app.emit(
-                        NAV_EVENT,
+                        events::KEYBOARD_NAV,
                         json!({ "type": "keyup", "key": preview_key, "code": "Space" }),
                     ) {
                         log::warn!("emit nav event failed: {err:?}");

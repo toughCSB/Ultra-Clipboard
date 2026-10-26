@@ -14,10 +14,9 @@ use tauri::{
 use super::geometry::PixelRect;
 use super::state::{CaptureSession, ScreenshotState};
 use super::{CaptureMode, OVERLAY_WINDOW_LABEL_PREFIX};
+use crate::core::events;
 use crate::core::Result;
 use crate::window::lifecycle;
-
-pub const OVERLAY_SESSION_EVENT: &str = "screenshot://overlay-session";
 
 /// Ends a capture whose frontend never reports the first paint.
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -86,7 +85,7 @@ pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
         if !is_new {
             if let Err(err) = window.emit_to(
                 label.as_str(),
-                OVERLAY_SESSION_EVENT,
+                events::SCREENSHOT_OVERLAY_SESSION,
                 OverlaySessionPayload {
                     label,
                     session_id: Some(session_id),
@@ -168,7 +167,7 @@ fn hide_window(app: &AppHandle, label: &str, window: &WebviewWindow) {
 
     if let Err(err) = window.emit_to(
         label,
-        OVERLAY_SESSION_EVENT,
+        events::SCREENSHOT_OVERLAY_SESSION,
         OverlaySessionPayload {
             label,
             session_id: None,

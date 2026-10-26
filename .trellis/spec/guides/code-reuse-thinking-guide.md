@@ -19,7 +19,7 @@ module that already owns the concept.
 | Concept | Source |
 | --- | --- |
 | Tauri command names | Rust command function names, `src/constants/commands.ts`, `src/commands/index.ts` |
-| Tauri event names | Rust constants near emitters, `src/constants/events.ts` |
+| Tauri event names | `core::events` in Rust, `src/constants/events.ts` (checked by `core::ipc_contract`) |
 | Window labels | `src-tauri/src/window/mod.rs`, `src/constants/windows.ts` |
 | Clipboard item actions | `db::models::ClipboardAction`, `clipboard::item_policy` (`available_actions`, `can_delete`), `src/constants/itemActions.ts` |
 | Capture kinds | `settings::CaptureKind`, `src/constants/captureKinds.ts` |

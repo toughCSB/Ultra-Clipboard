@@ -5,10 +5,9 @@ use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::{Settings, SettingsStore};
+use crate::core::events;
 use crate::core::Result;
 use crate::{admin, autostart, shortcut, tray, window};
-
-pub const SETTINGS_UPDATED_EVENT: &str = "settings://updated";
 
 pub enum SettingsWrite<'a> {
     Patch(serde_json::Value),
@@ -105,7 +104,7 @@ async fn apply_effect(app: &AppHandle, effect: SettingsEffect, settings: &Settin
 }
 
 fn emit_settings_updated(app: &AppHandle, settings: &Settings) {
-    if let Err(err) = app.emit(SETTINGS_UPDATED_EVENT, settings) {
+    if let Err(err) = app.emit(events::SETTINGS_UPDATED, settings) {
         log::warn!("emit settings updated event failed: {err}");
     }
 }

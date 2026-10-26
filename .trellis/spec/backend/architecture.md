@@ -36,9 +36,9 @@ Examples:
 - `commands::clipboard::list_clipboard_items` reads settings, queries
   `db::items::query_items_page`, attaches thumbnails, file entries, source app
   icons, color previews, display timestamps, redaction, and action lists.
-- `clipboard::persist_and_notify` is shared by the OS watcher and
-  `read_clipboard`, so manual and automatic capture have the same dedupe and
-  event semantics.
+- `clipboard::persist_and_notify` is shared by the OS watcher, screenshot output,
+  and legacy import, so every capture path has the same dedupe and event
+  semantics.
 - `settings::SettingsStore::update` performs deep merge, validation, and atomic
   persistence; `settings::change::commit` is the only runtime write path. It
   applies the OS effects of what changed and emits `settings://updated`.
@@ -79,8 +79,6 @@ or missing clipboard items.
 Some OS handles are not `Send`. The clipboard code keeps those handles inside a
 synchronous section or a dedicated thread:
 
-- `commands::clipboard::read_clipboard` reads the clipboard and drops
-  `ClipboardReader` before awaiting database writes.
 - `clipboard::watcher` creates `ClipboardReader` on the watcher thread and only
   moves `Send` data into `tauri::async_runtime::spawn`.
 - `clipboard::write::write_to_clipboard` completes the `ClipboardContext`

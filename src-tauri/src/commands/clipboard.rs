@@ -10,14 +10,13 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::clipboard::{
-    add_app_from_path, build_item_with_settings, delete_unreferenced_apps, detect_frontmost,
-    item_policy, materialize_source, persist_and_notify, refresh_running_apps, sanitize_css_color,
-    AppIconStore, AppsRegistry, ClipboardReader, FileIconStore, ImageStore, WritebackGuard,
+    add_app_from_path, delete_unreferenced_apps, emit_clipboard_updated, item_policy,
+    refresh_running_apps, sanitize_css_color, AppIconStore, AppsRegistry, ClipboardUpdated,
+    FileIconStore, ImageStore, WritebackGuard,
 };
+use crate::core::events;
 use crate::core::{AppError, Result};
-use crate::db::items::{
-    clear_items, find_item_by_id, find_item_for_list_by_id, increment_item_use_count,
-};
+use crate::db::items::{clear_items, find_item_by_id, increment_item_use_count};
 use crate::db::models::{
     ClipboardApp, ClipboardGroup, ClipboardItem, ClipboardItemPage, ClipboardItemQuery,
     ClipboardKind, ClipboardSubKind, FileEntry, Platform,
@@ -26,22 +25,9 @@ use crate::db::DatabaseState;
 use crate::settings::SettingsStore;
 use crate::window::{self, CLIPBOARD_WINDOW_LABEL};
 
-const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
-
-const CLIPBOARD_GROUPS_UPDATED_EVENT: &str = "clipboard-groups://updated";
-
 const DEFAULT_CLIPBOARD_GROUP_ICON: &str = "i-lets-icons:folder";
 const MAX_GROUP_NAME_CHARS: usize = 32;
 const MAX_GROUP_ICON_BYTES: usize = 256 * 1024;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadClipboardResult {
-    pub item: ClipboardItem,
-    pub deduplicated: bool,
-
-    pub captured: bool,
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,85 +43,6 @@ pub struct ClipboardGroupInput {
 pub struct ClipboardGroupLayoutInput {
     pub order: Vec<String>,
     pub visible_ids: Vec<String>,
-}
-
-#[tauri::command]
-pub async fn read_clipboard(
-    app: AppHandle,
-    db: State<'_, DatabaseState>,
-    store: State<'_, ImageStore>,
-    app_icon_store: State<'_, AppIconStore>,
-    registry: State<'_, AppsRegistry>,
-) -> Result<Option<ReadClipboardResult>> {
-    let (item_opt, source) = {
-        let source = detect_frontmost();
-        let reader = ClipboardReader::new()?;
-        let settings = app.state::<SettingsStore>().snapshot();
-        let payload = reader.read_with_capture(&settings.clipboard.capture)?;
-        let item = match payload {
-            Some(payload) => build_item_with_settings(
-                &store,
-                &payload,
-                &settings.clipboard.capture,
-                &settings.clipboard.sensitive,
-                settings.clipboard.content.copy_plain,
-            )?,
-            None => None,
-        };
-        (item, source)
-    };
-
-    let Some(mut item) = item_opt else {
-        return Ok(None);
-    };
-
-    let source_app = source.map(|src| materialize_source(&app_icon_store, Some(&registry), src));
-    if let Some(src) = &source_app {
-        item.source_app_id = Some(src.id.clone());
-    }
-
-    let pool = db.pool().await;
-    let result = persist_and_notify(&app, &pool, &item, source_app.as_ref()).await?;
-    Ok(Some(ReadClipboardResult {
-        item,
-        deduplicated: result.deduplicated,
-        captured: true,
-    }))
-}
-
-#[tauri::command]
-pub async fn get_clipboard_image_path(
-    store: State<'_, ImageStore>,
-    file_name: String,
-    thumbnail: bool,
-) -> Result<String> {
-    validate_image_file_name(&file_name)?;
-
-    let path = if thumbnail {
-        let store = store.inner().clone();
-        tauri::async_runtime::spawn_blocking(move || store.ensure_thumbnail(&file_name))
-            .await
-            .map_err(|err| AppError::Clipboard(format!("thumbnail task join failed: {err}")))??
-    } else {
-        store.origin_path(&file_name)
-    };
-
-    path.to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| AppError::Clipboard("image path is not valid utf-8".to_owned()))
-}
-
-#[tauri::command]
-pub async fn get_clipboard_app_icon_path(
-    store: State<'_, AppIconStore>,
-    file_name: String,
-) -> Result<String> {
-    validate_image_file_name(&file_name)?;
-    store
-        .icon_path(&file_name)
-        .to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| AppError::Clipboard("app icon path is not valid utf-8".to_owned()))
 }
 
 #[tauri::command]
@@ -208,14 +115,6 @@ pub async fn save_clipboard_image_to_file(
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FileIconResult {
-    pub icon_path: Option<String>,
-
-    pub exists: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ClipboardAppView {
     pub id: String,
     pub name: String,
@@ -258,22 +157,6 @@ pub struct ClipboardPreviewFileEntry {
     pub size: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_path: Option<String>,
-}
-
-#[tauri::command]
-pub async fn get_file_icon_path(
-    db: State<'_, DatabaseState>,
-    file_icon_store: State<'_, FileIconStore>,
-    path: String,
-    file_types: Option<String>,
-    index: usize,
-) -> Result<FileIconResult> {
-    let pool = db.pool().await;
-    let (icon_path, exists) =
-        resolve_file_icon_path(&pool, &file_icon_store, &path, file_types.as_deref(), index)
-            .await?;
-
-    Ok(FileIconResult { icon_path, exists })
 }
 
 #[tauri::command]
@@ -422,16 +305,14 @@ async fn mark_item_reused_if_enabled(
     }
 
     increment_item_use_count(pool, id).await?;
-    if let Err(err) = app.emit(
-        CLIPBOARD_UPDATED_EVENT,
-        serde_json::json!({
-            "id": id,
-            "kind": kind,
-            "deduplicated": true,
-        }),
-    ) {
-        log::warn!("emit {CLIPBOARD_UPDATED_EVENT} after item reuse failed: {err}");
-    }
+    emit_clipboard_updated(
+        app,
+        ClipboardUpdated::Captured {
+            id,
+            kind,
+            deduplicated: true,
+        },
+    );
 
     Ok(())
 }
@@ -479,34 +360,6 @@ pub async fn list_clipboard_items(
         total,
         has_more,
     })
-}
-
-#[tauri::command]
-pub async fn get_clipboard_item(
-    app: AppHandle,
-    db: State<'_, DatabaseState>,
-    image_store: State<'_, ImageStore>,
-    app_icon_store: State<'_, AppIconStore>,
-    file_icon_store: State<'_, FileIconStore>,
-    id: String,
-) -> Result<Option<ClipboardItem>> {
-    let pool = db.pool().await;
-    let mut item = find_item_for_list_by_id(&pool, &id).await?;
-    if let Some(item) = item.as_mut() {
-        let settings = app.state::<SettingsStore>().snapshot();
-        let file_entry_limit = settings.clipboard.display.file_entry_limit();
-        let redact_sensitive = settings.clipboard.sensitive.redact_secrets;
-        attach_image_thumbnail_path(&image_store, item).await?;
-        attach_source_app_icon_path(&app_icon_store, item);
-        attach_file_entries(&pool, &file_icon_store, item, file_entry_limit).await?;
-        attach_color_preview(item);
-        attach_display_created_at(item, &Local::now());
-        redact_sensitive_list_item(item, redact_sensitive);
-        // No list context here, so the favorite-view delete exception never applies.
-        item.available_actions =
-            item_policy::available_actions(item, &settings.clipboard.content, false);
-    }
-    Ok(item)
 }
 
 async fn attach_image_thumbnail_path(store: &ImageStore, item: &mut ClipboardItem) -> Result<()> {
@@ -926,15 +779,6 @@ async fn resolve_file_icon_path(
 }
 
 #[tauri::command]
-pub async fn list_clipboard_apps(
-    db: State<'_, DatabaseState>,
-    ids: Vec<String>,
-) -> Result<Vec<crate::db::models::ClipboardApp>> {
-    let pool = db.pool().await;
-    crate::db::apps::list_apps_by_ids(&pool, &ids).await
-}
-
-#[tauri::command]
 pub async fn list_all_apps(
     app_icon_store: State<'_, AppIconStore>,
     db: State<'_, DatabaseState>,
@@ -1054,7 +898,7 @@ fn normalize_group_svg(icon: &str) -> Result<()> {
 }
 
 fn emit_clipboard_groups_updated(app: &AppHandle) {
-    if let Err(err) = app.emit(CLIPBOARD_GROUPS_UPDATED_EVENT, ()) {
+    if let Err(err) = app.emit(events::CLIPBOARD_GROUPS_UPDATED, ()) {
         log::warn!("emit clipboard groups updated failed: {err}");
     }
 }
@@ -1224,14 +1068,12 @@ pub async fn clear_clipboard_items(
         }
     }
 
-    if let Err(err) = app.emit(
-        CLIPBOARD_UPDATED_EVENT,
-        serde_json::json!({
-            "cleanup": outcome.removed,
-        }),
-    ) {
-        log::warn!("emit {CLIPBOARD_UPDATED_EVENT} after clear failed: {err}");
-    }
+    emit_clipboard_updated(
+        &app,
+        ClipboardUpdated::Cleanup {
+            removed: outcome.removed,
+        },
+    );
 
     Ok(outcome.removed)
 }
