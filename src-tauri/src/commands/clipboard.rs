@@ -11,16 +11,16 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::clipboard::{
     add_app_from_path, build_item_with_settings, delete_unreferenced_apps, detect_frontmost,
-    materialize_source, persist_and_notify, refresh_running_apps, sanitize_css_color, AppIconStore,
-    AppsRegistry, ClipboardReader, FileIconStore, ImageStore, WritebackGuard,
+    item_policy, materialize_source, persist_and_notify, refresh_running_apps, sanitize_css_color,
+    AppIconStore, AppsRegistry, ClipboardReader, FileIconStore, ImageStore, WritebackGuard,
 };
 use crate::core::{AppError, Result};
 use crate::db::items::{
     clear_items, find_item_by_id, find_item_for_list_by_id, increment_item_use_count,
 };
 use crate::db::models::{
-    ClipboardAction, ClipboardApp, ClipboardGroup, ClipboardItem, ClipboardItemPage,
-    ClipboardItemQuery, ClipboardKind, ClipboardSubKind, FileEntry, Platform,
+    ClipboardApp, ClipboardGroup, ClipboardItem, ClipboardItemPage, ClipboardItemQuery,
+    ClipboardKind, ClipboardSubKind, FileEntry, Platform,
 };
 use crate::db::DatabaseState;
 use crate::settings::SettingsStore;
@@ -462,6 +462,7 @@ pub async fn list_clipboard_items(
     let settings = app.state::<SettingsStore>().snapshot();
     let file_entry_limit = settings.clipboard.display.file_entry_limit();
     let redact_sensitive = settings.clipboard.sensitive.redact_secrets;
+    let in_favorite_view = q.favorite == Some(true);
     for item in &mut items {
         attach_image_thumbnail_path(&image_store, item).await?;
         attach_source_app_icon_path(&app_icon_store, item);
@@ -469,7 +470,8 @@ pub async fn list_clipboard_items(
         attach_color_preview(item);
         attach_display_created_at(item, &now);
         redact_sensitive_list_item(item, redact_sensitive);
-        item.available_actions = compute_available_actions(item);
+        item.available_actions =
+            item_policy::available_actions(item, &settings.clipboard.content, in_favorite_view);
     }
     let has_more = q.offset + (items.len() as i64) < total;
     Ok(ClipboardItemPage {
@@ -500,7 +502,9 @@ pub async fn get_clipboard_item(
         attach_color_preview(item);
         attach_display_created_at(item, &Local::now());
         redact_sensitive_list_item(item, redact_sensitive);
-        item.available_actions = compute_available_actions(item);
+        // No list context here, so the favorite-view delete exception never applies.
+        item.available_actions =
+            item_policy::available_actions(item, &settings.clipboard.content, false);
     }
     Ok(item)
 }
@@ -645,45 +649,6 @@ fn attach_display_created_at(item: &mut ClipboardItem, now: &chrono::DateTime<Lo
     } else {
         local.format("%Y-%m-%d %H:%M").to_string()
     };
-}
-
-fn compute_available_actions(item: &ClipboardItem) -> Vec<ClipboardAction> {
-    let mut actions = Vec::with_capacity(10);
-
-    actions.push(ClipboardAction::Paste);
-
-    match item.kind {
-        ClipboardKind::Text => actions.push(ClipboardAction::PasteAsPlainText),
-        ClipboardKind::Files => actions.push(ClipboardAction::PasteAsPath),
-        ClipboardKind::Image => {}
-    }
-
-    actions.push(ClipboardAction::Copy);
-    if item.kind == ClipboardKind::Image {
-        actions.push(ClipboardAction::SaveImage);
-    }
-
-    match item.sub_kind {
-        Some(ClipboardSubKind::Url) => actions.push(ClipboardAction::OpenLink),
-        Some(ClipboardSubKind::Email) => actions.push(ClipboardAction::SendEmail),
-        _ => {}
-    }
-
-    let can_reveal =
-        item.kind == ClipboardKind::Files || item.sub_kind == Some(ClipboardSubKind::Path);
-    if can_reveal {
-        #[cfg(target_os = "macos")]
-        actions.push(ClipboardAction::RevealInFinder);
-        #[cfg(target_os = "windows")]
-        actions.push(ClipboardAction::RevealInExplorer);
-    }
-
-    actions.push(ClipboardAction::ToggleFavorite);
-    actions.push(ClipboardAction::TogglePinned);
-    actions.push(ClipboardAction::EditNote);
-    actions.push(ClipboardAction::Delete);
-
-    actions
 }
 
 fn default_saved_image_file_name(item: &ClipboardItem) -> String {
@@ -1218,11 +1183,22 @@ pub async fn toggle_clipboard_item_pinned(
 
 #[tauri::command]
 pub async fn delete_clipboard_item(
+    app: AppHandle,
     db: State<'_, DatabaseState>,
     store: State<'_, ImageStore>,
     id: String,
+    in_favorite_view: bool,
 ) -> Result<()> {
     let pool = db.pool().await;
+    if let Some(item) = find_item_by_id(&pool, &id).await? {
+        let content = app.state::<SettingsStore>().snapshot().clipboard.content;
+        if !item_policy::can_delete(&item, &content, in_favorite_view) {
+            return Err(AppError::Clipboard(
+                "this item is protected by the delete settings".to_owned(),
+            ));
+        }
+    }
+
     if let Some(file_name) = crate::db::items::delete_item(&pool, &id).await? {
         if let Err(err) = store.remove(&file_name) {
             log::warn!("remove deleted image {file_name} failed: {err}");
@@ -1630,13 +1606,6 @@ mod tests {
     }
 
     #[test]
-    fn image_actions_include_save_image() {
-        let actions = compute_available_actions(&image_item());
-
-        assert!(actions.contains(&ClipboardAction::SaveImage));
-    }
-
-    #[test]
     fn saved_image_file_name_uses_current_product_name() {
         let mut item = image_item();
         item.created_at = Utc.with_ymd_and_hms(2026, 9, 12, 12, 34, 56).unwrap();
@@ -1649,13 +1618,6 @@ mod tests {
             default_saved_image_file_name(&item),
             format!("UltraClipboard-image-{stamp}.png")
         );
-    }
-
-    #[test]
-    fn text_actions_do_not_include_save_image() {
-        let actions = compute_available_actions(&text_item(None, false));
-
-        assert!(!actions.contains(&ClipboardAction::SaveImage));
     }
 
     #[test]

@@ -941,20 +941,17 @@ export const toggleClipboardItemPinned = async (
   return next;
 };
 
+/**
+ * Rust decides whether the item may be deleted; this only asks for
+ * confirmation. `inFavoriteView` lets Rust apply the favorite-group rule.
+ */
 export const deleteClipboardItem = async (
   id: string,
   isFavorite: boolean,
   isPinned: boolean,
+  inFavoriteView: boolean,
 ): Promise<boolean> => {
   const contentSettings = settingsState.clipboard?.content;
-
-  if (isFavorite && !(contentSettings?.deleteFavoriteItems ?? false)) {
-    return false;
-  }
-
-  if (isPinned && !(contentSettings?.deletePinnedItems ?? false)) {
-    return false;
-  }
 
   const needConfirm =
     (isFavorite && (contentSettings?.deleteFavoriteConfirm ?? true)) ||
@@ -981,7 +978,7 @@ export const deleteClipboardItem = async (
   await call<void>(
     TAURI_COMMAND.DELETE_CLIPBOARD_ITEM,
     "commands:labels.delete",
-    { id },
+    { id, inFavoriteView },
   );
 
   getMessageApi().success(i18n.t("commands:messages.deleted"));

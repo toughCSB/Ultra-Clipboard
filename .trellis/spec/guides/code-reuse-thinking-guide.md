@@ -21,7 +21,7 @@ module that already owns the concept.
 | Tauri command names | Rust command function names, `src/constants/commands.ts`, `src/commands/index.ts` |
 | Tauri event names | Rust constants near emitters, `src/constants/events.ts` |
 | Window labels | `src-tauri/src/window/mod.rs`, `src/constants/windows.ts` |
-| Clipboard item actions | `db::models::ClipboardAction`, `commands::clipboard::compute_available_actions`, `src/constants/itemActions.ts` |
+| Clipboard item actions | `db::models::ClipboardAction`, `clipboard::item_policy` (`available_actions`, `can_delete`), `src/constants/itemActions.ts` |
 | Capture kinds | `settings::CaptureKind`, `src/constants/captureKinds.ts` |
 | Settings defaults | `src-tauri/src/settings/model.rs` |
 | Settings persistence/validation | `src-tauri/src/settings/store.rs` |

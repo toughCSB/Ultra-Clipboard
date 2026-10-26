@@ -6,6 +6,7 @@ mod file_icon_store;
 mod guard;
 mod icon;
 mod ingest;
+pub mod item_policy;
 mod payload;
 mod read;
 mod secrets;

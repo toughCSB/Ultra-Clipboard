@@ -168,7 +168,7 @@ const List: FC = () => {
     closePreview("filterChange");
   }, [snapshot]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only display settings affecting item payloads trigger reload; refs provide current callbacks.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only settings that change Rust-built item payloads (display, redaction, delete policy) trigger reload; refs provide current callbacks.
   useEffect(() => {
     if (!displaySettingsMountedRef.current) {
       displaySettingsMountedRef.current = true;
@@ -177,7 +177,13 @@ const List: FC = () => {
 
     closePreviewRef.current("displaySettingChange");
     reloadCurrentRangeRef.current();
-  }, [fileMaxCount, redactSecrets]);
+  }, [
+    fileMaxCount,
+    redactSecrets,
+    deleteFavoriteItems,
+    deletePinnedItems,
+    deleteFavoriteItemsOnlyInFavoriteGroup,
+  ]);
 
   const loadGroups = async () => {
     const groups = await listClipboardGroups();
@@ -319,6 +325,7 @@ const List: FC = () => {
     patchItemById(id, patch);
   };
 
+  // Favorite state changes the Rust-built delete permission, so the range reloads.
   const handleFavoriteToggled = (id: string, isFavorite: boolean) => {
     if (range === "favorite" && !isFavorite) {
       removeItem(id);
@@ -326,6 +333,7 @@ const List: FC = () => {
     }
 
     patchItem(id, { isFavorite });
+    reloadCurrentRange();
   };
 
   const handleNoteSaved = (
@@ -334,6 +342,7 @@ const List: FC = () => {
     autoFavorited: boolean,
   ) => {
     patchItem(id, autoFavorited ? { isFavorite: true, note } : { note });
+    if (autoFavorited) reloadCurrentRange();
   };
 
   const handleCloseNote = () => {
@@ -394,6 +403,7 @@ const List: FC = () => {
       id,
       target.isFavorite,
       target.isPinned,
+      range === "favorite",
     );
 
     if (!deleted) return;
@@ -928,21 +938,9 @@ const List: FC = () => {
       }
     };
 
-    const availableActions = getAllowedClipboardActions(
-      item.availableActions,
-      item,
-      canDeleteItem,
-    );
-    const visibleQuickActions = getAllowedItemActions(
-      quickActions,
-      item,
-      canDeleteItem,
-    );
-
     return (
       <div className={cn("px-3", { "pt-3": index !== 0 })}>
         <ClipboardCard
-          availableActions={availableActions}
           hintKey={hintKey}
           isLinkActive={isModifierPressed}
           isSelected={
@@ -961,7 +959,7 @@ const List: FC = () => {
           onQuickAction={handleQuickAction}
           onQuickPaste={hintKey ? handleQuickPaste : void 0}
           quickActionLabels={quickActionLabels}
-          quickActions={visibleQuickActions}
+          quickActions={[...quickActions]}
           rootRef={registerItemElement(item.id)}
           showOriginalOnHover={showOriginalPreview}
         />
@@ -1004,15 +1002,7 @@ const List: FC = () => {
   }
 
   function canDeleteItem(item: ClipboardItem) {
-    if (item.isPinned && !deletePinnedItems) return false;
-
-    if (!item.isFavorite) return true;
-
-    if (!deleteFavoriteItems) return false;
-
-    if (!deleteFavoriteItemsOnlyInFavoriteGroup) return true;
-
-    return range === "favorite";
+    return item.availableActions?.includes("delete") ?? false;
   }
 
   function closeTopEscapeLayer() {
@@ -1179,18 +1169,6 @@ function getNextKeyboardIndex(
   return Math.min(total - 1, currentIndex + 1);
 }
 
-function getAllowedClipboardActions(
-  actions: ClipboardAction[] | undefined,
-  item: ClipboardItem,
-  canDeleteItem: (item: ClipboardItem) => boolean,
-) {
-  if (canDeleteItem(item)) return actions;
-
-  return actions?.filter((action) => {
-    return action !== "delete";
-  });
-}
-
 function getOpenClipboardAction(actions: ClipboardAction[] | undefined) {
   const openActions: ClipboardAction[] = [
     "openLink",
@@ -1201,18 +1179,6 @@ function getOpenClipboardAction(actions: ClipboardAction[] | undefined) {
 
   return actions?.find((action) => {
     return openActions.includes(action);
-  });
-}
-
-function getAllowedItemActions(
-  actions: readonly ItemAction[],
-  item: ClipboardItem,
-  canDeleteItem: (item: ClipboardItem) => boolean,
-) {
-  if (canDeleteItem(item)) return [...actions];
-
-  return actions.filter((action) => {
-    return action !== "delete";
   });
 }
 

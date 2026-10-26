@@ -76,6 +76,15 @@ command can return a prepared field. `ClipboardItem` already includes
 `displayCreatedAt`, `imageThumbnailPath`, and source app icon paths after command
 enrichment.
 
+`clipboard::item_policy` owns `availableActions`. `delete` is present only when
+the delete settings allow it: pinned items need `deletePinnedItems`, favorites
+need `deleteFavoriteItems`, and with `deleteFavoriteItemsOnlyInFavoriteGroup`
+favorites are deletable only in the favorite list (`query.favorite == true`).
+`delete_clipboard_item(id, inFavoriteView)` re-checks the same rule and rejects a
+protected item with `AppError::Clipboard`. React treats `availableActions` as the
+only delete permission and reloads the list when a delete setting changes; it
+keeps only the confirmation dialog.
+
 ## Dedupe and Reuse
 
 `db::items::content_hash` hashes `"<kind>:<content>"` with blake3. `upsert_item`
