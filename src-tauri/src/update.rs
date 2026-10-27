@@ -6,10 +6,11 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update as TauriUpdate, UpdaterExt};
 use url::Url;
 
+use crate::core::events;
 use crate::core::{AppError, Result};
+use crate::settings::change;
 use crate::settings::{SettingsStore, Update as UpdateSettings, UpdateFrequency};
 
-const UPDATE_PROGRESS_EVENT: &str = "update://progress";
 const DEFAULT_STABLE_ENDPOINT: &str =
     "https://github.com/toughCSB/Ultra-Clipboard/releases/latest/download/latest.json";
 const STABLE_ENDPOINT_ENV: &str = "ULTRA_CLIPBOARD_UPDATE_ENDPOINT";
@@ -197,7 +198,7 @@ pub async fn check(app: &AppHandle, mode: CheckMode) -> Result<AppUpdateStatus> 
         state.set_update(None);
     }
 
-    persist_last_checked_at(app);
+    persist_last_checked_at(app).await;
 
     Ok(status(app).await)
 }
@@ -247,14 +248,13 @@ pub fn install(app: &AppHandle, version: String) -> Result<()> {
     Ok(())
 }
 
-pub fn skip(app: &AppHandle, version: String) -> Result<AppUpdateStatus> {
+pub async fn skip(app: &AppHandle, version: String) -> Result<AppUpdateStatus> {
     let patch = serde_json::json!({
         "update": {
             "skippedVersion": version,
         },
     });
-    let next = app.state::<SettingsStore>().update(patch)?;
-    crate::commands::emit_settings_updated(app, &next);
+    change::commit_patch(app, patch).await?;
     app.state::<UpdateState>().set_update(None);
 
     Ok(app
@@ -409,16 +409,15 @@ fn frequency_seconds(frequency: UpdateFrequency) -> i64 {
     }
 }
 
-fn persist_last_checked_at(app: &AppHandle) {
+async fn persist_last_checked_at(app: &AppHandle) {
     let patch = serde_json::json!({
         "update": {
             "lastCheckedAt": Utc::now().to_rfc3339(),
         },
     });
 
-    match app.state::<SettingsStore>().update(patch) {
-        Ok(next) => crate::commands::emit_settings_updated(app, &next),
-        Err(err) => log::warn!("persist update check timestamp failed: {err}"),
+    if let Err(err) = change::commit_patch(app, patch).await {
+        log::warn!("persist update check timestamp failed: {err}");
     }
 }
 
@@ -429,7 +428,7 @@ fn emit_progress(app: &AppHandle, downloaded: u64, total: Option<u64>) {
     });
 
     if let Err(err) = app.emit(
-        UPDATE_PROGRESS_EVENT,
+        events::UPDATE_PROGRESS,
         UpdateDownloadProgress {
             downloaded,
             total,

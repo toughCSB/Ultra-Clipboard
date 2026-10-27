@@ -4,9 +4,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use clipboard_rs::{ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext};
-use serde_json::json;
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 use super::app_store::AppIconStore;
 use super::apps_registry::AppsRegistry;
@@ -20,8 +19,6 @@ use crate::db::apps::upsert_app;
 use crate::db::items::{upsert_item, UpsertResult};
 use crate::db::models::{ClipboardApp, ClipboardItem};
 use crate::settings::SettingsStore;
-
-pub const CLIPBOARD_UPDATED_EVENT: &str = "clipboard://updated";
 
 const CLIPBOARD_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(120);
 
@@ -114,16 +111,14 @@ pub async fn persist_and_notify(
         }
     }
     let result = upsert_item(pool, &item_to_write).await?;
-    if let Err(err) = app.emit(
-        CLIPBOARD_UPDATED_EVENT,
-        json!({
-            "id": result.id,
-            "kind": item_to_write.kind,
-            "deduplicated": result.deduplicated,
-        }),
-    ) {
-        log::warn!("emit {CLIPBOARD_UPDATED_EVENT} failed: {err}");
-    }
+    super::emit_clipboard_updated(
+        app,
+        super::ClipboardUpdated::Captured {
+            id: &result.id,
+            kind: item_to_write.kind,
+            deduplicated: result.deduplicated,
+        },
+    );
     Ok(result)
 }
 

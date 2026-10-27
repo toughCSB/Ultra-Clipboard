@@ -11,9 +11,8 @@ use tauri::{
 
 use super::state::{CapturedImage, MonitorGeometry, ScreenshotState};
 use super::EDITOR_WINDOW_LABEL_PREFIX;
+use crate::core::events;
 use crate::core::Result;
-
-pub const EDITOR_CLOSE_REQUESTED_EVENT: &str = "screenshot://editor-close-requested";
 
 const TOOLBAR_HEIGHT: f64 = 52.0;
 const CANVAS_MARGIN: f64 = 96.0;
@@ -143,7 +142,7 @@ fn finish_overlay_handoff(app: &AppHandle, label: &str) {
 pub fn request_close(app: &AppHandle, label: &str) {
     if let Err(err) = app.emit_to(
         label,
-        EDITOR_CLOSE_REQUESTED_EVENT,
+        events::SCREENSHOT_EDITOR_CLOSE_REQUESTED,
         CloseRequestPayload { label },
     ) {
         log::warn!("emit screenshot editor close request to {label} failed: {err}");

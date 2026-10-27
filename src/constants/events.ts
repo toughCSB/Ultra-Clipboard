@@ -11,6 +11,7 @@ export const TAURI_EVENT = {
   SCREENSHOT_EDITOR_CLOSE_REQUESTED: "screenshot://editor-close-requested",
   SCREENSHOT_OVERLAY_SESSION: "screenshot://overlay-session",
   SETTINGS_UPDATED: "settings://updated",
+  SHORTCUT_CONFLICT: "shortcut://conflict",
   UPDATE_PROGRESS: "update://progress",
   WINDOW_BEFORE_DESTROY: "window://before-destroy",
   WINDOW_LIFECYCLE: "window://lifecycle",

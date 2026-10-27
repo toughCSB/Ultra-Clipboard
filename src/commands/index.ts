@@ -735,16 +735,6 @@ export const getAutostart = () => {
   );
 };
 
-export const setAutostart = (enabled: boolean) => {
-  return call<void>(
-    TAURI_COMMAND.SET_AUTOSTART,
-    "commands:labels.setAutostart",
-    {
-      enabled,
-    },
-  );
-};
-
 export const listAllApps = () => {
   return call<ClipboardApp[]>(
     TAURI_COMMAND.LIST_ALL_APPS,
@@ -951,20 +941,17 @@ export const toggleClipboardItemPinned = async (
   return next;
 };
 
+/**
+ * Rust decides whether the item may be deleted; this only asks for
+ * confirmation. `inFavoriteView` lets Rust apply the favorite-group rule.
+ */
 export const deleteClipboardItem = async (
   id: string,
   isFavorite: boolean,
   isPinned: boolean,
+  inFavoriteView: boolean,
 ): Promise<boolean> => {
   const contentSettings = settingsState.clipboard?.content;
-
-  if (isFavorite && !(contentSettings?.deleteFavoriteItems ?? false)) {
-    return false;
-  }
-
-  if (isPinned && !(contentSettings?.deletePinnedItems ?? false)) {
-    return false;
-  }
 
   const needConfirm =
     (isFavorite && (contentSettings?.deleteFavoriteConfirm ?? true)) ||
@@ -991,7 +978,7 @@ export const deleteClipboardItem = async (
   await call<void>(
     TAURI_COMMAND.DELETE_CLIPBOARD_ITEM,
     "commands:labels.delete",
-    { id },
+    { id, inFavoriteView },
   );
 
   getMessageApi().success(i18n.t("commands:messages.deleted"));
@@ -1116,16 +1103,6 @@ export const getWindowLifecycleSnapshot = async () => {
 
     return [];
   }
-};
-
-export const showTaskbarIcon = (visible: boolean) => {
-  return call<void>(
-    TAURI_COMMAND.SHOW_TASKBAR_ICON,
-    "commands:labels.setTaskbarIcon",
-    {
-      visible,
-    },
-  );
 };
 
 export const setClipboardWindowPinned = (pinned: boolean) => {
@@ -1290,6 +1267,8 @@ export interface ScreenshotOverlayState {
   width: number;
   height: number;
   scaleFactor: number;
+  /** False while an overlay shown before the capture waits for its pixels. */
+  ready: boolean;
   windows: ScreenshotPixelRect[];
 }
 

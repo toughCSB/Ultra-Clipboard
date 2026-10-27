@@ -6,12 +6,16 @@ mod file_icon_store;
 mod guard;
 mod icon;
 mod ingest;
+pub mod item_policy;
+pub mod item_view;
+pub mod paste;
 mod payload;
 mod read;
 mod secrets;
 mod sound;
 mod source;
 mod storage;
+mod updated;
 mod watcher;
 mod write;
 
@@ -27,13 +31,10 @@ pub use icon::{get_icon_cache_key, icon_png, DIR_CACHE_KEY};
 pub use ingest::build_item;
 pub use ingest::build_item_with_settings;
 pub use payload::{ClipboardPayload, ImagePayload, TextPayload};
-pub use read::ClipboardReader;
 pub use sound::{maybe_play_copy, play_copy_sound_now};
-pub use source::detect_frontmost;
-pub use storage::ImageStore;
-pub use watcher::{
-    init, materialize_source, persist_and_notify, WatcherPause, CLIPBOARD_UPDATED_EVENT,
-};
+pub use storage::{validate_image_file_name, ImageStore};
+pub use updated::{emit_clipboard_updated, ClipboardUpdated};
+pub use watcher::{init, persist_and_notify, WatcherPause};
 pub use write::write_to_clipboard;
 
 #[cfg(test)]

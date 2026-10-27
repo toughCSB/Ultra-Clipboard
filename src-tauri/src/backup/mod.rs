@@ -1,47 +1,36 @@
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use anyhow::{anyhow, Context};
-use argon2::{Algorithm, Argon2, Params, Version};
-use chacha20poly1305::aead::{Aead, KeyInit};
-use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use chrono::{DateTime, Utc};
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 use zeroize::Zeroizing;
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+use crate::core::events;
 use crate::core::{AppError, Result};
+use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
+
+mod archive;
+mod container;
+pub mod legacy;
+mod merge;
+
+use archive::{
+    extract_payload_zip, validate_extracted_payload, write_payload_zip, BackupManifest,
+    BackupSourcePaths, ManifestEncryption, CONFIG_ARCHIVE_DIR, DB_ARCHIVE_DIR, DB_FILENAME,
+    RESOURCES_ARCHIVE_DIR, SETTINGS_FILENAME,
+};
+use container::{inspect_backup_reader, read_backup_payload, write_container, FORMAT_VERSION};
+use merge::{merge_history, open_backup_db};
 
 pub const BACKUP_EXTENSION: &str = "ecopastebak";
-pub const BACKUP_RECEIVED_EVENT: &str = "backup://received";
-
-const MAGIC: &[u8; 12] = b"ECOPASTEBAK1";
-const ZIP_MAGIC: &[u8; 2] = b"PK";
-const HEADER_LEN_BYTES: usize = 4;
-const FORMAT_VERSION: u16 = 1;
-const ARGON2_MEMORY_KIB: u32 = 64 * 1024;
-const ARGON2_TIME_COST: u32 = 3;
-const ARGON2_PARALLELISM: u32 = 1;
-const SALT_LEN: usize = 16;
-const NONCE_LEN: usize = 24;
-const KEY_LEN: usize = 32;
-const SETTINGS_FILENAME: &str = "settings.json";
-const DB_FILENAME: &str = "clipboard.db";
-const DB_ARCHIVE_DIR: &str = "db";
-const RESOURCES_ARCHIVE_DIR: &str = "resources";
-const CONFIG_ARCHIVE_DIR: &str = "config";
-const MANIFEST_FILENAME: &str = "manifest.json";
 
 static PENDING_BACKUP: LazyLock<Mutex<Option<BackupReceivedPayload>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -133,68 +122,12 @@ pub enum BackupContainerMode {
     Plain,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ContainerHeader {
-    format_version: u16,
-    mode: BackupContainerMode,
-    kdf: Option<KdfHeader>,
-    cipher: Option<CipherHeader>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct KdfHeader {
-    algorithm: String,
-    memory_kib: u32,
-    time_cost: u32,
-    parallelism: u32,
-    salt: Vec<u8>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CipherHeader {
-    algorithm: String,
-    nonce: Vec<u8>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BackupManifest {
-    format_version: u16,
-    app_name: String,
-    app_version: String,
-    exported_at: DateTime<Utc>,
-    platform: String,
-    encryption: ManifestEncryption,
-    item_count: i64,
-    text_count: i64,
-    image_count: i64,
-    files_count: i64,
-    resource_bytes: u64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-enum ManifestEncryption {
-    None,
-    Password,
-}
-
 #[derive(Debug, Clone, Copy)]
 struct BackupCounts {
     item_count: i64,
     text_count: i64,
     image_count: i64,
     files_count: i64,
-}
-
-#[derive(Debug, Clone)]
-struct BackupSourcePaths {
-    db_path: PathBuf,
-    resources_dir: PathBuf,
-    settings_path: PathBuf,
 }
 
 pub async fn export_history_backup(
@@ -284,7 +217,7 @@ pub fn emit_received_backup(
     crate::window::show_window(app, crate::window::PREFERENCE_WINDOW_LABEL)?;
 
     if exists {
-        app.emit(BACKUP_RECEIVED_EVENT, payload)
+        app.emit(events::BACKUP_RECEIVED, payload)
             .context("failed to emit backup received event")?;
     }
 
@@ -513,423 +446,6 @@ fn backup_source_paths(app: &AppHandle) -> Result<BackupSourcePaths> {
     })
 }
 
-fn write_payload_zip(
-    source_paths: &BackupSourcePaths,
-    path: &Path,
-    manifest: &BackupManifest,
-    target_path: &Path,
-) -> Result<()> {
-    let file = File::create(path).with_context(|| format!("failed to create payload {path:?}"))?;
-    let mut zip = ZipWriter::new(BufWriter::new(file));
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-
-    zip.start_file("manifest.json", options)
-        .context("failed to write backup manifest entry")?;
-    let manifest_bytes =
-        serde_json::to_vec_pretty(manifest).context("failed to serialize backup manifest")?;
-    zip.write_all(&manifest_bytes)
-        .context("failed to write backup manifest")?;
-
-    add_optional_file(
-        &mut zip,
-        &source_paths.db_path,
-        &archive_path(DB_ARCHIVE_DIR, Path::new("clipboard.db"))?,
-        options,
-        target_path,
-    )?;
-    add_dir_contents(
-        &mut zip,
-        &source_paths.resources_dir,
-        RESOURCES_ARCHIVE_DIR,
-        options,
-        target_path,
-    )?;
-    if source_paths.settings_path.exists() && !same_path(&source_paths.settings_path, target_path) {
-        let settings_bytes = fs::read(&source_paths.settings_path)
-            .with_context(|| format!("failed to read {:?}", source_paths.settings_path))?;
-        let mut settings: serde_json::Value = serde_json::from_slice(&settings_bytes)
-            .context("failed to parse settings for backup")?;
-        if let Some(webdav) = settings
-            .get_mut("webdav")
-            .and_then(serde_json::Value::as_object_mut)
-        {
-            webdav.remove("password");
-        }
-        if let Some(settings) = settings.as_object_mut() {
-            settings.remove("sync");
-        }
-
-        let archive_name = archive_path(CONFIG_ARCHIVE_DIR, Path::new(SETTINGS_FILENAME))?;
-        zip.start_file(&archive_name, options)
-            .with_context(|| format!("failed to start archive file {archive_name}"))?;
-        serde_json::to_writer_pretty(&mut zip, &settings)
-            .context("failed to write sanitized backup settings")?;
-    }
-
-    zip.finish()
-        .context("failed to finish backup payload archive")?;
-
-    Ok(())
-}
-
-fn add_file<W: Write + Seek>(
-    zip: &mut ZipWriter<W>,
-    path: &Path,
-    archive_name: &str,
-    options: SimpleFileOptions,
-) -> Result<()> {
-    zip.start_file(archive_name, options)
-        .with_context(|| format!("failed to start archive file {archive_name}"))?;
-    let mut file = File::open(path).with_context(|| format!("failed to open {path:?}"))?;
-    std::io::copy(&mut file, zip).with_context(|| format!("failed to archive {path:?}"))?;
-
-    Ok(())
-}
-
-fn add_optional_file<W: Write + Seek>(
-    zip: &mut ZipWriter<W>,
-    path: &Path,
-    archive_name: &str,
-    options: SimpleFileOptions,
-    target_path: &Path,
-) -> Result<()> {
-    if !path.exists() || same_path(path, target_path) {
-        return Ok(());
-    }
-
-    add_file(zip, path, archive_name, options)
-}
-
-fn add_dir_contents<W: Write + Seek>(
-    zip: &mut ZipWriter<W>,
-    root: &Path,
-    archive_root: &str,
-    options: SimpleFileOptions,
-    target_path: &Path,
-) -> Result<()> {
-    if !root.exists() {
-        return Ok(());
-    }
-
-    for entry in WalkDir::new(root)
-        .into_iter()
-        .filter_map(std::result::Result::ok)
-    {
-        let path = entry.path();
-        let metadata = entry
-            .metadata()
-            .with_context(|| format!("failed to read metadata at {path:?}"))?;
-        if !metadata.is_file() {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        if should_skip_backup_path(path, file_name, target_path) {
-            continue;
-        }
-
-        let relative = path
-            .strip_prefix(root)
-            .with_context(|| format!("failed to strip root {root:?} from {path:?}"))?;
-        let archive_name = archive_path(archive_root, relative)?;
-        add_file(zip, path, &archive_name, options)?;
-    }
-
-    Ok(())
-}
-
-fn archive_path(prefix: &str, relative: &Path) -> Result<String> {
-    let mut parts = Vec::new();
-    if !prefix.is_empty() {
-        parts.push(prefix.to_owned());
-    }
-    for part in relative.components() {
-        let std::path::Component::Normal(value) = part else {
-            return app_error("backup path contains unsupported component");
-        };
-        let value = value
-            .to_str()
-            .ok_or_else(|| anyhow!("backup path is not valid utf-8"))?;
-        parts.push(value.to_owned());
-    }
-
-    Ok(parts.join("/"))
-}
-
-fn should_skip_backup_path(path: &Path, file_name: &str, target_path: &Path) -> bool {
-    if same_path(path, target_path) {
-        return true;
-    }
-
-    file_name.ends_with(".tmp")
-        || file_name.ends_with(".temp")
-        || file_name.starts_with(".tmp")
-        || file_name == ".DS_Store"
-}
-
-fn same_path(left: &Path, right: &Path) -> bool {
-    let left = fs::canonicalize(left).unwrap_or_else(|_| left.to_path_buf());
-    let right = fs::canonicalize(right).unwrap_or_else(|_| right.to_path_buf());
-
-    left == right
-}
-
-fn write_container(
-    target: &Path,
-    payload_path: &Path,
-    mode: BackupExportMode,
-    password: Option<Zeroizing<String>>,
-) -> Result<u64> {
-    let parent = target
-        .parent()
-        .filter(|path| !path.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {parent:?}"))?;
-
-    let mut temp = NamedTempFile::new_in(parent)
-        .with_context(|| format!("failed to create temporary file under {parent:?}"))?;
-    match mode {
-        BackupExportMode::Plain => {
-            copy_file_into_writer(payload_path, &mut temp)?;
-        }
-        BackupExportMode::Encrypted => {
-            let password = password.ok_or_else(|| anyhow!("missing backup password"))?;
-            let mut payload = Vec::new();
-            File::open(payload_path)
-                .with_context(|| format!("failed to open payload {payload_path:?}"))?
-                .read_to_end(&mut payload)
-                .context("failed to read backup payload")?;
-
-            let encrypted = encrypt_payload(&payload, &password)?;
-            write_header(&mut temp, &encrypted.header)?;
-            temp.write_all(&encrypted.ciphertext)
-                .context("failed to write encrypted backup payload")?;
-        }
-    }
-
-    temp.flush().context("failed to flush backup file")?;
-    temp.as_file()
-        .sync_all()
-        .context("failed to sync backup file")?;
-    temp.persist(target)
-        .map_err(|err| anyhow!(err))
-        .with_context(|| format!("failed to persist backup to {target:?}"))?;
-
-    let total_bytes = fs::metadata(target)
-        .with_context(|| format!("failed to read backup metadata {target:?}"))?
-        .len();
-
-    Ok(total_bytes)
-}
-
-struct EncryptedPayload {
-    header: ContainerHeader,
-    ciphertext: Vec<u8>,
-}
-
-fn encrypt_payload(payload: &[u8], password: &str) -> Result<EncryptedPayload> {
-    let mut salt = [0u8; SALT_LEN];
-    let mut nonce = [0u8; NONCE_LEN];
-    rand::rngs::OsRng.fill_bytes(&mut salt);
-    rand::rngs::OsRng.fill_bytes(&mut nonce);
-
-    let mut key = Zeroizing::new([0u8; KEY_LEN]);
-    let params = Params::new(
-        ARGON2_MEMORY_KIB,
-        ARGON2_TIME_COST,
-        ARGON2_PARALLELISM,
-        Some(KEY_LEN),
-    )
-    .context("failed to build argon2 params")?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    argon2
-        .hash_password_into(password.as_bytes(), &salt, key.as_mut())
-        .context("failed to derive backup key")?;
-
-    let cipher = XChaCha20Poly1305::new_from_slice(key.as_ref())
-        .context("failed to initialize backup cipher")?;
-    let nonce = XNonce::from(nonce);
-    let ciphertext = cipher
-        .encrypt(&nonce, payload)
-        .map_err(|_| anyhow!("failed to encrypt backup payload"))?;
-
-    Ok(EncryptedPayload {
-        header: ContainerHeader {
-            format_version: FORMAT_VERSION,
-            mode: BackupContainerMode::Encrypted,
-            kdf: Some(KdfHeader {
-                algorithm: "argon2id".to_owned(),
-                memory_kib: ARGON2_MEMORY_KIB,
-                time_cost: ARGON2_TIME_COST,
-                parallelism: ARGON2_PARALLELISM,
-                salt: salt.to_vec(),
-            }),
-            cipher: Some(CipherHeader {
-                algorithm: "xchacha20poly1305".to_owned(),
-                nonce: nonce.to_vec(),
-            }),
-        },
-        ciphertext,
-    })
-}
-
-fn write_header<W: Write>(writer: &mut W, header: &ContainerHeader) -> Result<()> {
-    let header_bytes = serde_json::to_vec(header).context("failed to serialize backup header")?;
-    let header_len: u32 = header_bytes
-        .len()
-        .try_into()
-        .context("backup header is too large")?;
-
-    writer
-        .write_all(MAGIC)
-        .context("failed to write backup magic")?;
-    writer
-        .write_all(&header_len.to_le_bytes())
-        .context("failed to write backup header length")?;
-    writer
-        .write_all(&header_bytes)
-        .context("failed to write backup header")?;
-
-    Ok(())
-}
-
-fn read_backup_payload(path: &Path, password: Option<&str>) -> Result<Vec<u8>> {
-    let mut file = File::open(path).with_context(|| format!("failed to open backup {path:?}"))?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .with_context(|| format!("failed to read backup {path:?}"))?;
-
-    if bytes.starts_with(ZIP_MAGIC) {
-        return Ok(bytes);
-    }
-    if !bytes.starts_with(MAGIC) {
-        return app_error("올바른 Ultra Clipboard 백업 파일이 아닙니다");
-    }
-
-    let mut cursor = Cursor::new(bytes.as_slice());
-    cursor.set_position(MAGIC.len() as u64);
-    let header = read_container_header_after_magic(&mut cursor)?;
-    let ciphertext_start = cursor.position() as usize;
-    let Some(kdf) = header.kdf else {
-        return app_error("암호화 백업 파일 헤더가 올바르지 않습니다");
-    };
-    let Some(cipher) = header.cipher else {
-        return app_error("암호화 백업 파일 헤더가 올바르지 않습니다");
-    };
-    let Some(password) = password else {
-        return app_error("백업 비밀번호를 입력하세요");
-    };
-
-    decrypt_payload(&bytes[ciphertext_start..], password, &kdf, &cipher)
-}
-
-fn decrypt_payload(
-    ciphertext: &[u8],
-    password: &str,
-    kdf: &KdfHeader,
-    cipher_header: &CipherHeader,
-) -> Result<Vec<u8>> {
-    if kdf.algorithm != "argon2id" || cipher_header.algorithm != "xchacha20poly1305" {
-        return app_error("이 백업 암호화 형식은 지원하지 않습니다");
-    }
-    if kdf.salt.len() != SALT_LEN || cipher_header.nonce.len() != NONCE_LEN {
-        return app_error("암호화 백업 파일 헤더가 올바르지 않습니다");
-    }
-
-    let mut key = Zeroizing::new([0u8; KEY_LEN]);
-    let params = Params::new(
-        kdf.memory_kib,
-        kdf.time_cost,
-        kdf.parallelism,
-        Some(KEY_LEN),
-    )
-    .context("failed to build argon2 params")?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    argon2
-        .hash_password_into(password.as_bytes(), &kdf.salt, key.as_mut())
-        .context("failed to derive backup key")?;
-
-    let cipher =
-        XChaCha20Poly1305::new_from_slice(key.as_ref()).context("failed to initialize cipher")?;
-    let mut nonce = [0u8; NONCE_LEN];
-    nonce.copy_from_slice(&cipher_header.nonce);
-    let nonce = XNonce::from(nonce);
-    cipher.decrypt(&nonce, ciphertext).map_err(|_| {
-        AppError::Other(anyhow!(
-            "백업 비밀번호가 올바르지 않거나 파일이 손상되었습니다"
-        ))
-    })
-}
-
-fn extract_payload_zip(payload: &[u8]) -> Result<TempDir> {
-    let temp = tempfile::tempdir().context("failed to create temporary import directory")?;
-    let cursor = Cursor::new(payload);
-    let mut archive = ZipArchive::new(cursor).context("failed to read backup zip payload")?;
-    archive
-        .extract(temp.path())
-        .context("failed to extract backup payload")?;
-
-    Ok(temp)
-}
-
-fn validate_extracted_payload(root: &Path) -> Result<()> {
-    if !root.join(MANIFEST_FILENAME).exists() {
-        return app_error("백업 파일에 manifest.json이 없습니다");
-    }
-    if !root.join(DB_ARCHIVE_DIR).join(DB_FILENAME).exists() {
-        return app_error("백업 파일에 기록 데이터베이스가 없습니다");
-    }
-    if !root
-        .join(CONFIG_ARCHIVE_DIR)
-        .join(SETTINGS_FILENAME)
-        .exists()
-    {
-        return app_error("백업 파일에 설정 파일이 없습니다");
-    }
-
-    Ok(())
-}
-
-fn inspect_backup_reader<R: Read>(reader: &mut R) -> Result<BackupContainerMode> {
-    let mut magic = [0u8; MAGIC.len()];
-    let read = reader
-        .read(&mut magic)
-        .context("failed to read backup magic")?;
-    if read >= MAGIC.len() && &magic == MAGIC {
-        let header = read_container_header_after_magic(reader)?;
-        return Ok(header.mode);
-    }
-    if read >= ZIP_MAGIC.len() && &magic[..ZIP_MAGIC.len()] == ZIP_MAGIC {
-        return Ok(BackupContainerMode::Plain);
-    }
-
-    app_error("올바른 Ultra Clipboard 백업 파일이 아닙니다")
-}
-
-fn read_container_header_after_magic<R: Read>(reader: &mut R) -> Result<ContainerHeader> {
-    let mut len = [0u8; HEADER_LEN_BYTES];
-    reader
-        .read_exact(&mut len)
-        .context("failed to read backup header length")?;
-    let header_len = u32::from_le_bytes(len) as usize;
-    if header_len == 0 || header_len > 64 * 1024 {
-        return app_error("백업 파일 헤더가 올바르지 않습니다");
-    }
-
-    let mut header = vec![0u8; header_len];
-    reader
-        .read_exact(&mut header)
-        .context("failed to read backup header")?;
-    let header: ContainerHeader =
-        serde_json::from_slice(&header).context("failed to parse backup header")?;
-    if header.format_version != FORMAT_VERSION {
-        return app_error("이 백업 형식 버전은 지원하지 않습니다");
-    }
-
-    Ok(header)
-}
-
 async fn merge_import(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -949,10 +465,7 @@ async fn merge_import(
     if let Some(settings) = patch.as_object_mut() {
         settings.remove("sync");
     }
-    let next = app
-        .state::<crate::settings::SettingsStore>()
-        .update(patch)?;
-    emit_settings_updated(app, &next);
+    change::commit(app, SettingsWrite::Patch(patch), OnEffectFailure::LogOnly).await?;
 
     Ok(ImportHistoryBackupResult {
         strategy: BackupImportStrategy::Merge,
@@ -993,13 +506,12 @@ async fn overwrite_import(
     emit_clipboard_imported(app);
 
     let settings_path = root.join(CONFIG_ARCHIVE_DIR).join(SETTINGS_FILENAME);
-    let next = app
-        .state::<crate::settings::SettingsStore>()
-        .replace_from_file(&settings_path)?;
-    emit_settings_updated(app, &next);
-    if let Err(err) = crate::sync::reconfigure(app).await {
-        log::warn!("reconfigure clipboard sync after backup restore failed: {err}");
-    }
+    change::commit(
+        app,
+        SettingsWrite::ReplaceFromFile(&settings_path),
+        OnEffectFailure::LogOnly,
+    )
+    .await?;
 
     Ok(ImportHistoryBackupResult {
         strategy: BackupImportStrategy::Overwrite,
@@ -1009,236 +521,6 @@ async fn overwrite_import(
         imported_settings: true,
         requires_restart: false,
     })
-}
-
-struct MergeOutcome {
-    imported_items: u64,
-    skipped_items: u64,
-}
-
-async fn open_backup_db(path: &Path) -> Result<SqlitePool> {
-    let options = SqliteConnectOptions::new()
-        .filename(path)
-        .read_only(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .foreign_keys(true);
-
-    Ok(SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(options)
-        .await
-        .with_context(|| format!("failed to open backup database at {path:?}"))?)
-}
-
-async fn merge_history(current: &SqlitePool, backup: &SqlitePool) -> Result<MergeOutcome> {
-    let mut tx = current.begin().await.context("failed to begin import")?;
-    merge_groups(&mut tx, backup).await?;
-    merge_apps(&mut tx, backup).await?;
-    merge_file_type_icons(&mut tx, backup).await?;
-    let outcome = merge_items(&mut tx, backup).await?;
-    tx.commit().await.context("failed to commit import")?;
-
-    Ok(outcome)
-}
-
-async fn merge_groups(tx: &mut sqlx::Transaction<'_, Sqlite>, backup: &SqlitePool) -> Result<()> {
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            bool,
-            i64,
-            DateTime<Utc>,
-            DateTime<Utc>,
-        ),
-    >(
-        "SELECT id, name, icon, is_hidden, sort_order, created_at, updated_at FROM clipboard_groups",
-    )
-    .fetch_all(backup)
-    .await
-    .context("failed to read backup groups")?;
-
-    for row in rows {
-        sqlx::query(
-            "INSERT OR IGNORE INTO clipboard_groups \
-             (id, name, icon, is_hidden, sort_order, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(row.0)
-        .bind(row.1)
-        .bind(row.2)
-        .bind(row.3)
-        .bind(row.4)
-        .bind(row.5)
-        .bind(row.6)
-        .execute(&mut **tx)
-        .await
-        .context("failed to import group")?;
-    }
-
-    Ok(())
-}
-
-async fn merge_apps(tx: &mut sqlx::Transaction<'_, Sqlite>, backup: &SqlitePool) -> Result<()> {
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            String,
-            DateTime<Utc>,
-            DateTime<Utc>,
-        ),
-    >(
-        "SELECT id, name, icon_file, platform, created_at, updated_at FROM clipboard_apps"
-    )
-    .fetch_all(backup)
-    .await
-    .context("failed to read backup apps")?;
-
-    for row in rows {
-        sqlx::query(
-            "INSERT OR IGNORE INTO clipboard_apps \
-             (id, name, icon_file, platform, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(row.0)
-        .bind(row.1)
-        .bind(row.2)
-        .bind(row.3)
-        .bind(row.4)
-        .bind(row.5)
-        .execute(&mut **tx)
-        .await
-        .context("failed to import app")?;
-    }
-
-    Ok(())
-}
-
-async fn merge_file_type_icons(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
-    backup: &SqlitePool,
-) -> Result<()> {
-    let rows = sqlx::query_as::<_, (String, String, String, DateTime<Utc>, DateTime<Utc>)>(
-        "SELECT cache_key, platform, icon_file, created_at, updated_at FROM file_type_icons",
-    )
-    .fetch_all(backup)
-    .await
-    .context("failed to read backup file type icons")?;
-
-    for row in rows {
-        sqlx::query(
-            "INSERT OR IGNORE INTO file_type_icons \
-             (cache_key, platform, icon_file, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(row.0)
-        .bind(row.1)
-        .bind(row.2)
-        .bind(row.3)
-        .bind(row.4)
-        .execute(&mut **tx)
-        .await
-        .context("failed to import file type icon")?;
-    }
-
-    Ok(())
-}
-
-async fn merge_items(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
-    backup: &SqlitePool,
-) -> Result<MergeOutcome> {
-    let rows = sqlx::query_as::<_, BackupItemRow>(
-        "SELECT id, kind, sub_kind, group_id, source_app_id, content, content_hash, search_text, \
-         summary, file_types, size, width, height, use_count, is_favorite, is_pinned, is_sensitive, platform, note, \
-         created_at, updated_at FROM clipboard_items ORDER BY created_at ASC",
-    )
-    .fetch_all(backup)
-    .await
-    .context("failed to read backup items")?;
-
-    let mut imported_items = 0;
-    let mut skipped_items = 0;
-    for row in rows {
-        let exists: Option<i64> = sqlx::query_scalar(
-            "SELECT 1 FROM clipboard_items WHERE kind = ? AND content_hash = ? LIMIT 1",
-        )
-        .bind(row.kind.as_str())
-        .bind(row.content_hash.as_str())
-        .fetch_optional(&mut **tx)
-        .await
-        .context("failed to check duplicate item")?;
-        if exists.is_some() {
-            skipped_items += 1;
-            continue;
-        }
-
-        sqlx::query(
-            "INSERT OR IGNORE INTO clipboard_items \
-             (id, kind, sub_kind, group_id, source_app_id, content, content_hash, search_text, \
-              summary, file_types, size, width, height, use_count, is_favorite, is_pinned, is_sensitive, platform, note, \
-              created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(row.id)
-        .bind(row.kind)
-        .bind(row.sub_kind)
-        .bind(row.group_id)
-        .bind(row.source_app_id)
-        .bind(row.content)
-        .bind(row.content_hash)
-        .bind(row.search_text)
-        .bind(row.summary)
-        .bind(row.file_types)
-        .bind(row.size)
-        .bind(row.width)
-        .bind(row.height)
-        .bind(row.use_count)
-        .bind(row.is_favorite)
-        .bind(row.is_pinned)
-        .bind(row.is_sensitive)
-        .bind(row.platform)
-        .bind(row.note)
-        .bind(row.created_at)
-        .bind(row.updated_at)
-        .execute(&mut **tx)
-        .await
-        .context("failed to import item")?;
-        imported_items += 1;
-    }
-
-    Ok(MergeOutcome {
-        imported_items,
-        skipped_items,
-    })
-}
-
-#[derive(sqlx::FromRow)]
-struct BackupItemRow {
-    id: String,
-    kind: String,
-    sub_kind: Option<String>,
-    group_id: Option<String>,
-    source_app_id: Option<String>,
-    content: String,
-    content_hash: String,
-    search_text: Option<String>,
-    summary: Option<String>,
-    file_types: Option<String>,
-    size: Option<i64>,
-    width: Option<i64>,
-    height: Option<i64>,
-    use_count: i64,
-    is_favorite: bool,
-    is_pinned: bool,
-    is_sensitive: bool,
-    platform: String,
-    note: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 struct WatcherPauseRestore {
@@ -1378,30 +660,10 @@ fn replace_dir(src: &Path, dst: &Path) -> Result<()> {
 }
 
 fn emit_clipboard_imported(app: &AppHandle) {
-    if let Err(err) = app.emit(
-        "clipboard://updated",
-        serde_json::json!({
-            "id": null,
-            "deduplicated": false,
-            "imported": true,
-        }),
-    ) {
-        log::warn!("emit clipboard import update failed: {err}");
-    }
-}
-
-fn emit_settings_updated(app: &AppHandle, settings: &crate::settings::Settings) {
-    if let Err(err) = app.emit("settings://updated", settings) {
-        log::warn!("emit settings import update failed: {err}");
-    }
-}
-
-fn copy_file_into_writer<W: Write>(path: &Path, writer: &mut W) -> Result<()> {
-    let file = File::open(path).with_context(|| format!("failed to open {path:?}"))?;
-    let mut reader = BufReader::new(file);
-    std::io::copy(&mut reader, writer).with_context(|| format!("failed to copy {path:?}"))?;
-
-    Ok(())
+    crate::clipboard::emit_clipboard_updated(
+        app,
+        crate::clipboard::ClipboardUpdated::Imported { imported: true },
+    );
 }
 
 fn dir_size(path: &Path) -> Result<u64> {
@@ -1434,9 +696,6 @@ fn app_error<T>(message: impl Into<String>) -> Result<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
-    use tempfile::tempdir;
-    use zip::ZipArchive;
 
     #[test]
     fn backup_extension_validation_accepts_expected_suffix() {
@@ -1453,181 +712,5 @@ mod tests {
     #[test]
     fn backup_extension_validation_rejects_other_suffix() {
         assert!(normalize_backup_path(PathBuf::from("demo.zip")).is_err());
-    }
-
-    #[test]
-    fn encrypted_payload_header_round_trips() {
-        let encrypted = encrypt_payload(b"hello", "password-123").unwrap();
-        let mut bytes = Vec::new();
-        write_header(&mut bytes, &encrypted.header).unwrap();
-        bytes.extend_from_slice(&encrypted.ciphertext);
-
-        let mut cursor = Cursor::new(bytes);
-
-        assert_eq!(
-            inspect_backup_reader(&mut cursor).unwrap(),
-            BackupContainerMode::Encrypted
-        );
-    }
-
-    #[test]
-    fn inspect_backup_reader_recognizes_plain_zip() {
-        let mut cursor = Cursor::new(b"PK\x03\x04demo".to_vec());
-
-        assert_eq!(
-            inspect_backup_reader(&mut cursor).unwrap(),
-            BackupContainerMode::Plain
-        );
-    }
-
-    #[test]
-    fn inspect_backup_reader_recognizes_encrypted_container() {
-        let encrypted = encrypt_payload(b"hello", "password-123").unwrap();
-        let mut bytes = Vec::new();
-        write_header(&mut bytes, &encrypted.header).unwrap();
-        bytes.extend_from_slice(&encrypted.ciphertext);
-        let mut cursor = Cursor::new(bytes);
-
-        assert_eq!(
-            inspect_backup_reader(&mut cursor).unwrap(),
-            BackupContainerMode::Encrypted
-        );
-    }
-
-    #[test]
-    fn payload_zip_contains_only_backup_whitelist_and_omits_webdav_password() {
-        let temp = tempdir().unwrap();
-        let root = temp.path();
-        let resources = root.join("resources");
-        fs::create_dir_all(resources.join("clipboard-images/origin")).unwrap();
-        fs::write(root.join("clipboard.db"), b"db").unwrap();
-        fs::write(
-            root.join("settings.json"),
-            br#"{"webdav":{"username":"me","password":"remote-secret"}}"#,
-        )
-        .unwrap();
-        fs::write(root.join("window-state.json"), b"skip").unwrap();
-        fs::write(root.join("settings.json.bak"), b"skip").unwrap();
-        fs::write(resources.join("clipboard-images/origin/demo.png"), b"image").unwrap();
-
-        let payload = root.join("payload.zip");
-        let target = root.join("backup.ecopastebak");
-        let manifest = BackupManifest {
-            format_version: FORMAT_VERSION,
-            app_name: "Ultra Clipboard".to_owned(),
-            app_version: "0.0.0".to_owned(),
-            exported_at: Utc::now(),
-            platform: "macos".to_owned(),
-            encryption: ManifestEncryption::None,
-            item_count: 1,
-            text_count: 1,
-            image_count: 0,
-            files_count: 0,
-            resource_bytes: 5,
-        };
-        let source_paths = BackupSourcePaths {
-            db_path: root.join("clipboard.db"),
-            resources_dir: resources,
-            settings_path: root.join("settings.json"),
-        };
-
-        write_payload_zip(&source_paths, &payload, &manifest, &target).unwrap();
-
-        let file = File::open(payload).unwrap();
-        let mut archive = ZipArchive::new(file).unwrap();
-        let mut names = Vec::new();
-        for index in 0..archive.len() {
-            let file = archive.by_index(index).unwrap();
-            names.push(file.name().to_owned());
-        }
-        names.sort();
-
-        assert_eq!(
-            names,
-            vec![
-                "config/settings.json",
-                "db/clipboard.db",
-                "manifest.json",
-                "resources/clipboard-images/origin/demo.png",
-            ]
-        );
-
-        let mut settings_entry = archive.by_name("config/settings.json").unwrap();
-        let mut settings_json = String::new();
-        settings_entry.read_to_string(&mut settings_json).unwrap();
-        let settings: serde_json::Value = serde_json::from_str(&settings_json).unwrap();
-
-        assert_eq!(settings.pointer("/webdav/username").unwrap(), "me");
-        assert!(settings.pointer("/webdav/password").is_none());
-    }
-
-    #[tokio::test]
-    async fn merge_preserves_is_sensitive_flag() {
-        use crate::db::items::{content_hash, insert_item};
-        use crate::db::models::{ClipboardItem, ClipboardKind, Platform};
-        use crate::db::test_support::memory_pool;
-        use chrono::DateTime;
-
-        // The backup pool stands in for a real backup database, which is a
-        // snapshot of the live clipboard.db and therefore already carries the
-        // `is_sensitive` flag written by the production insert path.
-        let backup = memory_pool().await;
-        let current = memory_pool().await;
-
-        let ts = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
-        let content = "AKIAIOSFODNN7EXAMPLE".to_owned();
-        let item = ClipboardItem {
-            id: "secret-1".to_owned(),
-            kind: ClipboardKind::Text,
-            sub_kind: None,
-            group_id: None,
-            source_app_id: None,
-            content_hash: content_hash(ClipboardKind::Text, &content),
-            content,
-            search_text: None,
-            summary: None,
-            file_types: None,
-            size: None,
-            width: None,
-            height: None,
-            use_count: 1,
-            is_favorite: false,
-            is_pinned: false,
-            is_sensitive: true,
-            platform: Platform::Macos,
-            note: None,
-            created_at: ts,
-            updated_at: ts,
-            source_app_name: None,
-            source_app_icon_file: None,
-            source_app_icon_path: None,
-            image_thumbnail_path: None,
-            file_entries: None,
-            files_preview_kind: None,
-            available_actions: Vec::new(),
-            color_preview: None,
-            display_created_at: String::new(),
-        };
-        insert_item(&backup, &item).await.unwrap();
-
-        let outcome = merge_history(&current, &backup).await.unwrap();
-        assert_eq!(
-            outcome.imported_items, 1,
-            "sensitive item should be imported"
-        );
-
-        // Regression: the merge SELECT/INSERT used to omit `is_sensitive`, so
-        // every imported row silently fell back to the column DEFAULT (0) and
-        // secrets were rendered in plaintext. The flag must survive the merge.
-        let imported: bool =
-            sqlx::query_scalar("SELECT is_sensitive FROM clipboard_items WHERE id = ?")
-                .bind("secret-1")
-                .fetch_one(&current)
-                .await
-                .unwrap();
-        assert!(
-            imported,
-            "merged sensitive item must keep is_sensitive = true"
-        );
     }
 }

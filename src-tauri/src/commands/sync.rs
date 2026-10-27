@@ -13,15 +13,6 @@ pub async fn set_sync_peer_secret(app: AppHandle, peer_id: String, secret: Strin
 }
 
 #[tauri::command]
-pub async fn replace_sync_peer_secret(
-    app: AppHandle,
-    peer_id: String,
-    secret: String,
-) -> Result<()> {
-    set_or_replace(&app, &peer_id, &secret).await
-}
-
-#[tauri::command]
 pub async fn delete_sync_peer_secret(app: AppHandle, peer_id: String) -> Result<()> {
     if app
         .state::<SettingsStore>()

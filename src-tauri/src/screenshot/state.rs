@@ -20,7 +20,8 @@ pub struct MonitorGeometry {
 pub struct MonitorFrame {
     pub label: String,
     pub monitor: MonitorGeometry,
-    pub rgba: Arc<Vec<u8>>,
+    /// `None` while an overlay shown before the capture waits for its pixels.
+    pub rgba: Option<Arc<Vec<u8>>>,
 }
 
 pub struct CaptureSession {
@@ -37,6 +38,11 @@ pub struct CaptureSession {
 impl CaptureSession {
     pub fn frame(&self, label: &str) -> Option<&MonitorFrame> {
         self.frames.iter().find(|frame| frame.label == label)
+    }
+
+    /// Whether every monitor's pixels have arrived.
+    pub fn is_ready(&self) -> bool {
+        self.frames.iter().all(|frame| frame.rgba.is_some())
     }
 }
 
@@ -132,6 +138,21 @@ impl ScreenshotState {
         self.lock().session.as_ref().map(read)
     }
 
+    /// Stores the pixels and window list of a session that was shown before its
+    /// capture. Returns `false` when the session was cancelled meanwhile.
+    pub fn fill_session(&self, id: u64, pixels: Vec<Vec<u8>>, windows: Vec<PixelRect>) -> bool {
+        let mut inner = self.lock();
+        let Some(session) = inner.session.as_mut().filter(|session| session.id == id) else {
+            return false;
+        };
+
+        for (frame, rgba) in session.frames.iter_mut().zip(pixels) {
+            frame.rgba = Some(Arc::new(rgba));
+        }
+        session.windows = windows;
+        true
+    }
+
     /// Ends the capture and hands the session to the caller when `id` is still current.
     pub fn take_session(&self, id: Option<u64>) -> Option<CaptureSession> {
         let mut inner = self.lock();
@@ -181,7 +202,54 @@ impl ScreenshotState {
 
 #[cfg(test)]
 mod tests {
-    use super::ScreenshotState;
+    use chrono::Local;
+
+    use super::*;
+
+    fn pending_session(id: u64) -> CaptureSession {
+        let monitor = MonitorGeometry {
+            bounds: PixelRect::new(0, 0, 2, 1),
+            work_area: PixelRect::new(0, 0, 2, 1),
+            scale_factor: 1.0,
+        };
+
+        CaptureSession {
+            id,
+            mode: CaptureMode::Area,
+            frames: vec![MonitorFrame {
+                label: "screenshot-overlay-0".to_owned(),
+                monitor,
+                rgba: None,
+            }],
+            windows: Vec::new(),
+            cursor_label: "screenshot-overlay-0".to_owned(),
+            previous_foreground: None,
+            captured_at: Local::now(),
+        }
+    }
+
+    #[test]
+    fn a_session_shown_before_capture_becomes_ready_once_filled() {
+        let state = ScreenshotState::default();
+        state.set_session(pending_session(7));
+
+        assert_eq!(state.with_session(CaptureSession::is_ready), Some(false));
+        assert!(state.fill_session(7, vec![vec![0; 8]], vec![PixelRect::new(0, 0, 1, 1)]));
+        assert_eq!(state.with_session(CaptureSession::is_ready), Some(true));
+        assert_eq!(state.with_session(|session| session.windows.len()), Some(1));
+    }
+
+    #[test]
+    fn pixels_for_a_cancelled_session_are_dropped() {
+        let state = ScreenshotState::default();
+        state.set_session(pending_session(7));
+        state.take_session(Some(7));
+
+        assert!(!state.fill_session(7, vec![vec![0; 8]], Vec::new()));
+        state.set_session(pending_session(8));
+        assert!(!state.fill_session(7, vec![vec![0; 8]], Vec::new()));
+        assert_eq!(state.with_session(CaptureSession::is_ready), Some(false));
+    }
 
     #[test]
     fn editor_handoff_blocks_another_capture_until_the_matching_editor_is_ready() {

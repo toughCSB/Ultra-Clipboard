@@ -49,6 +49,8 @@ const ScreenshotOverlay: FC = () => {
   const modeRef = useRef<SelectionMode>("area");
   const drawFrameRef = useRef(0);
   const committedRef = useRef(false);
+  const sessionIdRef = useRef<number | null>(null);
+  const pendingCommitRef = useRef<PixelRect | null>(null);
   const [session, setSession] = useState<ScreenshotOverlayState | null>(null);
   const [mode, setMode] = useState<SelectionMode>("area");
   const [hintVisible, setHintVisible] = useState(false);
@@ -58,11 +60,24 @@ const ScreenshotOverlay: FC = () => {
   const reset = () => {
     loadGenerationRef.current += 1;
     frameRef.current = null;
+    sessionIdRef.current = null;
+    pendingCommitRef.current = null;
     pointerRef.current = null;
     dragOriginRef.current = null;
     selectionRef.current = null;
     committedRef.current = false;
+    releaseCanvases();
     setSession(null);
+  };
+
+  // Overlays stay alive between captures, so drop the full-monitor backing stores.
+  const releaseCanvases = () => {
+    for (const canvas of [frameCanvasRef.current, marksCanvasRef.current]) {
+      if (!canvas) continue;
+
+      canvas.width = 0;
+      canvas.height = 0;
+    }
   };
 
   const loadSession = async () => {
@@ -79,29 +94,43 @@ const ScreenshotOverlay: FC = () => {
         return;
       }
 
-      const buffer = await getScreenshotOverlayFrame(label, state.sessionId);
-      const frameMs = performance.now() - startedAt - stateMs;
-      if (generation !== loadGenerationRef.current) {
-        return;
+      if (state.ready) {
+        const buffer = await getScreenshotOverlayFrame(label, state.sessionId);
+        if (generation !== loadGenerationRef.current) {
+          return;
+        }
+
+        frameRef.current = new ImageData(
+          new Uint8ClampedArray(buffer),
+          state.width,
+          state.height,
+        );
+        log.info("screenshot overlay frame ready", {
+          frameMs: Math.round(performance.now() - startedAt - stateMs),
+          label,
+          stateMs: Math.round(stateMs),
+        });
       }
 
-      frameRef.current = new ImageData(
-        new Uint8ClampedArray(buffer),
-        state.width,
-        state.height,
-      );
-      log.info("screenshot overlay frame ready", {
-        frameMs: Math.round(frameMs),
-        label,
-        stateMs: Math.round(stateMs),
-      });
-      pointerRef.current = null;
-      dragOriginRef.current = null;
-      selectionRef.current = null;
-      committedRef.current = false;
-      setMode(state.mode === "window" ? "window" : "area");
-      setHintVisible(true);
+      // The pixels of an overlay shown early arrive as a second load of the
+      // same session; keep what the user has selected so far.
+      if (sessionIdRef.current !== state.sessionId) {
+        sessionIdRef.current = state.sessionId;
+        pendingCommitRef.current = null;
+        pointerRef.current = null;
+        dragOriginRef.current = null;
+        selectionRef.current = null;
+        committedRef.current = false;
+        setMode(state.mode === "window" ? "window" : "area");
+        setHintVisible(true);
+      }
       setSession(state);
+
+      const pending = pendingCommitRef.current;
+      if (state.ready && pending) {
+        pendingCommitRef.current = null;
+        void sendCommit(state.sessionId, pending);
+      }
     } catch (error) {
       log.error("load screenshot overlay failed", error);
     }
@@ -167,6 +196,7 @@ const ScreenshotOverlay: FC = () => {
       ratio: session.width / Math.max(1, marks.clientWidth),
       showCrosshair:
         modeRef.current === "area" && dragOriginRef.current === null,
+      showLoupe: session.ready,
     });
   });
 
@@ -174,15 +204,19 @@ const ScreenshotOverlay: FC = () => {
     const canvas = frameCanvasRef.current;
     const marks = marksCanvasRef.current;
     const frame = frameRef.current;
-    if (!session || !canvas || !marks || !frame) return;
+    if (!session || !canvas || !marks) return;
 
     const startedAt = performance.now();
-    canvas.width = session.width;
-    canvas.height = session.height;
-    marks.width = session.width;
-    marks.height = session.height;
-    canvas.getContext("2d")?.putImageData(frame, 0, 0);
-    frameRef.current = null;
+    if (canvas.width !== session.width || canvas.height !== session.height) {
+      canvas.width = session.width;
+      canvas.height = session.height;
+      marks.width = session.width;
+      marks.height = session.height;
+    }
+    if (frame) {
+      canvas.getContext("2d")?.putImageData(frame, 0, 0);
+      frameRef.current = null;
+    }
     drawMarks();
     log.info("screenshot overlay painted", {
       label,
@@ -230,8 +264,18 @@ const ScreenshotOverlay: FC = () => {
 
     committedRef.current = true;
 
+    // A selection made before the pixels arrive is sent when they do.
+    if (!session.ready) {
+      pendingCommitRef.current = rect;
+      return;
+    }
+
+    await sendCommit(session.sessionId, rect);
+  };
+
+  const sendCommit = async (sessionId: number, rect: PixelRect) => {
     try {
-      await commitScreenshotSelection(label, session.sessionId, rect);
+      await commitScreenshotSelection(label, sessionId, rect);
     } catch (error) {
       committedRef.current = false;
       log.error("commit screenshot selection failed", error);
@@ -239,9 +283,11 @@ const ScreenshotOverlay: FC = () => {
   };
 
   const cancel = async () => {
-    if (!session || committedRef.current) return;
+    if (!session) return;
+    if (committedRef.current && pendingCommitRef.current === null) return;
 
     committedRef.current = true;
+    pendingCommitRef.current = null;
 
     try {
       await cancelScreenshotCapture(session.sessionId);

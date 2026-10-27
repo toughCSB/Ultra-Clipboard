@@ -1,6 +1,7 @@
 //! Application settings are owned by `SettingsStore`; the frontend accesses
 //! them through the `get_settings` and `update_settings` commands.
 
+pub mod change;
 mod model;
 mod store;
 

@@ -14,6 +14,7 @@ use tauri::{
     WebviewWindow, WebviewWindowBuilder,
 };
 
+use crate::core::events;
 use crate::core::Result;
 
 use super::{get_window, lifecycle, CLIPBOARD_PREVIEW_WINDOW_LABEL, CLIPBOARD_WINDOW_LABEL};
@@ -28,7 +29,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
 };
 
-const PREVIEW_UPDATED_EVENT: &str = "preview://updated";
 const PREVIEW_PANEL_WIDTH: f64 = 480.0;
 const PREVIEW_PANEL_HEIGHT: f64 = 480.0;
 const PREVIEW_PANEL_GAP: f64 = 40.0;
@@ -164,7 +164,7 @@ pub fn show_clipboard_preview(
 
     set_preview_state(Some(state.clone()));
     window
-        .emit(PREVIEW_UPDATED_EVENT, &state)
+        .emit(events::PREVIEW_UPDATED, &state)
         .map_err(|e| anyhow::anyhow!(e))?;
     show_preview_window(app, &window, &work_area)?;
 
@@ -177,7 +177,10 @@ pub fn close_clipboard_preview(app: &AppHandle) -> Result<()> {
 
     if let Some(window) = app.get_webview_window(CLIPBOARD_PREVIEW_WINDOW_LABEL) {
         window
-            .emit(PREVIEW_UPDATED_EVENT, Option::<ClipboardPreviewState>::None)
+            .emit(
+                events::PREVIEW_UPDATED,
+                Option::<ClipboardPreviewState>::None,
+            )
             .map_err(|e| anyhow::anyhow!(e))?;
         schedule_preview_window_hide(app.clone(), window, request_id);
     }
@@ -191,7 +194,10 @@ pub fn close_clipboard_preview_now(app: &AppHandle) -> Result<()> {
 
     if let Some(window) = app.get_webview_window(CLIPBOARD_PREVIEW_WINDOW_LABEL) {
         window
-            .emit(PREVIEW_UPDATED_EVENT, Option::<ClipboardPreviewState>::None)
+            .emit(
+                events::PREVIEW_UPDATED,
+                Option::<ClipboardPreviewState>::None,
+            )
             .map_err(|e| anyhow::anyhow!(e))?;
         hide_preview_window(app, &window)?;
     }

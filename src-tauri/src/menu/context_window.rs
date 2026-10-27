@@ -11,6 +11,7 @@ use crate::commands::{
     ContextMenuItemPayload, ContextMenuShowPayload, ContextSubmenuGroupInput,
     ShowContextSubmenuInput,
 };
+use crate::core::events;
 use crate::core::{AppError, Result};
 use crate::settings::Language;
 use crate::window::lifecycle;
@@ -21,9 +22,6 @@ use super::clipboard_item::{
 
 pub const CONTEXT_MENU_WINDOW_LABEL: &str = "context-menu";
 pub const CONTEXT_SUBMENU_WINDOW_LABEL: &str = "context-submenu";
-
-const CONTEXT_MENU_SHOW_EVENT: &str = "context-menu://show";
-const CONTEXT_SUBMENU_SHOW_EVENT: &str = "context-submenu://show";
 
 const MENU_WIDTH: u32 = 220;
 const SUBMENU_WIDTH: u32 = 220;
@@ -143,7 +141,7 @@ pub(super) fn show_for_clipboard_item(
         .map_err(|err| AppError::Other(anyhow::anyhow!("context-menu set_position: {err}")))?;
 
     window
-        .emit(CONTEXT_MENU_SHOW_EVENT, payload)
+        .emit(events::CONTEXT_MENU_SHOW, payload)
         .map_err(|err| AppError::Other(anyhow::anyhow!("context-menu emit show: {err}")))?;
     window
         .show()
@@ -181,7 +179,7 @@ pub fn show_submenu(app: &AppHandle, input: ShowContextSubmenuInput) -> Result<(
         .map_err(|err| AppError::Other(anyhow::anyhow!("context-submenu set_position: {err}")))?;
 
     submenu
-        .emit(CONTEXT_SUBMENU_SHOW_EVENT, input)
+        .emit(events::CONTEXT_SUBMENU_SHOW, input)
         .map_err(|err| AppError::Other(anyhow::anyhow!("context-submenu emit show: {err}")))?;
     submenu
         .show()

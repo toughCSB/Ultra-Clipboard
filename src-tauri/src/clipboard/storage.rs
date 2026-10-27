@@ -124,6 +124,23 @@ impl ImageStore {
     }
 }
 
+/// Rejects anything but a bare `*.png` name, so a stored item's `content`
+/// cannot point outside the image directory.
+pub fn validate_image_file_name(file_name: &str) -> Result<()> {
+    let invalid = file_name.is_empty()
+        || file_name.contains('/')
+        || file_name.contains('\\')
+        || file_name.contains("..")
+        || !file_name.ends_with(".png");
+
+    if invalid {
+        return Err(AppError::Clipboard(format!(
+            "invalid image file name: {file_name:?}"
+        )));
+    }
+    Ok(())
+}
+
 fn shard_dir(src: &str) -> &str {
     if src.len() >= 2 {
         &src[..2]
@@ -185,6 +202,30 @@ fn clip_err<E: std::fmt::Display>(err: E) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_plain_png_file_name() {
+        assert!(validate_image_file_name("abcdef0123.png").is_ok());
+    }
+
+    #[test]
+    fn rejects_traversal_and_subpaths() {
+        for bad in [
+            "",
+            "evil.txt",
+            "../secret.png",
+            "..\\secret.png",
+            "sub/dir.png",
+            "a/b.png",
+            "/abs.png",
+            "name..png",
+        ] {
+            assert!(
+                validate_image_file_name(bad).is_err(),
+                "should reject: {bad:?}"
+            );
+        }
+    }
 
     fn sample_png(w: u32, h: u32) -> Vec<u8> {
         use std::io::Cursor;

@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::core::events;
 use crate::settings::SettingsStore;
 
 /// Default idle time before a non-clipboard WebView is destroyed.
@@ -140,9 +141,6 @@ impl RuntimeState {
     }
 }
 
-const WINDOW_LIFECYCLE_EVENT: &str = "window://lifecycle";
-const WINDOW_BEFORE_DESTROY_EVENT: &str = "window://before-destroy";
-
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LifecyclePayload<'a> {
@@ -238,7 +236,7 @@ impl WindowLifecycleManager {
 
         let visible = matches!(phase, LifecyclePhase::Visible);
         if let Err(err) = app.emit(
-            WINDOW_LIFECYCLE_EVENT,
+            events::WINDOW_LIFECYCLE,
             LifecyclePayload {
                 label,
                 phase,
@@ -541,7 +539,7 @@ fn try_destroy_idle(app: &AppHandle, label: &str, generation: u64) {
 
 fn emit_before_destroy(app: &AppHandle, label: &str, generation: u64) {
     if let Err(err) = app.emit(
-        WINDOW_BEFORE_DESTROY_EVENT,
+        events::WINDOW_BEFORE_DESTROY,
         BeforeDestroyPayload {
             deadline_ms: BEFORE_DESTROY_DEADLINE_MS,
             generation,

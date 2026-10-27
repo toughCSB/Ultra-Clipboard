@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
+use crate::core::events;
 use crate::core::{AppError, Result};
 use crate::screenshot::{self, CaptureMode};
 use crate::settings::{SettingsStore, Shortcuts};
@@ -16,7 +17,6 @@ use crate::window::{self, CLIPBOARD_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL};
 #[cfg(target_os = "windows")]
 mod win_v;
 
-pub const CONFLICT_EVENT: &str = "shortcut://conflict";
 const RESUME_DEBOUNCE: Duration = Duration::from_millis(160);
 
 #[derive(Debug, Clone, Serialize)]
@@ -147,7 +147,7 @@ pub fn apply(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
         if claimed.contains(&normalized) {
             log::warn!("skip shortcut {action}={binding}: already used by another action");
             let _ = app.emit(
-                CONFLICT_EVENT,
+                events::SHORTCUT_CONFLICT,
                 ShortcutConflict {
                     action,
                     binding: binding.into(),
@@ -163,7 +163,7 @@ pub fn apply(app: &AppHandle, shortcuts: &Shortcuts) -> Result<()> {
             Err(err) => {
                 log::warn!("register shortcut {action}={binding} failed: {err}");
                 let _ = app.emit(
-                    CONFLICT_EVENT,
+                    events::SHORTCUT_CONFLICT,
                     ShortcutConflict {
                         action,
                         binding: binding.into(),

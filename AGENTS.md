@@ -1,7 +1,7 @@
 # AGENTS.md
 
 > This file is the single source of truth for AI coding tools in this project. Other tool entry points should reference it instead of duplicating these rules.
-> Staged backlog work lives in `.trellis/tasks/`; each task's PRD and research are authoritative for that task.
+> Layer-specific engineering notes (contracts, storage, platform behavior, frontend rules) live in `docs/spec/`; read the matching file before changing that layer.
 
 Ultra Clipboard is a cross-platform clipboard manager based on EcoPaste and uses a Rust-first Tauri architecture.
 
@@ -65,7 +65,7 @@ src-tauri/
     tray/       # tray menu
     menu/       # clipboard context menus
     drag_out/   # native drag-out for files, images, and text
-    backup/     # `.ecopastebak` import and export
+    backup/     # `.ecopastebak` import and export, legacy EcoPaste import
     i18n/       # Rust-owned user-visible labels
     autostart/  # startup registration
     settings/   # settings model and persistence
@@ -157,26 +157,16 @@ cargo test
 - UnoCSS: <https://unocss.dev/> and <https://unocss.dev/presets/wind4>
 - Tauri v2: <https://tauri.app/llms-full.txt>
 
-<!-- TRELLIS:START -->
+## Agent skills
 
-# Trellis Instructions
+### Issue tracker
 
-These instructions are for AI assistants working in this project.
+Issues and specs live as local markdown under `.scratch/`, which is git-ignored because this repository is public. See `docs/agents/issue-tracker.md`.
 
-This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
+### Triage labels
 
-- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
-- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
-- `.trellis/workspace/` — per-developer journals and session traces
-- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+Default five-role vocabulary, recorded as a `Status:` line in each issue file. See `docs/agents/triage-labels.md`.
 
-If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+### Domain docs
 
-If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
-
-- `.agents/skills/` — reusable Trellis skills
-- `.codex/agents/` — optional custom subagents
-
-Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
-
-<!-- TRELLIS:END -->
+Single-context: root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.

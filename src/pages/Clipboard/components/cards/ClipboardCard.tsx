@@ -5,7 +5,7 @@ import { popupClipboardItemMenu, startDragClipboardItem } from "@/commands";
 import AssetImage from "@/components/AssetImage";
 import KeyHint from "@/components/KeyHint";
 import type { ItemActionLabels } from "@/constants/itemActions";
-import type { ClipboardAction, ClipboardItem } from "@/types/clipboard";
+import type { ClipboardItem } from "@/types/clipboard";
 import type { ItemAction } from "@/types/settings";
 import { cn } from "@/utils/cn";
 import { isMac } from "@/utils/is";
@@ -33,7 +33,6 @@ interface ClipboardCardProps {
   onMouseDown?: (event: MouseEvent<HTMLDivElement>) => void;
   onAuxClick?: (event: MouseEvent<HTMLDivElement>) => void;
   onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void;
-  availableActions?: ClipboardAction[];
   quickActions?: ItemAction[];
   quickActionLabels?: ItemActionLabels;
   onQuickAction?: (action: ItemAction) => Promise<void> | void;
@@ -56,7 +55,6 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
     onMouseDown,
     onAuxClick,
     onDoubleClick,
-    availableActions,
     quickActions = [],
     quickActionLabels,
     onQuickAction,
@@ -95,7 +93,7 @@ const ClipboardCard: FC<ClipboardCardProps> = (props) => {
   const handleContextMenu = async (event: MouseEvent) => {
     event.preventDefault();
 
-    const actions = availableActions ?? item.availableActions ?? [];
+    const actions = item.availableActions ?? [];
     const { isFavorite, isPinned, note } = item;
 
     if (actions.length === 0) return;

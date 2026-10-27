@@ -1,0 +1,105 @@
+# Commands and Events
+
+## Command Registration
+
+Every public Tauri command must be registered in `tauri::generate_handler!` in
+`src-tauri/src/lib.rs`, re-exported by `src-tauri/src/commands/mod.rs`, mirrored
+in `src/constants/commands.ts`, and wrapped once in `src/commands/index.ts`.
+
+The frontend rule is strict: callers import wrappers from `@/commands`. They do
+not call `invoke` directly or import `TAURI_COMMAND` outside `src/commands`.
+
+Reference files:
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/commands/mod.rs`
+- `src/constants/commands.ts`
+- `src/commands/index.ts`
+
+## Command Boundary Responsibilities
+
+Commands may:
+
+- Validate external strings, paths, IDs, and enum inputs.
+- Acquire `State<DatabaseState>`, `State<SettingsStore>`, resource stores, and
+  `AppHandle`.
+- Coordinate one-off side effects such as hiding a window before paste.
+- Convert repository models into frontend-ready response models.
+- Emit events after successful persistence.
+
+Commands should not:
+
+- Open new database connections.
+- Reimplement repository filtering or persistence rules inline.
+- Let native non-`Send` handles cross an `await`.
+- Return raw file names when the frontend needs an absolute path. See list item
+  enrichment (`imageThumbnailPath`, source app icon paths).
+
+Good local examples:
+- `commands::clipboard::paste_clipboard_item` delegates to `clipboard::paste`,
+  which owns the writeback, reuse update, and the hide/resign, wait, keystroke
+  order; `paste_steps` tests pin that order per platform.
+- `commands::clipboard::list_clipboard_items` delegates list enrichment to
+  `clipboard::item_view::ItemView`.
+- `commands::settings::update_settings` delegates to `settings::change`, which
+  diffs previous and next settings and re-applies only the affected OS state.
+- `commands::window::open_preference_with_highlight` delegates to the Rust
+  pending-slot mechanism instead of asking React to emit into a rebuilding
+  window.
+
+## Event Naming and Payloads
+
+Event names use `domain://action`. Every Rust event name is a constant in
+`core::events`, and `src/constants/events.ts` mirrors it key for key.
+`core::ipc_contract` tests fail on any mismatch.
+
+Current high-value events:
+
+| Event | Rust Emitters | Frontend Consumers |
+| --- | --- | --- |
+| `clipboard://updated` | `clipboard::emit_clipboard_updated` (watcher, cleanup, reuse, clear, sync, imports) | Clipboard list refresh and deferred reload logic |
+| `clipboard-groups://updated` | `commands/clipboard.rs` | Group lists and empty state labels |
+| `settings://updated` | `settings/change.rs` (every runtime settings write) | `src/stores/settings.ts` mirror |
+| `window://visibility` | `window/mod.rs` | Clipboard focus/search and dormant refresh gates |
+| `window://lifecycle` and `window://before-destroy` | `window/lifecycle/mod.rs` | Window lifecycle mirror and destroy protection |
+| `keyboard://nav` | `keyboard/windows.rs` | `useKeyboardEvent` on Windows clipboard window |
+| `backup://received` | `backup/mod.rs` | Preference backup import flow |
+
+When adding an event, define the payload shape in Rust and in TypeScript near
+the consumer. Prefer small payloads that let the frontend fetch the latest state
+with an existing command when payloads would otherwise grow large.
+
+## Error Surface
+
+`src/commands/index.ts` normalizes rejected values into `AppError`, logs through
+`@/utils/log`, shows a localized command error toast, and rethrows. Callers
+should catch only when they need local control flow, not to show another generic
+error toast.
+
+Rust command errors should be user-readable at the message level. Avoid action
+prefixes like "save settings failed"; the frontend toast already supplies the
+action label from `src/locales/*/commands.json`.
+
+## Contract Checklist
+
+When adding or renaming a command:
+
+- Register it in `src-tauri/src/lib.rs`.
+- Export it from `src-tauri/src/commands/mod.rs`.
+- Add `TAURI_COMMAND` in `src/constants/commands.ts`.
+- Add one wrapper in `src/commands/index.ts` with a command label key. Never
+  call `invoke("…")` with a string literal.
+- `core::ipc_contract` tests fail when a registered command has no TS constant,
+  a TS constant has no handler or no caller, or any file other than
+  `src/commands/index.ts` imports `invoke`.
+  Delete a command once nothing calls it instead of keeping it registered.
+- Add `commands:labels.*` entries in both `src/locales/ko-KR/commands.json` and
+  `src/locales/en-US/commands.json`.
+- Update TypeScript types when Rust returns a new shape.
+
+When adding an event:
+
+- Add the constant to the `events!` list in `src-tauri/src/core/events.rs`.
+- Add the same key and value as `TAURI_EVENT` in `src/constants/events.ts`.
+- Define a typed payload at the consuming module.
+- Decide whether hidden or dormant windows should process it immediately or
+  defer work until `window://visibility`.

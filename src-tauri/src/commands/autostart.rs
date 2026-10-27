@@ -7,8 +7,3 @@ use crate::core::Result;
 pub async fn get_autostart(app: AppHandle) -> Result<bool> {
     autostart::is_enabled(&app)
 }
-
-#[tauri::command]
-pub async fn set_autostart(app: AppHandle, enabled: bool) -> Result<()> {
-    autostart::set_enabled(&app, enabled)
-}
