@@ -11,6 +11,18 @@ import {
   snapEdgeInside,
 } from "@/utils/pixelRect";
 import {
+  CLICK_DISTANCE,
+  createShape,
+  type DragInfo,
+  dragCreatedShape,
+  finalizeCreatedShape,
+  grabsShape,
+  isSelectTool,
+  measureRulers,
+  refreshShape,
+  type SourceImage,
+} from "../model/creation";
+import {
   addShape,
   addShapes,
   documentBounds,
@@ -18,34 +30,19 @@ import {
   findShape,
   replaceShape,
 } from "../model/document";
+import { measureSpans, type PixelSpans } from "../model/pixels";
 import {
-  averageBorderColor,
-  measureSpans,
-  type PixelSpans,
-} from "../model/pixels";
-import {
-  type BlurShape,
-  boxFromPoints,
-  constrainAngle,
-  createShapeId,
   hitShapeHandle,
-  isDegenerateShape,
-  type MagnifierShape,
   moveShape,
-  nextCounterValue,
   resizeShape,
   type Shape,
   type ShapeHandle,
-  snapBox,
   topShapeAt,
 } from "../model/shapes";
 import type { EditorTool, ToolStyle } from "../model/tools";
 
-export interface PointerInfo {
+export interface PointerInfo extends DragInfo {
   altKey: boolean;
-  shiftKey: boolean;
-  /** Image pixels covered by the handle hit radius at the current zoom. */
-  tolerance: number;
 }
 
 export interface TextEditRequest {
@@ -64,7 +61,7 @@ export interface CanvasInteraction {
 
 interface InteractionOptions {
   document: EditorDocument;
-  image: { height: number; pixels: Uint8ClampedArray; width: number };
+  image: SourceImage;
   /** Device pixels per logical pixel of the capture, used to size new annotations. */
   scale: number;
   selectedId: string | null;
@@ -100,8 +97,6 @@ const HANDLE_CURSORS: Record<RectHandle, string> = {
 
 /** Colors that differ by at most this much in every channel count as one surface. */
 const MEASURE_TOLERANCE = 12;
-/** A press that travels less than this many handle radii counts as a click. */
-const CLICK_DISTANCE = 0.5;
 
 /**
  * Turns pointer input in image coordinates into selections and annotations.
@@ -129,188 +124,6 @@ export const useCanvasInteraction = (
 
   const bounds = () => documentBounds(optionsRef.current.document);
 
-  const createShape = (point: PixelPoint): Shape | null => {
-    const { document, scale, style, tool } = optionsRef.current;
-    const id = createShapeId();
-    const strokeWidth = style.strokeWidth * scale;
-    const box = { height: 0, width: 0, x: point.x, y: point.y };
-
-    switch (tool) {
-      case "arrow":
-      case "line":
-        return {
-          color: style.color,
-          from: point,
-          id,
-          kind: tool,
-          strokeWidth,
-          to: point,
-        };
-      case "ruler":
-        return {
-          color: style.color,
-          fontSize: Math.max(11, style.strokeWidth * 3 + 8) * scale,
-          from: point,
-          id,
-          kind: "ruler",
-          strokeWidth: Math.max(1, style.strokeWidth / 2) * scale,
-          to: point,
-        };
-      case "rect":
-      case "oval":
-        return {
-          ...box,
-          color: style.color,
-          fill: style.rectFill,
-          id,
-          kind: tool,
-          strokeWidth,
-        };
-      case "highlighter":
-        return {
-          ...box,
-          color: style.highlightColor,
-          id,
-          kind: "highlighter",
-          opacity: style.highlightOpacity,
-        };
-      case "blur":
-        return {
-          ...box,
-          fillColor: "#FFFFFF",
-          id,
-          kind: "blur",
-          mode: style.blurMode,
-          strength: Math.max(4, style.strokeWidth * 3) * scale,
-        };
-      case "spotlight":
-        return { ...box, id, kind: "spotlight", oval: style.spotlightOval };
-      case "pen":
-        return {
-          color: style.color,
-          id,
-          kind: "pen",
-          points: [point],
-          strokeWidth,
-        };
-      case "counter":
-        return {
-          color: style.color,
-          id,
-          kind: "counter",
-          radius: style.counterSize * scale,
-          value: nextCounterValue(document.shapes),
-          x: point.x,
-          y: point.y,
-        };
-      case "magnifier":
-        return {
-          ...box,
-          id,
-          kind: "magnifier",
-          sourceX: point.x,
-          sourceY: point.y,
-          strokeWidth: 3 * scale,
-          zoom: style.magnifierZoom,
-        };
-      default:
-        return null;
-    }
-  };
-
-  const updateCreated = (
-    shape: Shape,
-    origin: PixelPoint,
-    point: PixelPoint,
-    info: PointerInfo,
-  ): Shape => {
-    switch (shape.kind) {
-      case "arrow":
-      case "line":
-      case "ruler":
-        return {
-          ...shape,
-          to: info.shiftKey ? constrainAngle(origin, point) : point,
-        };
-      case "pen": {
-        const last = shape.points[shape.points.length - 1];
-        if (
-          Math.hypot(point.x - last.x, point.y - last.y) <
-          info.tolerance / 4
-        ) {
-          return shape;
-        }
-
-        return { ...shape, points: [...shape.points, point] };
-      }
-      case "counter":
-        return { ...shape, x: point.x, y: point.y };
-      case "text":
-      case "image":
-        return shape;
-      default:
-        return { ...shape, ...boxFromPoints(origin, point, info.shiftKey) };
-    }
-  };
-
-  /** Finishes a created shape once the pointer is released. */
-  const finalizeCreated = (shape: Shape, info: PointerInfo): Shape | null => {
-    const { image, scale } = optionsRef.current;
-
-    switch (shape.kind) {
-      case "blur": {
-        const box = snapBox(shape);
-        const next: BlurShape = { ...shape, ...box };
-        if (next.mode === "erase") {
-          next.fillColor = averageBorderColor(
-            image.pixels,
-            image.width,
-            image.height,
-            box,
-          );
-        }
-
-        return isDegenerateShape(next, 2) ? null : next;
-      }
-      case "magnifier":
-        return placeMagnifier(shape, info, scale);
-      case "counter":
-      case "pen":
-        return shape;
-      default:
-        return isDegenerateShape(shape, info.tolerance * CLICK_DISTANCE)
-          ? null
-          : shape;
-    }
-  };
-
-  /** Turns the dragged source area into a lens placed beside it. */
-  const placeMagnifier = (
-    shape: MagnifierShape,
-    info: PointerInfo,
-    scale: number,
-  ): MagnifierShape => {
-    const area = bounds();
-    const clicked =
-      shape.width < info.tolerance && shape.height < info.tolerance;
-    const side = clicked ? 48 * scale : Math.max(shape.width, shape.height);
-    const sourceX = clicked ? shape.x : shape.x + shape.width / 2;
-    const sourceY = clicked ? shape.y : shape.y + shape.height / 2;
-    const lens = Math.max(side * shape.zoom, 64 * scale);
-    const gap = 16 * scale;
-    const rightX = sourceX + side / 2 + gap;
-    const x =
-      rightX + lens <= area.x + area.width
-        ? rightX
-        : Math.max(area.x, sourceX - side / 2 - gap - lens);
-    const y = Math.min(
-      Math.max(area.y, sourceY - lens / 2),
-      area.y + area.height - lens,
-    );
-
-    return { ...shape, height: lens, sourceX, sourceY, width: lens, x, y };
-  };
-
   const measureAt = (point: PixelPoint) => {
     const { document, image } = optionsRef.current;
 
@@ -329,40 +142,14 @@ export const useCanvasInteraction = (
     const spans = measureAt(point);
     if (!spans) return;
 
-    const centerX = spans.left + (spans.right - spans.left) / 2;
-    const centerY = spans.top + (spans.bottom - spans.top) / 2;
-    const base = {
-      color: style.color,
-      fontSize: Math.max(11, style.strokeWidth * 3 + 8) * scale,
-      kind: "ruler" as const,
-      strokeWidth: Math.max(1, style.strokeWidth / 2) * scale,
-    };
-
     optionsRef.current.commit(
-      addShapes(document, [
-        {
-          ...base,
-          from: { x: spans.left, y: centerY },
-          id: createShapeId(),
-          to: { x: spans.right, y: centerY },
-        },
-        {
-          ...base,
-          from: { x: centerX, y: spans.top },
-          id: createShapeId(),
-          to: { x: centerX, y: spans.bottom },
-        },
-      ]),
+      addShapes(document, measureRulers(spans, style, scale)),
     );
   };
 
   /** Starts moving or resizing the selected shape, or selects the shape under the press. */
-  const beginShapeGesture = (
-    point: PixelPoint,
-    info: PointerInfo,
-    selectAny: boolean,
-  ) => {
-    const { document, selectedId } = optionsRef.current;
+  const beginShapeGesture = (point: PixelPoint, info: PointerInfo) => {
+    const { document, selectedId, tool } = optionsRef.current;
     const selected = findShape(document, selectedId);
 
     if (selected) {
@@ -374,13 +161,7 @@ export const useCanvasInteraction = (
     }
 
     const hit = topShapeAt(document.shapes, point, info.tolerance);
-    const target =
-      hit &&
-      (selectAny ||
-        hit.id === selectedId ||
-        hit.kind === optionsRef.current.tool)
-        ? hit
-        : null;
+    const target = hit && grabsShape(hit, tool, selectedId) ? hit : null;
     if (!target) return false;
 
     optionsRef.current.onSelectShape(target.id);
@@ -395,10 +176,10 @@ export const useCanvasInteraction = (
   };
 
   const pointerDown = (point: PixelPoint, info: PointerInfo) => {
-    const { document, selection, tool } = optionsRef.current;
+    const { document, scale, selection, style, tool } = optionsRef.current;
 
-    if (tool === "select" || tool === "backdrop") {
-      if (beginShapeGesture(point, info, true)) return;
+    if (isSelectTool(tool)) {
+      if (beginShapeGesture(point, info)) return;
 
       optionsRef.current.onSelectShape(null);
 
@@ -446,10 +227,10 @@ export const useCanvasInteraction = (
       return;
     }
 
-    // Freehand strokes often start on earlier strokes, so the pen never grabs shapes.
-    if (tool !== "pen" && beginShapeGesture(point, info, false)) return;
+    // The pen never starts a shape gesture, not even on the selected shape's handles.
+    if (tool !== "pen" && beginShapeGesture(point, info)) return;
 
-    const shape = createShape(point);
+    const shape = createShape(tool, point, style, scale, document.shapes);
     if (!shape) return;
 
     optionsRef.current.onSelectShape(null);
@@ -460,7 +241,7 @@ export const useCanvasInteraction = (
 
   const pointerMove = (point: PixelPoint, info: PointerInfo) => {
     const gesture = gestureRef.current;
-    const { document } = optionsRef.current;
+    const { document, image } = optionsRef.current;
 
     if (!gesture) return;
 
@@ -513,7 +294,7 @@ export const useCanvasInteraction = (
         setDraft(
           replaceShape(
             document,
-            refreshShape(moveShape(gesture.shape, dx, dy)),
+            refreshShape(moveShape(gesture.shape, dx, dy), image),
           ),
         );
         return;
@@ -524,12 +305,18 @@ export const useCanvasInteraction = (
             document,
             refreshShape(
               resizeShape(gesture.shape, gesture.handle, point, info.shiftKey),
+              image,
             ),
           ),
         );
         return;
       case "create": {
-        const shape = updateCreated(gesture.shape, gesture.origin, point, info);
+        const shape = dragCreatedShape(
+          gesture.shape,
+          gesture.origin,
+          point,
+          info,
+        );
         gestureRef.current = { ...gesture, shape };
         setDraft(addShape(document, shape));
         return;
@@ -537,29 +324,12 @@ export const useCanvasInteraction = (
     }
   };
 
-  /** Keeps derived values current after a shape moves, such as erase colors. */
-  const refreshShape = (shape: Shape): Shape => {
-    if (shape.kind !== "blur") return shape;
-
-    const box = snapBox(shape);
-    const { image } = optionsRef.current;
-
-    return {
-      ...shape,
-      ...box,
-      fillColor:
-        shape.mode === "erase"
-          ? averageBorderColor(image.pixels, image.width, image.height, box)
-          : shape.fillColor,
-    };
-  };
-
   const pointerUp = (point: PixelPoint, info: PointerInfo) => {
     const gesture = gestureRef.current;
     gestureRef.current = null;
     if (!gesture) return;
 
-    const { document } = optionsRef.current;
+    const { document, image, scale } = optionsRef.current;
 
     switch (gesture.kind) {
       case "moveShape":
@@ -567,7 +337,12 @@ export const useCanvasInteraction = (
         finishDraft();
         return;
       case "create": {
-        const shape = updateCreated(gesture.shape, gesture.origin, point, info);
+        const shape = dragCreatedShape(
+          gesture.shape,
+          gesture.origin,
+          point,
+          info,
+        );
         const moved =
           Math.hypot(point.x - gesture.origin.x, point.y - gesture.origin.y) >=
           info.tolerance * CLICK_DISTANCE;
@@ -579,7 +354,13 @@ export const useCanvasInteraction = (
           return;
         }
 
-        const finished = finalizeCreated(shape, info);
+        const finished = finalizeCreatedShape(
+          shape,
+          info,
+          image,
+          bounds(),
+          scale,
+        );
         if (!finished) return;
 
         optionsRef.current.commit(addShape(document, finished));
@@ -624,18 +405,11 @@ export const useCanvasInteraction = (
     }
 
     const hit = topShapeAt(document.shapes, point, info.tolerance);
-    const selectTool = tool === "select" || tool === "backdrop";
 
-    if (
-      hit &&
-      tool !== "pen" &&
-      (selectTool || hit.id === selectedId || hit.kind === tool)
-    ) {
-      return "move";
-    }
+    if (hit && grabsShape(hit, tool, selectedId)) return "move";
 
     if (tool === "text") return "text";
-    if (!selectTool) return "crosshair";
+    if (!isSelectTool(tool)) return "crosshair";
     if (!selection) return "crosshair";
 
     const handle = hitRectHandle(selection, point, info.tolerance);
