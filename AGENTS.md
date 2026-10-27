@@ -65,7 +65,7 @@ src-tauri/
     tray/       # tray menu
     menu/       # clipboard context menus
     drag_out/   # native drag-out for files, images, and text
-    backup/     # `.ecopastebak` import and export
+    backup/     # `.ecopastebak` import and export, legacy EcoPaste import
     i18n/       # Rust-owned user-visible labels
     autostart/  # startup registration
     settings/   # settings model and persistence

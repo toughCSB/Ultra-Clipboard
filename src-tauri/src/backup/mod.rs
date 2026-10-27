@@ -19,6 +19,7 @@ use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
 
 mod archive;
 mod container;
+pub mod legacy;
 mod merge;
 
 use archive::{
