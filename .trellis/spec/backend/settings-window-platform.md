@@ -11,6 +11,18 @@ otherwise an empty full-screen canvas can be visible. A failed editor open or
 closed editor must release the handoff and overlays. Keep the macOS overlay
 window and its page background transparent until its captured frame is ready.
 
+On macOS (`backend::OVERLAY_BEFORE_CAPTURE`), area and window captures show the
+overlays first, without focus, over the live screen, then capture. Every
+ScreenCaptureKit filter excludes this app and re-includes its non-overlay
+windows (matched by `OVERLAY_WINDOW_TITLE`), so overlays never reach the frame
+while pins stay capturable. Focus is given only after the pixels arrive, so the
+frontmost app does not switch to its inactive look in the frame. The session
+starts without pixels (`CaptureSession::is_ready`), `overlay::refresh` reloads
+the same session, and a selection made earlier is committed when the pixels
+land. Windows keeps capture-first, since GDI copies the composed desktop.
+Overlays are prewarmed after startup and never idle-destroyed; the frontend
+shrinks its canvases on reset instead.
+
 For latency checks, keep the backend freeze time separate from overlay window
 creation, raw frame transfer, WebView canvas painting, and editor first paint.
 Repeat captures in the installed app on both platforms; a fast ScreenCaptureKit

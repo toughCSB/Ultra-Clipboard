@@ -13,7 +13,7 @@ use tauri::{
 
 use super::geometry::PixelRect;
 use super::state::{CaptureSession, ScreenshotState};
-use super::{CaptureMode, OVERLAY_WINDOW_LABEL_PREFIX};
+use super::{CaptureMode, OVERLAY_WINDOW_LABEL_PREFIX, OVERLAY_WINDOW_TITLE};
 use crate::core::events;
 use crate::core::Result;
 use crate::window::lifecycle;
@@ -36,6 +36,9 @@ pub struct OverlayState {
     pub width: u32,
     pub height: u32,
     pub scale_factor: f64,
+    /// Whether the frozen pixels exist. An overlay shown before the capture
+    /// starts without them and is told again once they arrive.
+    pub ready: bool,
     /// Capturable windows clipped to this monitor, in monitor-local pixels, front to back.
     pub windows: Vec<PixelRect>,
 }
@@ -60,13 +63,22 @@ pub fn state_for(session: &CaptureSession, label: &str) -> Option<OverlayState> 
         width: bounds.width,
         height: bounds.height,
         scale_factor: frame.monitor.scale_factor,
+        ready: frame.rgba.is_some(),
         windows,
     })
 }
 
-/// Prepares one hidden overlay per captured monitor and asks each frontend to paint.
-/// Windows become visible in [`reveal`] after the frozen frame is drawn.
-pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
+/// When an overlay becomes visible.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Reveal {
+    /// After the frontend draws the frozen frame (see [`reveal`]).
+    AfterPaint,
+    /// Right away and without focus, over the live screen, before the capture.
+    Now,
+}
+
+/// Prepares one overlay per captured monitor and asks each frontend to paint.
+pub fn present(app: &AppHandle, session_id: u64, when: Reveal) -> Result<()> {
     let started = Instant::now();
     let state = app.state::<ScreenshotState>();
     let Some(labels) = state.with_session(|session| {
@@ -95,6 +107,10 @@ pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
             }
         }
         schedule_ready_timeout(app, label.clone(), session_id);
+
+        if when == Reveal::Now {
+            show(app, label, session_id, false)?;
+        }
     }
 
     for (label, window) in app.webview_windows() {
@@ -112,8 +128,67 @@ pub fn present(app: &AppHandle, session_id: u64) -> Result<()> {
     Ok(())
 }
 
+/// Tells overlays shown before the capture that their pixels arrived, and
+/// gives the overlay under the cursor focus now that the frame is taken.
+pub fn refresh(app: &AppHandle, session_id: u64) {
+    let state = app.state::<ScreenshotState>();
+    let Some((labels, cursor_label)) = state
+        .with_session(|session| {
+            if session.id != session_id {
+                return None;
+            }
+
+            let labels = session
+                .frames
+                .iter()
+                .map(|frame| frame.label.clone())
+                .collect::<Vec<_>>();
+
+            Some((labels, session.cursor_label.clone()))
+        })
+        .flatten()
+    else {
+        return;
+    };
+
+    for label in &labels {
+        let Some(window) = app.get_webview_window(label) else {
+            continue;
+        };
+        if let Err(err) = window.emit_to(
+            label.as_str(),
+            events::SCREENSHOT_OVERLAY_SESSION,
+            OverlaySessionPayload {
+                label,
+                session_id: Some(session_id),
+            },
+        ) {
+            log::warn!("emit screenshot overlay frame to {label} failed: {err}");
+        }
+        if *label == cursor_label {
+            if let Err(err) = window.set_focus() {
+                log::warn!("focus screenshot overlay {label} failed: {err}");
+            }
+        }
+    }
+}
+
+/// Builds hidden overlays ahead of the first capture so it does not wait for
+/// a WebView to boot.
+pub fn prewarm(app: &AppHandle, count: usize) {
+    for index in 0..count {
+        if let Err(err) = ensure_window(app, &label_for(index)) {
+            log::warn!("prewarm screenshot overlay {index} failed: {err}");
+        }
+    }
+}
+
 /// Shows a painted overlay at its monitor bounds. The overlay under the cursor takes focus.
 pub fn reveal(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
+    show(app, label, session_id, true)
+}
+
+fn show(app: &AppHandle, label: &str, session_id: u64, allow_focus: bool) -> Result<()> {
     let state = app.state::<ScreenshotState>();
     let Some(Some((bounds, focus))) = state.with_session(|session| {
         if session.id != session_id {
@@ -139,7 +214,7 @@ pub fn reveal(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
         .set_always_on_top(true)
         .map_err(|err| anyhow::anyhow!(err))?;
     window.show().map_err(|err| anyhow::anyhow!(err))?;
-    if focus {
+    if focus && allow_focus {
         window.set_focus().map_err(|err| anyhow::anyhow!(err))?;
     }
 
@@ -187,7 +262,7 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow> {
         label,
         WebviewUrl::App("index.html/#/screenshot-overlay".into()),
     )
-    .title("Ultra Clipboard Capture")
+    .title(OVERLAY_WINDOW_TITLE)
     .decorations(false)
     .resizable(false)
     .maximizable(false)

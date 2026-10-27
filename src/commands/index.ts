@@ -1267,6 +1267,8 @@ export interface ScreenshotOverlayState {
   width: number;
   height: number;
   scaleFactor: number;
+  /** False while an overlay shown before the capture waits for its pixels. */
+  ready: boolean;
   windows: ScreenshotPixelRect[];
 }
 

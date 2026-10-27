@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Request;
-use tauri::{AppHandle, Manager, PhysicalPosition, Window};
+use tauri::{AppHandle, Manager, Window};
 
 use crate::core::{AppError, Result};
 
@@ -32,9 +32,15 @@ use state::{CaptureSession, CapturedImage, MonitorFrame, MonitorGeometry, Screen
 pub const OVERLAY_WINDOW_LABEL_PREFIX: &str = "screenshot-overlay-";
 pub const EDITOR_WINDOW_LABEL_PREFIX: &str = "screenshot-editor-";
 pub const PIN_WINDOW_LABEL_PREFIX: &str = "screenshot-pin-";
+/// Overlay window title; the macOS backend uses it to tell overlays apart from
+/// this app's other windows when excluding them from a capture.
+pub const OVERLAY_WINDOW_TITLE: &str = "Ultra Clipboard Capture";
 
 /// Lets the tray menu finish closing before the screen is frozen.
 const TRAY_CAPTURE_DELAY: Duration = Duration::from_millis(200);
+
+/// Lets startup finish before the overlay WebViews are built in the background.
+const OVERLAY_PREWARM_DELAY: Duration = Duration::from_secs(3);
 
 /// Time to open a menu or hover state before a delayed capture freezes the screen.
 const DELAYED_CAPTURE_DELAY: Duration = Duration::from_secs(3);
@@ -53,6 +59,36 @@ pub enum CaptureMode {
 
 pub fn init(app: &AppHandle) {
     app.manage(ScreenshotState::default());
+    prewarm_overlays(app);
+}
+
+/// Builds one hidden overlay per monitor after startup, so the first capture
+/// does not wait for WebViews to boot. Overlays are kept from then on.
+fn prewarm_overlays(app: &AppHandle) {
+    if !backend::is_supported() {
+        return;
+    }
+
+    let app = app.clone();
+    let spawned = thread::Builder::new()
+        .name("screenshot-overlay-prewarm".to_owned())
+        .spawn(move || {
+            thread::sleep(OVERLAY_PREWARM_DELAY);
+
+            let main_app = app.clone();
+            if let Err(err) = app.run_on_main_thread(move || match monitor_geometries(&main_app) {
+                Ok(monitors) => overlay::prewarm(&main_app, monitors.len()),
+                Err(err) => {
+                    log::warn!("prewarm screenshot overlays could not read monitors: {err}")
+                }
+            }) {
+                log::warn!("dispatch screenshot overlay prewarm failed: {err}");
+            }
+        });
+
+    if let Err(err) = spawned {
+        log::warn!("spawn screenshot overlay prewarm failed: {err}");
+    }
 }
 
 pub fn is_supported() -> bool {
@@ -132,7 +168,7 @@ pub fn overlay_frame(app: &AppHandle, label: &str, session_id: u64) -> Result<Ve
                 return None;
             }
 
-            session.frame(label).map(|frame| Arc::clone(&frame.rgba))
+            session.frame(label).and_then(|frame| frame.rgba.clone())
         })
         .flatten()
         .ok_or_else(|| AppError::Other(anyhow::anyhow!("capture session has ended")))?;
@@ -152,6 +188,11 @@ pub fn commit_selection(
     selection: PixelRect,
 ) -> Result<()> {
     let state = app.state::<ScreenshotState>();
+    if state.with_session(|session| session.id == session_id && !session.is_ready()) == Some(true) {
+        return Err(AppError::Other(anyhow::anyhow!(
+            "capture pixels have not arrived yet"
+        )));
+    }
     let Some(session) = state.take_session(Some(session_id)) else {
         return Ok(());
     };
@@ -160,11 +201,15 @@ pub fn commit_selection(
         let frame = session
             .frame(label)
             .ok_or_else(|| AppError::Other(anyhow::anyhow!("capture monitor is unavailable")))?;
+        let frame_rgba = frame
+            .rgba
+            .as_ref()
+            .ok_or_else(|| AppError::Other(anyhow::anyhow!("capture pixels are missing")))?;
         let bounds = frame.monitor.bounds;
         let selection = selection
             .intersect(&PixelRect::new(0, 0, bounds.width, bounds.height))
             .ok_or_else(|| AppError::Other(anyhow::anyhow!("selection is empty")))?;
-        let rgba = geometry::crop_rgba(&frame.rgba, bounds.width, bounds.height, selection)
+        let rgba = geometry::crop_rgba(frame_rgba, bounds.width, bounds.height, selection)
             .ok_or_else(|| AppError::Other(anyhow::anyhow!("selection is outside the monitor")))?;
 
         log::info!(
@@ -330,8 +375,19 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
     };
     let cursor = app.cursor_position().ok();
     let previous_foreground = backend::foreground_window();
-    let capture_app = app.clone();
+    let cursor_index = cursor
+        .and_then(|cursor| {
+            monitors
+                .iter()
+                .position(|monitor| monitor.bounds.contains_point(cursor.x, cursor.y))
+        })
+        .unwrap_or(0);
+    let direct = direct_target(&state, mode, &monitors, cursor_index);
+    // Selection overlays shown before the capture appear at once, like the
+    // system screenshot tool; the pixels arrive while the user starts selecting.
+    let early = direct.is_none() && backend::OVERLAY_BEFORE_CAPTURE;
 
+    let capture_app = app.clone();
     let spawned = thread::Builder::new()
         .name("screenshot-capture".to_owned())
         .spawn(move || {
@@ -339,27 +395,22 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
                 thread::sleep(delay);
             }
 
-            if let Err(err) = capture(&capture_app, mode, monitors, cursor, previous_foreground) {
+            let target = CaptureTarget {
+                mode,
+                monitors,
+                cursor_index,
+                direct,
+                previous_foreground,
+                captured_at: Local::now(),
+            };
+            let early_session = early.then(|| show_early_session(&capture_app, &target));
+            let result = match early_session {
+                Some(session_id) => capture_into_session(&capture_app, &target, session_id),
+                None => capture(&capture_app, target),
+            };
+            if let Err(err) = result {
                 log::error!("screenshot capture failed: {err}");
-                capture_app.state::<ScreenshotState>().finish_capture();
-
-                if backend::is_permission_error(&err) {
-                    let preference_app = capture_app.clone();
-                    if let Err(dispatch_err) = capture_app.run_on_main_thread(move || {
-                        if let Err(open_err) = crate::window::open_preference_with_highlight(
-                            &preference_app,
-                            "permissions.screenRecording".to_owned(),
-                        ) {
-                            log::error!(
-                                "open screen recording permission preference failed: {open_err}"
-                            );
-                        }
-                    }) {
-                        log::error!(
-                            "dispatch screen recording permission preference failed: {dispatch_err}"
-                        );
-                    }
-                }
+                fail_capture(&capture_app, early_session, &err);
             }
         });
 
@@ -369,35 +420,158 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
     }
 }
 
-fn capture(
-    app: &AppHandle,
+/// Stores a session without pixels and shows its overlays over the live screen.
+fn show_early_session(app: &AppHandle, target: &CaptureTarget) -> u64 {
+    let state = app.state::<ScreenshotState>();
+    let session_id = state.next_id();
+    state.set_session(CaptureSession {
+        id: session_id,
+        mode: overlay_mode(target.mode),
+        frames: monitor_frames(&target.monitors, None),
+        windows: Vec::new(),
+        cursor_label: overlay::label_for(target.cursor_index),
+        previous_foreground: target.previous_foreground,
+        captured_at: target.captured_at,
+    });
+
+    let main_app = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || present_early(&main_app, session_id)) {
+        log::error!("dispatch early screenshot overlays failed: {err}");
+    }
+
+    session_id
+}
+
+struct CaptureTarget {
     mode: CaptureMode,
     monitors: Vec<MonitorGeometry>,
-    cursor: Option<PhysicalPosition<f64>>,
+    cursor_index: usize,
+    /// Fullscreen and repeat capture skip the overlay and go to the editor.
+    direct: Option<(MonitorGeometry, PixelRect)>,
     previous_foreground: Option<isize>,
-) -> Result<()> {
-    let started = Instant::now();
-    let captured_at = Local::now();
-    let backend = backend::CaptureContext::new(&monitors)?;
-    let cursor_index = cursor
-        .and_then(|cursor| {
-            monitors
-                .iter()
-                .position(|monitor| monitor.bounds.contains_point(cursor.x, cursor.y))
-        })
-        .unwrap_or(0);
+    captured_at: chrono::DateTime<Local>,
+}
 
-    let direct = match mode {
+fn direct_target(
+    state: &ScreenshotState,
+    mode: CaptureMode,
+    monitors: &[MonitorGeometry],
+    cursor_index: usize,
+) -> Option<(MonitorGeometry, PixelRect)> {
+    match mode {
         CaptureMode::Fullscreen => {
             let monitor = monitors[cursor_index];
             Some((monitor, monitor.bounds))
         }
-        CaptureMode::Repeat => app
-            .state::<ScreenshotState>()
+        CaptureMode::Repeat => state
             .last_area()
-            .and_then(|area| repeat_target(&monitors, area)),
+            .and_then(|area| repeat_target(monitors, area)),
         _ => None,
-    };
+    }
+}
+
+/// Window capture keeps its mode; repeat without a previous area and delayed
+/// capture both pick an area on the frozen screen.
+fn overlay_mode(mode: CaptureMode) -> CaptureMode {
+    if mode == CaptureMode::Window {
+        CaptureMode::Window
+    } else {
+        CaptureMode::Area
+    }
+}
+
+fn monitor_frames(monitors: &[MonitorGeometry], pixels: Option<Vec<Vec<u8>>>) -> Vec<MonitorFrame> {
+    let mut pixels = pixels.map(Vec::into_iter);
+
+    monitors
+        .iter()
+        .enumerate()
+        .map(|(index, monitor)| MonitorFrame {
+            label: overlay::label_for(index),
+            monitor: *monitor,
+            rgba: pixels.as_mut().and_then(Iterator::next).map(Arc::new),
+        })
+        .collect()
+}
+
+fn present_early(app: &AppHandle, session_id: u64) {
+    let started = Instant::now();
+    if let Err(err) = overlay::present(app, session_id, overlay::Reveal::Now) {
+        log::error!("present early screenshot overlays failed: {err}");
+        cancel_capture(app, Some(session_id));
+        return;
+    }
+
+    log::info!(
+        "screenshot overlays shown before capture in {}ms",
+        started.elapsed().as_millis()
+    );
+}
+
+/// Ends a failed capture and, for a missing permission, opens its preference.
+fn fail_capture(app: &AppHandle, early_session: Option<u64>, err: &AppError) {
+    let permission_missing = backend::is_permission_error(err);
+    let main_app = app.clone();
+
+    if let Err(dispatch_err) = app.run_on_main_thread(move || {
+        if let Some(session_id) = early_session {
+            cancel_capture(&main_app, Some(session_id));
+        }
+        main_app.state::<ScreenshotState>().finish_capture();
+
+        if permission_missing {
+            if let Err(open_err) = crate::window::open_preference_with_highlight(
+                &main_app,
+                "permissions.screenRecording".to_owned(),
+            ) {
+                log::error!("open screen recording permission preference failed: {open_err}");
+            }
+        }
+    }) {
+        log::error!("dispatch failed screenshot cleanup failed: {dispatch_err}");
+        app.state::<ScreenshotState>().finish_capture();
+    }
+}
+
+/// Fills a session whose overlays are already on screen.
+fn capture_into_session(app: &AppHandle, target: &CaptureTarget, session_id: u64) -> Result<()> {
+    let started = Instant::now();
+    let backend = backend::CaptureContext::new(&target.monitors)?;
+    let rects = target
+        .monitors
+        .iter()
+        .map(|monitor| monitor.bounds)
+        .collect::<Vec<_>>();
+    let pixels = backend.capture_rects(&rects)?;
+
+    let state = app.state::<ScreenshotState>();
+    if !state.fill_session(session_id, pixels, backend.list_windows()) {
+        log::debug!("screenshot session {session_id} ended before its pixels arrived");
+        return Ok(());
+    }
+    log::info!(
+        "screenshot {:?} froze {} monitor(s) behind visible overlays in {}ms",
+        target.mode,
+        target.monitors.len(),
+        started.elapsed().as_millis()
+    );
+
+    let main_app = app.clone();
+    app.run_on_main_thread(move || overlay::refresh(&main_app, session_id))
+        .map_err(|err| AppError::Other(anyhow::anyhow!(err)))
+}
+
+fn capture(app: &AppHandle, target: CaptureTarget) -> Result<()> {
+    let started = Instant::now();
+    let CaptureTarget {
+        mode,
+        monitors,
+        cursor_index,
+        direct,
+        previous_foreground,
+        captured_at,
+    } = target;
+    let backend = backend::CaptureContext::new(&monitors)?;
 
     if let Some((monitor, area)) = direct {
         let rgba = backend.capture_rect(area)?;
@@ -429,29 +603,19 @@ fn capture(
             .map_err(|err| AppError::Other(anyhow::anyhow!(err)));
     }
 
-    // Window capture keeps its mode; repeat without a previous area and delayed
-    // capture both pick an area on the frozen screen.
-    let mode = if mode == CaptureMode::Window {
-        CaptureMode::Window
-    } else {
-        CaptureMode::Area
-    };
-
-    let mut frames = Vec::with_capacity(monitors.len());
-    for (index, monitor) in monitors.iter().enumerate() {
-        frames.push(MonitorFrame {
-            label: overlay::label_for(index),
-            monitor: *monitor,
-            rgba: Arc::new(backend.capture_rect(monitor.bounds)?),
-        });
-    }
+    let rects = monitors
+        .iter()
+        .map(|monitor| monitor.bounds)
+        .collect::<Vec<_>>();
+    let pixels = backend.capture_rects(&rects)?;
 
     let state = app.state::<ScreenshotState>();
     let session_id = state.next_id();
+    let mode = overlay_mode(mode);
     state.set_session(CaptureSession {
         id: session_id,
         mode,
-        frames,
+        frames: monitor_frames(&monitors, Some(pixels)),
         windows: backend.list_windows(),
         cursor_label: overlay::label_for(cursor_index),
         previous_foreground,
@@ -465,7 +629,7 @@ fn capture(
 
     let main_app = app.clone();
     app.run_on_main_thread(move || {
-        if let Err(err) = overlay::present(&main_app, session_id) {
+        if let Err(err) = overlay::present(&main_app, session_id, overlay::Reveal::AfterPaint) {
             log::error!("present screenshot overlays failed: {err}");
             cancel_capture(&main_app, Some(session_id));
         }

@@ -26,6 +26,10 @@ use crate::screenshot::state::MonitorGeometry;
 /// Desktop shell windows cover every monitor and would hide real windows in window mode.
 const SHELL_BACKGROUND_CLASSES: [&str; 2] = ["Progman", "WorkerW"];
 
+/// GDI copies the composed desktop, so an overlay shown before the capture
+/// would be in the frame.
+pub const OVERLAY_BEFORE_CAPTURE: bool = false;
+
 pub fn is_supported() -> bool {
     true
 }
@@ -39,6 +43,10 @@ impl CaptureContext {
 
     pub fn capture_rect(&self, rect: PixelRect) -> Result<Vec<u8>> {
         capture_rect(rect)
+    }
+
+    pub fn capture_rects(&self, rects: &[PixelRect]) -> Result<Vec<Vec<u8>>> {
+        rects.iter().map(|rect| capture_rect(*rect)).collect()
     }
 
     pub fn list_windows(&self) -> Vec<PixelRect> {

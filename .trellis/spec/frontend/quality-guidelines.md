@@ -57,7 +57,9 @@ restore the single large startup bundle.
 with `ImageData`/`putImageData`, and gives the painted frame canvas to the loupe.
 Rust retains the original RGBA for selection cropping, so preview painting must
 not change exported pixels. Report overlay readiness only after both canvases
-are painted. Measure frame transfer, canvas painting, and editor first paint on
+are painted. An overlay shown before its capture has `ready: false`: draw shade,
+crosshair, and selection without the loupe, keep the selection when the same
+session reloads with pixels, and hold a commit until then. Measure frame transfer, canvas painting, and editor first paint on
 the actual Windows and macOS apps before claiming capture latency improved.
 
 For UI changes, manually verify the main path and at least one boundary case:

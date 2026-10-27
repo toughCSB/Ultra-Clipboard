@@ -7,6 +7,8 @@ export interface OverlayMarks {
   pointer: PixelPoint | null;
   highlight: PixelRect | null;
   showCrosshair: boolean;
+  /** The loupe needs the frozen pixels, which arrive after an early overlay. */
+  showLoupe: boolean;
 }
 
 const SHADE = "rgba(0, 0, 0, 0.4)";
@@ -21,7 +23,7 @@ export const drawOverlay = (
   context: CanvasRenderingContext2D,
   marks: OverlayMarks,
 ) => {
-  const { bitmap, highlight, pointer, ratio, showCrosshair } = marks;
+  const { bitmap, highlight, pointer, ratio, showCrosshair, showLoupe } = marks;
   const { width, height } = context.canvas;
 
   context.clearRect(0, 0, width, height);
@@ -60,7 +62,7 @@ export const drawOverlay = (
     drawCrosshair(context, pointer);
   }
 
-  drawLoupe(context, bitmap, pointer, ratio);
+  if (showLoupe) drawLoupe(context, bitmap, pointer, ratio);
 };
 
 const drawCrosshair = (

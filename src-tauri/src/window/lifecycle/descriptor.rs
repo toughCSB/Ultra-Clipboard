@@ -93,11 +93,12 @@ static DESCRIPTORS: &[WindowDescriptor] = &[
 ];
 
 /// Windows created per monitor or per capture. `label` holds a prefix, and
-/// matching windows are never rebuilt by the lifecycle manager.
+/// matching windows are never rebuilt by the lifecycle manager. Capture
+/// overlays stay warm so a capture never waits for a WebView to boot.
 static PREFIX_DESCRIPTORS: &[WindowDescriptor] = &[WindowDescriptor {
     label: OVERLAY_WINDOW_LABEL_PREFIX,
     emits_lifecycle: false,
-    retain_policy: RetainPolicy::DestroyWhenIdle,
+    retain_policy: RetainPolicy::Permanent,
     build: None,
 }];
 
