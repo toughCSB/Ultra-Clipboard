@@ -14,6 +14,7 @@ Reference files:
 - `src-tauri/src/backup/mod.rs` (export/import flow, received-backup slot)
 - `src-tauri/src/backup/container.rs`, `archive.rs`, `merge.rs` (container
   format and encryption, zip payload, row merge)
+- `src-tauri/src/backup/legacy.rs` (EcoPaste legacy history import)
 
 Do not create a fresh pool in normal commands. Repository functions accept
 `&SqlitePool` and return `crate::core::Result<T>`.

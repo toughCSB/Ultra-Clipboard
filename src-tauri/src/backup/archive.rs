@@ -21,7 +21,7 @@ pub(super) const DB_FILENAME: &str = "clipboard.db";
 pub(super) const DB_ARCHIVE_DIR: &str = "db";
 pub(super) const RESOURCES_ARCHIVE_DIR: &str = "resources";
 pub(super) const CONFIG_ARCHIVE_DIR: &str = "config";
-pub(super) const MANIFEST_FILENAME: &str = "manifest.json";
+const MANIFEST_FILENAME: &str = "manifest.json";
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct BackupManifest {
