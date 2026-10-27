@@ -43,7 +43,8 @@ Rust validates external or security-sensitive values:
 - CSS colors in `clipboard::sanitize_css_color`.
 - Settings patch shape and duplicate global shortcuts in `SettingsStore`.
 - Storage targets in `core::paths::validate_storage_target`.
-- Backup passwords and container headers in `backup/mod.rs`.
+- Backup passwords in `backup/mod.rs` and container headers in
+  `backup/container.rs`.
 
 Frontend controls can guide user input, but they should not be the only
 protection for persisted data, filesystem paths, CSS injection, or OS actions.

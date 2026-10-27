@@ -11,7 +11,9 @@ Reference files:
 - `src-tauri/src/db/init.rs`
 - `src-tauri/src/db/state.rs`
 - `src-tauri/src/commands/storage.rs`
-- `src-tauri/src/backup/mod.rs`
+- `src-tauri/src/backup/mod.rs` (export/import flow, received-backup slot)
+- `src-tauri/src/backup/container.rs`, `archive.rs`, `merge.rs` (container
+  format and encryption, zip payload, row merge)
 
 Do not create a fresh pool in normal commands. Repository functions accept
 `&SqlitePool` and return `crate::core::Result<T>`.
@@ -104,8 +106,9 @@ import refresh.
 
 `backup/mod.rs` exports `.ecopastebak` packages in two modes:
 
-- Plain mode: ZIP payload.
-- Encrypted mode: EcoPaste container with Argon2id and XChaCha20Poly1305.
+- Plain mode: ZIP payload (`backup/archive.rs`).
+- Encrypted mode: EcoPaste container with Argon2id and XChaCha20Poly1305
+  (`backup/container.rs`).
 
 The backup receive flow uses a pending slot when the preference window has been
 destroyed, mirroring the preference-highlight pending-slot pattern in
