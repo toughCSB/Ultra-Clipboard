@@ -27,7 +27,8 @@ Reference files:
 - `src-tauri/src/clipboard/payload.rs`
 - `src-tauri/src/clipboard/ingest.rs`
 - `src-tauri/src/db/items.rs`
-- `src-tauri/src/commands/clipboard.rs`
+- `src-tauri/src/clipboard/paste.rs` (copy/paste of a stored item)
+- `src-tauri/src/clipboard/item_view.rs` (list decoration and preview payload)
 
 ## Transient Clipboard Read Failures
 

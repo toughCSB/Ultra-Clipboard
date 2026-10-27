@@ -39,7 +39,7 @@ next edit session.
 
 Rust validates external or security-sensitive values:
 
-- Image/icon file names in `commands::clipboard::validate_image_file_name`.
+- Image/icon file names in `clipboard::validate_image_file_name`.
 - CSS colors in `clipboard::sanitize_css_color`.
 - Settings patch shape and duplicate global shortcuts in `SettingsStore`.
 - Storage targets in `core::paths::validate_storage_target`.

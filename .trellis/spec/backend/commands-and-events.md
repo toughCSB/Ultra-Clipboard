@@ -35,8 +35,11 @@ Commands should not:
   enrichment (`imageThumbnailPath`, source app icon paths).
 
 Good local examples:
-- `commands::clipboard::paste_clipboard_item` handles the writeback, hide/resign
-  timing, paste simulation, and reuse update.
+- `commands::clipboard::paste_clipboard_item` delegates to `clipboard::paste`,
+  which owns the writeback, reuse update, and the hide/resign, wait, keystroke
+  order; `paste_steps` tests pin that order per platform.
+- `commands::clipboard::list_clipboard_items` delegates list enrichment to
+  `clipboard::item_view::ItemView`.
 - `commands::settings::update_settings` delegates to `settings::change`, which
   diffs previous and next settings and re-applies only the affected OS state.
 - `commands::window::open_preference_with_highlight` delegates to the Rust

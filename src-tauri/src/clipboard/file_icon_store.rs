@@ -23,6 +23,13 @@ impl FileIconStore {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn for_test(root: PathBuf) -> Self {
+        Self {
+            root: Arc::new(RwLock::new(root)),
+        }
+    }
+
     pub fn rebase(&self, app: &AppHandle) -> Result<()> {
         let next = crate::core::paths::resources_dir(app)?.join(FILE_ICONS_DIR);
         *self

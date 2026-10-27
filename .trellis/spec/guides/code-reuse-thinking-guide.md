@@ -50,7 +50,7 @@ Check the whole response chain:
 
 - Database schema and `db::models::ClipboardItem`.
 - Repository `SELECT` aliases and `INSERT`/`UPDATE` binds.
-- Command enrichment in `commands/clipboard.rs`.
+- List and preview enrichment in `clipboard/item_view.rs`.
 - TypeScript mirror in `src/types/clipboard.ts`.
 - Card/preview components that should render the field.
 - Tests constructing `ClipboardItem` literals.
