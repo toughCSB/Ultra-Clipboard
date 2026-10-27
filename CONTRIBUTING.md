@@ -70,7 +70,6 @@ and `window://visibility`.
 - Native dependencies required by Tauri v2. See the
   [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your
   operating system.
-- Trellis workflow docs: [Trellis documentation](https://docs.trytrellis.app).
 
 ### Install
 

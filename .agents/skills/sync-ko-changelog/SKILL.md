@@ -8,14 +8,7 @@ description: "Synchronize an Ultra Clipboard release section from CHANGELOG.md i
 Synchronize one Ultra Clipboard release from `CHANGELOG.md` to
 `CHANGELOG.ko-KR.md` without changing release metadata or unrelated files.
 
-## Trellis routing
-
-- Treat an explicit `$sync-ko-changelog` invocation as the user's standing
-  choice to skip Trellis task creation for this narrow documentation change.
-  Do not ask again, and do not create, activate, or archive a Trellis task.
-- When this skill is selected implicitly from natural-language intent, follow
-  the normal Trellis task-creation routing.
-- Still respect `AGENTS.md`, the dirty worktree, and applicable release specs.
+Respect `AGENTS.md`, the dirty worktree, and applicable release specs.
 
 ## Workflow
 
