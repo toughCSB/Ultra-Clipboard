@@ -22,6 +22,7 @@ module that already owns the concept.
 | Tauri event names | `core::events` in Rust, `src/constants/events.ts` (checked by `core::ipc_contract`) |
 | Window labels | `src-tauri/src/window/mod.rs`, `src/constants/windows.ts` |
 | Clipboard item actions | `db::models::ClipboardAction`, `clipboard::item_policy` (`available_actions`, `can_delete`), `src/constants/itemActions.ts` |
+| Running an item action in the list | `src/pages/Clipboard/itemCommands.ts` (entry point → `ItemCommand`, preview rule), `runItemCommand` in `List.tsx` |
 | Capture kinds | `settings::CaptureKind`, `src/constants/captureKinds.ts` |
 | Settings defaults | `src-tauri/src/settings/model.rs` |
 | Settings persistence/validation | `src-tauri/src/settings/store.rs` |

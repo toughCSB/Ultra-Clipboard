@@ -59,6 +59,13 @@ import {
   isSpaceKey,
   useClipboardPreviewController,
 } from "../hooks/useClipboardPreviewController";
+import {
+  closesPreview,
+  commandFromClickSetting,
+  commandFromMenuAction,
+  commandFromQuickAction,
+  type ItemCommand,
+} from "../itemCommands";
 import ClipboardCard from "./cards/ClipboardCard";
 import NoteModal from "./NoteModal";
 
@@ -349,18 +356,7 @@ const List: FC = () => {
     setNoteTarget(null);
   };
 
-  const handleOpenNote = (item: ClipboardItem, reason: string) => {
-    if (previewSession?.itemId === item.id) closePreview(reason);
-
-    setNoteTarget(item);
-  };
-
-  const handleMoveToGroup = async (
-    item: ClipboardItem,
-    nextGroupId: string,
-  ) => {
-    if (previewSession?.itemId === item.id) closePreview("moveToGroup");
-
+  const moveToGroup = async (item: ClipboardItem, nextGroupId: string) => {
     await updateClipboardItemGroup(item.id, nextGroupId);
 
     if (groupId !== null && groupId !== nextGroupId) {
@@ -392,17 +388,11 @@ const List: FC = () => {
     };
   };
 
-  const handleShortcutDelete = async (id: string) => {
-    const target = findItemById(id);
-
-    if (!target || !canDeleteItem(target)) return;
-
-    if (previewSession?.itemId === id) closePreview("delete");
-
+  const deleteItem = async (item: ClipboardItem) => {
     const deleted = await deleteClipboardItem(
-      id,
-      target.isFavorite,
-      target.isPinned,
+      item.id,
+      item.isFavorite,
+      item.isPinned,
       range === "favorite",
     );
 
@@ -414,51 +404,72 @@ const List: FC = () => {
         getItemIndexById,
         firstVisibleIndex,
         selectedId,
-        id,
+        item.id,
       ),
     );
-    removeItem(id);
+    removeItem(item.id);
   };
 
-  const handleShortcutToggleFavorite = async (id: string) => {
-    const current = findItemById(id);
+  const toggleFavorite = async (item: ClipboardItem) => {
+    const next = await toggleClipboardItemFavorite(item.id, !item.isFavorite);
 
-    if (!current) return;
-
-    const next = await toggleClipboardItemFavorite(id, !current.isFavorite);
-
-    handleFavoriteToggled(id, next);
+    handleFavoriteToggled(item.id, next);
   };
 
-  const handleTogglePinned = async (id: string) => {
-    const current = findItemById(id);
+  const togglePinned = async (item: ClipboardItem) => {
+    const next = await toggleClipboardItemPinned(item.id, !item.isPinned);
 
-    if (!current) return;
-
-    const next = await toggleClipboardItemPinned(id, !current.isPinned);
-
-    patchItem(id, { isPinned: next });
+    patchItem(item.id, { isPinned: next });
     reloadCurrentRange();
   };
 
-  const handleShortcutOpen = async (
-    item: ClipboardItem,
-    action: ClipboardAction,
+  /**
+   * Every entry point runs item actions here, so the preview and delete rules
+   * live in one place. The item is re-read so toggles see the latest state.
+   */
+  const runItemCommand = async (
+    target: ClipboardItem,
+    command: ItemCommand,
   ) => {
-    if (previewSession?.itemId === item.id) closePreview("shortcutOpen");
+    const item = findItemById(target.id);
 
-    switch (action) {
+    if (!item) return;
+    if (command.type === "delete" && !canDeleteItem(item)) return;
+
+    if (closesPreview(command, previewSession?.itemId ?? null, item.id)) {
+      closePreview(command.type);
+    }
+
+    switch (command.type) {
+      case "paste":
+        await pasteClipboardItem(item.id, command.plain);
+        return;
+      case "copy":
+        await writeToClipboard(item.id, command.plain);
+        return;
+      case "saveImage":
+        await saveClipboardImageToFile(item.id);
+        return;
       case "openLink":
-        await openClipboardItemLink(item.id, false);
+        await openClipboardItemLink(item.id, command.mailto);
         return;
-      case "sendEmail":
-        await openClipboardItemLink(item.id, true);
-        return;
-      case "revealInFinder":
-      case "revealInExplorer":
+      case "reveal":
         await revealClipboardItem(item.id);
         return;
-      default:
+      case "toggleFavorite":
+        await toggleFavorite(item);
+        return;
+      case "togglePinned":
+        await togglePinned(item);
+        return;
+      case "moveToGroup":
+        await moveToGroup(item, command.groupId);
+        return;
+      case "editNote":
+        setNoteTarget(item);
+        return;
+      case "delete":
+        await deleteItem(item);
         return;
     }
   };
@@ -467,62 +478,12 @@ const List: FC = () => {
     (payload: ClipboardMenuActionPayload) => void
   >(() => {});
   handleMenuActionRef.current = (payload) => {
-    const { action, groupId: targetGroupId, itemId } = payload;
-    const target = findItemById(itemId);
+    const target = findItemById(payload.itemId);
+    const command = commandFromMenuAction(payload.action, payload.groupId);
 
-    if (!target) return;
+    if (!target || !command) return;
 
-    switch (action) {
-      case "paste":
-        closePreview("paste");
-        pasteClipboardItem(target.id, false);
-        return;
-      case "pasteAsPlainText":
-      case "pasteAsPath":
-        closePreview("pastePlain");
-        pasteClipboardItem(target.id, true);
-        return;
-      case "copy":
-        if (previewSession?.itemId === target.id) closePreview("copy");
-        writeToClipboard(target.id, false);
-        return;
-      case "saveImage":
-        if (previewSession?.itemId === target.id) closePreview("saveImage");
-        saveClipboardImageToFile(target.id);
-        return;
-      case "openLink":
-        if (previewSession?.itemId === target.id) closePreview("openLink");
-        openClipboardItemLink(target.id, false);
-        return;
-      case "sendEmail":
-        if (previewSession?.itemId === target.id) closePreview("sendEmail");
-        openClipboardItemLink(target.id, true);
-        return;
-      case "revealInFinder":
-      case "revealInExplorer":
-        if (previewSession?.itemId === target.id) closePreview("reveal");
-        revealClipboardItem(target.id);
-        return;
-      case "toggleFavorite":
-        handleShortcutToggleFavorite(target.id);
-        return;
-      case "togglePinned":
-        handleTogglePinned(target.id);
-        return;
-      case "moveToGroup":
-        if (!targetGroupId) return;
-
-        void handleMoveToGroup(target, targetGroupId);
-        return;
-      case "editNote":
-        handleOpenNote(target, "editNote");
-        return;
-      case "delete":
-        if (!canDeleteItem(target)) return;
-
-        handleShortcutDelete(target.id);
-        return;
-    }
+    void runItemCommand(target, command);
   };
 
   const handleMenuActionEvent = (event: { payload: unknown }) => {
@@ -552,8 +513,10 @@ const List: FC = () => {
 
       if (!activeItem) return;
 
-      closePreview("enterPaste");
-      pasteClipboardItem(activeItem.id, eventModifierPressed);
+      void runItemCommand(activeItem, {
+        plain: eventModifierPressed,
+        type: "paste",
+      });
 
       return;
     }
@@ -573,7 +536,7 @@ const List: FC = () => {
 
       if (!activeItem) return;
 
-      handleShortcutDelete(activeItem.id);
+      void runItemCommand(activeItem, { type: "delete" });
 
       return;
     }
@@ -589,10 +552,7 @@ const List: FC = () => {
 
       if (!activeItem) return;
 
-      if (previewSession?.itemId === activeItem.id)
-        closePreview("shortcutCopy");
-
-      writeToClipboard(activeItem.id, false);
+      void runItemCommand(activeItem, { plain: false, type: "copy" });
 
       return;
     }
@@ -603,11 +563,12 @@ const List: FC = () => {
       if (!activeItem) return;
 
       const openAction = getOpenClipboardAction(activeItem.availableActions);
+      const command = openAction ? commandFromMenuAction(openAction) : null;
 
-      if (!openAction) return;
+      if (!command) return;
 
       event.preventDefault();
-      void handleShortcutOpen(activeItem, openAction);
+      void runItemCommand(activeItem, command);
 
       return;
     }
@@ -619,7 +580,7 @@ const List: FC = () => {
 
       if (!activeItem) return;
 
-      handleShortcutToggleFavorite(activeItem.id);
+      void runItemCommand(activeItem, { type: "toggleFavorite" });
 
       return;
     }
@@ -631,7 +592,7 @@ const List: FC = () => {
 
       if (!activeItem) return;
 
-      handleTogglePinned(activeItem.id);
+      void runItemCommand(activeItem, { type: "togglePinned" });
 
       return;
     }
@@ -643,7 +604,7 @@ const List: FC = () => {
 
       if (!activeItem) return;
 
-      handleOpenNote(activeItem, "shortcutNote");
+      void runItemCommand(activeItem, { type: "editNote" });
 
       return;
     }
@@ -799,124 +760,40 @@ const List: FC = () => {
         : void 0;
 
     const handleQuickPaste = () => {
-      closePreview("quickPaste");
-      pasteClipboardItem(item.id, false);
+      void runItemCommand(item, { plain: false, type: "paste" });
     };
 
     const handleOpenLink = () => {
-      closePreview("openLink");
-      openClipboardItemLink(item.id, item.subKind === "email");
+      void runItemCommand(item, {
+        mailto: item.subKind === "email",
+        type: "openLink",
+      });
     };
 
-    const handleEditNote = () => {
-      handleOpenNote(item, "editNote");
-    };
-
-    const handleQuickAction = async (action: ItemAction) => {
-      if (action === "delete" && !canDeleteItem(item)) return;
-
-      switch (action) {
-        case "paste":
-          closePreview("quickPaste");
-          await pasteClipboardItem(item.id, false);
-          return;
-        case "pastePlain":
-          closePreview("quickPastePlain");
-          await pasteClipboardItem(item.id, true);
-          return;
-        case "pastePath":
-          closePreview("quickPastePath");
-          await pasteClipboardItem(item.id, true);
-          return;
-        case "copy":
-          if (previewSession?.itemId === item.id) closePreview("quickCopy");
-          await writeToClipboard(item.id, false);
-          return;
-        case "copyPlain":
-          if (previewSession?.itemId === item.id) {
-            closePreview("quickCopyPlain");
-          }
-          await writeToClipboard(item.id, true);
-          return;
-        case "openLink":
-          if (previewSession?.itemId === item.id) {
-            closePreview("quickOpenLink");
-          }
-          await openClipboardItemLink(item.id, false);
-          return;
-        case "sendEmail":
-          if (previewSession?.itemId === item.id) {
-            closePreview("quickSendEmail");
-          }
-          await openClipboardItemLink(item.id, true);
-          return;
-        case "reveal":
-          if (previewSession?.itemId === item.id) closePreview("quickReveal");
-          await revealClipboardItem(item.id);
-          return;
-        case "note":
-          handleEditNote();
-          return;
-        case "pinItem":
-          await handleTogglePinned(item.id);
-          return;
-        case "star":
-          await handleShortcutToggleFavorite(item.id);
-          return;
-        case "delete":
-          await handleShortcutDelete(item.id);
-          return;
-      }
+    const handleQuickAction = (action: ItemAction) => {
+      return runItemCommand(item, commandFromQuickAction(action));
     };
 
     const handleMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        if (event.button !== 1) return;
-
+      if (event.button === 1) {
         event.preventDefault();
 
-        if (middleClick === "singleClickPaste") {
-          setSelectedId(item.id);
-          closePreview("middleClickPaste");
-          pasteClipboardItem(item.id, false);
-          return;
-        }
+        const command = commandFromClickSetting(middleClick, "single");
 
-        if (middleClick === "singleClickPastePlain") {
-          setSelectedId(item.id);
-          closePreview("middleClickPastePlain");
-          pasteClipboardItem(item.id, true);
-          return;
-        }
+        if (!command) return;
 
-        if (middleClick === "singleClickCopy") {
-          setSelectedId(item.id);
-          closePreview("middleClickCopy");
-          writeToClipboard(item.id, false);
-          return;
-        }
-
-        if (middleClick === "singleClickCopyPlain") {
-          setSelectedId(item.id);
-          closePreview("middleClickCopyPlain");
-          writeToClipboard(item.id, true);
-        }
-
+        setSelectedId(item.id);
+        void runItemCommand(item, command);
         return;
       }
+
+      if (event.button !== 0) return;
 
       setSelectedId(item.id);
 
-      if (autoPaste === "singleClickPaste") {
-        closePreview("singleClickPaste");
-        pasteClipboardItem(item.id, false);
-        return;
-      }
+      const command = commandFromClickSetting(autoPaste, "single");
 
-      if (autoPaste === "singleClickCopy") {
-        closePreview("singleClickCopy");
-        writeToClipboard(item.id, false);
-      }
+      if (command) void runItemCommand(item, command);
     };
 
     const handleAuxClick = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -926,16 +803,9 @@ const List: FC = () => {
     };
 
     const handleDoubleClick = () => {
-      if (autoPaste === "doubleClickPaste") {
-        closePreview("doubleClickPaste");
-        pasteClipboardItem(item.id, false);
-        return;
-      }
+      const command = commandFromClickSetting(autoPaste, "double");
 
-      if (autoPaste === "doubleClickCopy") {
-        closePreview("doubleClickCopy");
-        writeToClipboard(item.id, false);
-      }
+      if (command) void runItemCommand(item, command);
     };
 
     return (
