@@ -63,6 +63,7 @@ import {
   closesPreview,
   commandFromClickSetting,
   commandFromMenuAction,
+  commandFromPrimaryClick,
   commandFromQuickAction,
   type ItemCommand,
 } from "../itemCommands";
@@ -791,7 +792,7 @@ const List: FC = () => {
 
       setSelectedId(item.id);
 
-      const command = commandFromClickSetting(autoPaste, "single");
+      const command = commandFromPrimaryClick(autoPaste, "single");
 
       if (command) void runItemCommand(item, command);
     };
@@ -803,7 +804,7 @@ const List: FC = () => {
     };
 
     const handleDoubleClick = () => {
-      const command = commandFromClickSetting(autoPaste, "double");
+      const command = commandFromPrimaryClick(autoPaste, "double");
 
       if (command) void runItemCommand(item, command);
     };

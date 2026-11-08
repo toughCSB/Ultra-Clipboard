@@ -109,6 +109,17 @@ export function commandFromClickSetting(
   }
 }
 
+export function commandFromPrimaryClick(
+  setting: AutoPaste,
+  click: "single" | "double",
+): ItemCommand | null {
+  if (click === "single") return { plain: false, type: "copy" };
+  if (setting === "singleClickPaste") return { plain: false, type: "paste" };
+  if (setting === "singleClickCopy") return { plain: false, type: "copy" };
+
+  return commandFromClickSetting(setting, click);
+}
+
 /**
  * A paste moves focus to the target app, so the preview always closes. Toggles
  * keep it so the preview can show the new state. Anything else closes it only

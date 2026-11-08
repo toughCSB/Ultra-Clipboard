@@ -94,7 +94,7 @@
     "clipboardGroupSaved": "그룹 저장됨",
     "clipboardGroupsLayoutSaved": "그룹 레이아웃 저장됨",
     "clipboardItemsCleared": "기록 {{count}}개 지움",
-    "copied": "복사됨",
+    "copied": "클립보드에 복사되었습니다.",
     "deleted": "삭제됨",
     "favoriteAdded": "즐겨찾기에 추가됨",
     "favoriteRemoved": "즐겨찾기에서 제거됨",
