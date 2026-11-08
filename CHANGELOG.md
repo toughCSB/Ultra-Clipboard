@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.3.0](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.5...v1.3.0) (2026-11-08)
+
+### Added
+
+- Select recognized text directly over a screenshot image and copy the selected characters. A separate text-selection button provides a return-to-editing action while the existing area OCR copy action remains available.
+- Save screenshots directly to Pictures with the source window title and capture time in the filename. Keep Save As available as a separate button and avoid overwriting an existing automatic save.
+- Show a close button on pinned images and support Escape and Back actions to close them.
+
+### Changed
+
+- Keep the original editor tools, copy and discard controls visible in a wrapping two-row toolbar. Show Save As, Paste Image, OCR and image text selection as individual buttons, and make Save easier to find.
+- Draw straight highlighter strokes with adjustable width and intensity.
+- Copy a clipboard history item when it is clicked and show an explicit clipboard-copy confirmation.
+- Coordinate storage relocation, backup overwrite and resource cleanup with active clipboard and sync work, and retain recovery data when replacement fails.
+
+### Performance
+
+- Reduce capture startup and repeat-capture delays with prewarmed macOS overlays, parallel Windows monitor capture and compressed overlay-frame transfer.
+
+### Fixed
+
+- Restore macOS capture permission handling and protect capture sessions and editor handoffs from stale callbacks, cancellations and timeouts.
+- Prevent a dragged image from replacing the screenshot editor with a browser image viewer, keep native close requests usable, and cancel pending drags after pointer release, Escape or Back.
+- Keep managed images and icons available during copy, paste, drag, backup and storage changes.
+
+### Release Notes
+
+- Existing clipboard history and settings keep their current storage format. No released database migration is changed.
+- macOS packages remain ad hoc signed. Updating can require Screen Recording and Accessibility permissions again.
+
 ## [1.2.5](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.4...v1.2.5) (2026-09-23)
 
 ### Fixed
