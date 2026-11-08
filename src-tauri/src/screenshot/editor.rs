@@ -55,15 +55,15 @@ pub fn open(
     app: &AppHandle,
     image: CapturedImage,
     monitor: MonitorGeometry,
-    handoff_overlay: bool,
+    handoff_overlay: Option<u64>,
 ) -> Result<()> {
     let started = Instant::now();
     let state = app.state::<ScreenshotState>();
     let label = format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id());
     let (width, height) = window_size(&image, &monitor);
     state.insert_image(&label, image);
-    if handoff_overlay {
-        state.begin_editor_handoff(&label);
+    if let Some(id) = handoff_overlay {
+        state.begin_editor_handoff(id, &label);
     }
 
     let builder = WebviewWindowBuilder::new(
@@ -73,10 +73,10 @@ pub fn open(
     )
     .title("Ultra Clipboard Screenshot")
     .inner_size(width, height)
-    // The one-row toolbar needs this width to show every tool and the image info.
     .min_inner_size(MIN_WIDTH, 420.0)
     .accept_first_mouse(true)
     .disable_drag_drop_handler()
+    .on_navigation(navigation_guard(app, "/screenshot-editor"))
     .visible(false);
 
     // The toolbar doubles as the title bar, like the Shottr editor.
@@ -108,6 +108,38 @@ pub fn open(
     Ok(())
 }
 
+pub(super) fn navigation_guard(
+    app: &AppHandle,
+    route: &'static str,
+) -> impl Fn(&tauri::Url) -> bool + Send + 'static {
+    let dev_url = if cfg!(debug_assertions) {
+        app.config().build.dev_url.clone()
+    } else {
+        None
+    };
+
+    move |url| {
+        let allowed = is_screenshot_document(url, route, dev_url.as_ref());
+        if !allowed {
+            log::info!("ignored navigation away from screenshot document");
+        }
+        allowed
+    }
+}
+
+fn is_screenshot_document(url: &tauri::Url, route: &str, dev_url: Option<&tauri::Url>) -> bool {
+    let app_origin = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+        || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"));
+    let dev_origin = dev_url.is_some_and(|dev| dev.origin() == url.origin());
+
+    (app_origin || dev_origin)
+        && url.path().trim_end_matches('/') == "/index.html"
+        && url
+            .fragment()
+            .and_then(|fragment| fragment.split('?').next())
+            == Some(route)
+}
+
 /// Shows a painted editor or pin window and brings it to the front.
 pub fn reveal(app: &AppHandle, label: &str) -> Result<()> {
     let Some(window) = app.get_webview_window(label) else {
@@ -130,16 +162,33 @@ pub fn reveal(app: &AppHandle, label: &str) -> Result<()> {
 }
 
 fn finish_overlay_handoff(app: &AppHandle, label: &str) {
-    if app
-        .state::<ScreenshotState>()
-        .complete_editor_handoff(label)
-    {
+    let state = app.state::<ScreenshotState>();
+    state.complete_editor_handoff(label, || {
         super::overlay::hide_all(app);
-    }
+    });
 }
 
 /// Asks the editor frontend to run its close flow, which confirms unsaved edits.
 pub fn request_close(app: &AppHandle, label: &str) {
+    let non_editor_document = app
+        .get_webview_window(label)
+        .and_then(|window| window.url().ok())
+        .is_some_and(|url| {
+            url.scheme() == "file"
+                || url
+                    .fragment()
+                    .and_then(|fragment| fragment.split('?').next())
+                    != Some("/screenshot-editor")
+        });
+    if non_editor_document {
+        let main_app = app.clone();
+        let label = label.to_owned();
+        if let Err(err) = app.run_on_main_thread(move || super::close_window(&main_app, &label)) {
+            log::error!("close non-editor screenshot window failed: {err}");
+        }
+        return;
+    }
+
     if let Err(err) = app.emit_to(
         label,
         events::SCREENSHOT_EDITOR_CLOSE_REQUESTED,
@@ -201,6 +250,46 @@ mod tests {
     use super::*;
     use crate::screenshot::geometry::PixelRect;
 
+    #[test]
+    fn screenshot_navigation_stays_on_its_app_document() {
+        let route = "/screenshot-editor";
+        for value in [
+            "tauri://localhost/index.html/#/screenshot-editor",
+            "http://tauri.localhost/index.html/#/screenshot-editor",
+            "https://tauri.localhost/index.html/#/screenshot-editor",
+        ] {
+            assert!(is_screenshot_document(&value.parse().unwrap(), route, None));
+        }
+        for value in [
+            "file:///tmp/screenshot.png",
+            "file:///tmp/index.html/#/screenshot-editor",
+            "https://example.com/index.html/#/screenshot-editor",
+            "tauri://localhost/index.html/#/screenshot-pin",
+            "data:text/html,screenshot",
+        ] {
+            assert!(!is_screenshot_document(
+                &value.parse().unwrap(),
+                route,
+                None
+            ));
+        }
+        let dev_url = "http://localhost:1420".parse().unwrap();
+        assert!(is_screenshot_document(
+            &"http://localhost:1420/index.html/#/screenshot-editor"
+                .parse()
+                .unwrap(),
+            route,
+            Some(&dev_url),
+        ));
+        assert!(!is_screenshot_document(
+            &"http://localhost:1421/index.html/#/screenshot-editor"
+                .parse()
+                .unwrap(),
+            route,
+            Some(&dev_url),
+        ));
+    }
+
     fn image(width: u32, height: u32, scale_factor: f64) -> CapturedImage {
         CapturedImage {
             width,
@@ -210,6 +299,7 @@ mod tests {
             origin_y: 0,
             rgba: Vec::new(),
             captured_at: Local::now(),
+            source_title: None,
         }
     }
 

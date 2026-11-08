@@ -36,14 +36,14 @@ export const isSelectTool = (tool: EditorTool) => {
 /**
  * Whether a press on `hit` moves it instead of starting a new shape. Select
  * tools grab anything; drawing tools grab the selected shape or their own kind.
- * Freehand strokes often start on earlier strokes, so the pen never grabs.
+ * Pen and marker strokes often start on earlier strokes, so they never grab.
  */
 export const grabsShape = (
   hit: Shape,
   tool: EditorTool,
   selectedId: string | null,
 ) => {
-  if (tool === "pen") return false;
+  if (tool === "pen" || tool === "highlighter") return false;
 
   return isSelectTool(tool) || hit.id === selectedId || hit.kind === tool;
 };
@@ -99,11 +99,13 @@ export const createShape = (
       };
     case "highlighter":
       return {
-        ...box,
         color: style.highlightColor,
+        from: point,
         id,
         kind: "highlighter",
         opacity: style.highlightOpacity,
+        strokeWidth: style.highlightWidth * scale,
+        to: point,
       };
     case "blur":
       return {
@@ -158,6 +160,7 @@ export const dragCreatedShape = (
 ): Shape => {
   switch (shape.kind) {
     case "arrow":
+    case "highlighter":
     case "line":
     case "ruler":
       return {
@@ -200,6 +203,7 @@ export const finalizeCreatedShape = (
       return placeMagnifier(shape, info, area, scale);
     case "counter":
     case "pen":
+    case "highlighter":
       return shape;
     default:
       return isDegenerateShape(shape, info.tolerance * CLICK_DISTANCE)

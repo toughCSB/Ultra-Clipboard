@@ -42,6 +42,7 @@ pub struct Receiver {
     image_store: ImageStore,
     sensitive: Sensitive,
     sink: Arc<dyn EventSink>,
+    storage_access: crate::storage::StorageAccess,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,12 +67,14 @@ impl Receiver {
         image_store: ImageStore,
         sensitive: Sensitive,
         sink: Arc<dyn EventSink>,
+        storage_access: crate::storage::StorageAccess,
     ) -> Self {
         Self {
             pool,
             image_store,
             sensitive,
             sink,
+            storage_access,
         }
     }
 
@@ -82,6 +85,7 @@ impl Receiver {
         event: &SyncEvent,
         body_hash: &str,
     ) -> Result<ReceiveOutcome, ReceiveError> {
+        let _resource_access = self.storage_access.read_owned().await;
         if auth.device_id != event.origin_device_id {
             return Err(ReceiveError::Invalid);
         }
@@ -178,6 +182,7 @@ mod tests {
             store.clone(),
             Sensitive::default(),
             sink.clone(),
+            crate::storage::StorageAccess::default(),
         );
         let peer_id = uuid::Uuid::new_v4().to_string();
         let event = SyncEvent {

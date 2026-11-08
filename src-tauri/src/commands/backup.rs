@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::backup::{
     BackupContainerMode, BackupReceiveSource, BackupReceivedPayload, ExportHistoryBackupOptions,
@@ -42,6 +42,10 @@ pub async fn export_history_backup(
     target_path: String,
     options: ExportHistoryBackupOptions,
 ) -> Result<ExportHistoryBackupResult> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     crate::backup::export_history_backup(&app, &pool, target_path, options).await
 }

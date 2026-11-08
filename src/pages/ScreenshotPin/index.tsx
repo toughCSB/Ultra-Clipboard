@@ -7,6 +7,7 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   closeScreenshotWindow,
   getScreenshotImage,
@@ -15,6 +16,8 @@ import {
   setScreenshotPinScale,
   showScreenshotPinMenu,
 } from "@/commands";
+import CustomIconButton from "@/components/CustomIconButton";
+import Tooltip from "@/components/Tooltip";
 import { cn } from "@/utils/cn";
 import { log } from "@/utils/log";
 
@@ -26,12 +29,14 @@ const SCALE_BADGE_MS = 900;
 
 /** Always-on-top pinned screenshot that moves by dragging and scales with the wheel. */
 const ScreenshotPin: FC = () => {
+  const { t } = useTranslation("screenshot");
   const currentWindow = getCurrentWebviewWindow();
   const label = currentWindow.label;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bitmapRef = useRef<ImageBitmap | null>(null);
   const scaleRef = useRef(1);
   const pressRef = useRef<{ x: number; y: number } | null>(null);
+  const closingRef = useRef(false);
   const [scalePercent, setScalePercent] = useState<number | null>(null);
 
   const draw = () => {
@@ -91,9 +96,13 @@ const ScreenshotPin: FC = () => {
   };
 
   const close = async () => {
+    if (closingRef.current) return;
+
+    closingRef.current = true;
     try {
       await closeScreenshotWindow(label);
     } catch (error) {
+      closingRef.current = false;
       log.error("close screenshot pin failed", error);
     }
   };
@@ -165,13 +174,45 @@ const ScreenshotPin: FC = () => {
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
+    if (
+      event.key !== "Escape" &&
+      event.key !== "Backspace" &&
+      event.key !== "BrowserBack" &&
+      !(event.altKey && event.key === "ArrowLeft")
+    ) {
+      return;
+    }
 
+    event.preventDefault();
+
+    void close();
+  };
+
+  const handleBackMouseDown = (event: MouseEvent) => {
+    if (event.button !== 3) return;
+
+    event.preventDefault();
+    void close();
+  };
+
+  const handleUnsupportedDrop = (event: DragEvent) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
+  };
+
+  const handleClosePointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    event.stopPropagation();
+  };
+
+  const handleClose = () => {
     void close();
   };
 
   useEventListener("resize", draw);
   useEventListener("keydown", handleKeyDown);
+  useEventListener("mousedown", handleBackMouseDown);
+  useEventListener("dragover", handleUnsupportedDrop);
+  useEventListener("drop", handleUnsupportedDrop);
 
   return (
     <main
@@ -185,9 +226,18 @@ const ScreenshotPin: FC = () => {
     >
       <canvas className="block h-full w-full" ref={canvasRef} />
       <div className="pointer-events-none absolute inset-0 border border-white/25" />
+      <Tooltip title={t("editor.window.close")}>
+        <CustomIconButton
+          aria-label={t("editor.window.close")}
+          className="absolute top-2 right-2 h-8 w-8 rounded-2 bg-ant-container text-ant-text shadow-sm"
+          icon={<span aria-hidden="true" className="i-lucide:x text-lg" />}
+          onClick={handleClose}
+          onPointerDown={handleClosePointerDown}
+        />
+      </Tooltip>
       <div
         className={cn(
-          "pointer-events-none absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-white text-xs opacity-0 transition-opacity",
+          "pointer-events-none absolute top-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-white text-xs opacity-0 transition-opacity",
           { "opacity-100": scalePercent !== null },
         )}
       >

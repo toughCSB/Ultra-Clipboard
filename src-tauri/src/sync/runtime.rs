@@ -156,7 +156,13 @@ impl SyncRuntime {
             ));
         }
 
-        let receiver = Receiver::new(input.pool, input.image_store, input.sensitive, input.sink);
+        let receiver = Receiver::new(
+            input.pool,
+            input.image_store,
+            input.sensitive,
+            input.sink,
+            input.storage_access,
+        );
         let server_state = ServerState::new(incoming, receiver);
         let (shutdown, shutdown_receiver) = watch::channel(false);
         let supervisor_shutdown = shutdown.clone();
@@ -241,6 +247,7 @@ pub struct RuntimeInput {
     pub image_store: ImageStore,
     pub sensitive: crate::settings::Sensitive,
     pub sink: Arc<dyn EventSink>,
+    pub storage_access: crate::storage::StorageAccess,
 }
 
 fn secret_error() -> AppError {

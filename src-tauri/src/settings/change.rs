@@ -45,6 +45,36 @@ pub async fn commit(
     write: SettingsWrite<'_>,
     on_failure: OnEffectFailure,
 ) -> Result<Settings> {
+    let access = app.state::<crate::storage::StorageAccess>();
+    let _operation = access.operation().await;
+    let _access = access.read_owned().await;
+    commit_inner(app, write, on_failure, false).await
+}
+
+/// The caller owns the storage operation mutex while applying imported settings.
+pub(crate) async fn commit_during_storage_operation(
+    app: &AppHandle,
+    write: SettingsWrite<'_>,
+    on_failure: OnEffectFailure,
+) -> Result<Settings> {
+    let _access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
+    commit_inner(app, write, on_failure, false).await
+}
+
+/// Defers sync reconfiguration until an exclusive storage change ends.
+pub async fn commit_storage_swap(app: &AppHandle, write: SettingsWrite<'_>) -> Result<Settings> {
+    commit_inner(app, write, OnEffectFailure::LogOnly, true).await
+}
+
+async fn commit_inner(
+    app: &AppHandle,
+    write: SettingsWrite<'_>,
+    on_failure: OnEffectFailure,
+    defer_sync: bool,
+) -> Result<Settings> {
     let store = app.state::<SettingsStore>();
     let previous = store.snapshot();
     let swaps_storage = write.swaps_storage();
@@ -59,6 +89,9 @@ pub async fn commit(
     let effects = plan(&previous, &next, swaps_storage);
 
     for (index, effect) in effects.iter().enumerate() {
+        if defer_sync && *effect == SettingsEffect::Sync {
+            continue;
+        }
         let Err(err) = apply_effect(app, *effect, &next).await else {
             continue;
         };

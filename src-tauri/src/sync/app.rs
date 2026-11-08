@@ -31,6 +31,7 @@ async fn configure_app(runtime: &SyncRuntime, app: &AppHandle) -> Result<()> {
                 image_store: app.state::<ImageStore>().inner().clone(),
                 sensitive: settings.clipboard.sensitive,
                 sink: Arc::new(AppEventSink::new(app.clone())),
+                storage_access: app.state::<crate::storage::StorageAccess>().inner().clone(),
             },
             false,
         )

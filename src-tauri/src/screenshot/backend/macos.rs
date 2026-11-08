@@ -39,6 +39,14 @@ pub fn is_permission_error(error: &AppError) -> bool {
     error.to_string() == SCREEN_RECORDING_PERMISSION_ERROR
 }
 
+pub fn ensure_capture_permission() -> Result<()> {
+    let access = ScreenCaptureAccess;
+    if !access.preflight() && !access.request() {
+        return Err(anyhow::anyhow!(SCREEN_RECORDING_PERMISSION_ERROR).into());
+    }
+    Ok(())
+}
+
 pub fn monitor_geometries() -> Result<Vec<MonitorGeometry>> {
     let mtm = MainThreadMarker::new()
         .ok_or_else(|| anyhow::anyhow!("macOS monitor enumeration requires the main thread"))?;
@@ -129,10 +137,7 @@ struct Exclusion {
 impl CaptureContext {
     pub fn new(monitors: &[MonitorGeometry]) -> Result<Self> {
         let permission_started = Instant::now();
-        let access = ScreenCaptureAccess;
-        if !access.preflight() && !access.request() {
-            return Err(anyhow::anyhow!(SCREEN_RECORDING_PERMISSION_ERROR).into());
-        }
+        ensure_capture_permission()?;
         log::info!(
             "macOS screenshot permission confirmed in {}ms",
             permission_started.elapsed().as_millis()
@@ -235,6 +240,23 @@ impl CaptureContext {
 
         rects
     }
+
+    pub fn origin_title(&self, handle: Option<isize>) -> Option<String> {
+        let process_id = i32::try_from(handle?).ok()?;
+        self.windows.iter().find_map(|window| {
+            // SAFETY: The shareable snapshot retains every window and owning app.
+            let owner = unsafe { window.owningApplication() }?;
+            if unsafe { owner.processID() } != process_id
+                || unsafe { window.windowLayer() } != 0
+                || !unsafe { window.isOnScreen() }
+            {
+                return None;
+            }
+            unsafe { window.title() }
+                .map(|title| title.to_string())
+                .filter(|title| !title.trim().is_empty())
+        })
+    }
 }
 
 pub fn foreground_window() -> Option<isize> {
@@ -242,6 +264,15 @@ pub fn foreground_window() -> Option<isize> {
         NSWorkspace::sharedWorkspace()
             .frontmostApplication()
             .map(|app| app.processIdentifier() as isize)
+    })
+}
+
+pub fn foreground_title(handle: Option<isize>) -> Option<String> {
+    let process_id = i32::try_from(handle?).ok()?;
+    autoreleasepool(|_| {
+        NSRunningApplication::runningApplicationWithProcessIdentifier(process_id)
+            .and_then(|app| app.localizedName())
+            .map(|name| name.to_string())
     })
 }
 
@@ -317,17 +348,26 @@ fn own_exclusion(snapshot: &ShareableSnapshot) -> Exclusion {
         .applications
         .iter()
         .find(|app| unsafe { app.processID() } == own_process)
-        .cloned();
+        .cloned()
+        .or_else(|| {
+            snapshot.windows.iter().find_map(|window| {
+                // The on-screen-only application list can omit a hidden app even
+                // when it still returns one of that app's windows.
+                unsafe { window.owningApplication() }
+                    .filter(|owner| unsafe { owner.processID() } == own_process)
+            })
+        });
     let kept_windows = snapshot
         .windows
         .iter()
         .filter(|window| {
             let owned = unsafe { window.owningApplication() }
                 .is_some_and(|owner| unsafe { owner.processID() } == own_process);
-            let is_overlay = unsafe { window.title() }
-                .is_some_and(|title| title.to_string() == OVERLAY_WINDOW_TITLE);
+            // A missing title may be a screenshot overlay; never re-include it.
+            let named_non_overlay = unsafe { window.title() }
+                .is_some_and(|title| title.to_string() != OVERLAY_WINDOW_TITLE);
 
-            owned && !is_overlay
+            owned && named_non_overlay
         })
         .cloned()
         .collect();
@@ -580,6 +620,44 @@ mod tests {
             work_area: PixelRect::new(x, y, width, height),
             scale_factor: scale,
         }
+    }
+
+    /// Runs only in an interactive macOS process granted Screen Recording.
+    #[test]
+    #[ignore = "requires Screen Recording permission for the test executable"]
+    fn screen_capture_kit_returns_pixels_within_timeout() {
+        assert!(
+            ScreenCaptureAccess.preflight(),
+            "the test executable needs Screen Recording permission"
+        );
+        let snapshot_started = Instant::now();
+        let snapshot = shareable_snapshot().unwrap();
+        let snapshot_elapsed = snapshot_started.elapsed();
+        let display = snapshot.displays.first().unwrap().clone();
+        let frame = unsafe { display.frame() };
+        let width = 64.min(unsafe { display.width() } as u32);
+        let height = 64.min(unsafe { display.height() } as u32);
+        let rect = PixelRect::new(0, 0, width, height);
+        let target = DisplayTarget {
+            display,
+            monitor: monitor(0, 0, width, height, 1.0),
+            point_frame: frame,
+        };
+        let source = CGRect::new(
+            CGPoint::new(0.0, 0.0),
+            CGSize::new(f64::from(width), f64::from(height)),
+        );
+        let exclusion = Exclusion {
+            app: None,
+            kept_windows: Vec::new(),
+        };
+        let capture_started = Instant::now();
+        let pixels = start_capture(&target, rect, source, &exclusion)
+            .wait()
+            .unwrap();
+        let capture_elapsed = capture_started.elapsed();
+        eprintln!("SCK snapshot={snapshot_elapsed:?} capture={capture_elapsed:?}");
+        assert_eq!(pixels.len(), rect.byte_len().unwrap());
     }
 
     #[test]

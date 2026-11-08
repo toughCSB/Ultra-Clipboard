@@ -83,6 +83,10 @@ pub async fn import_legacy_rows(
     app: &AppHandle,
     types: Vec<LegacyImportSelection>,
 ) -> Result<OnboardingLegacyImportResult> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     if types.is_empty() {
         return Err(AppError::Clipboard(
             "가져올 유형을 하나 이상 선택하세요".to_owned(),

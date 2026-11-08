@@ -17,6 +17,10 @@ use winapi::um::winuser::{
 use crate::core::events;
 
 static NAV_ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn navigation_keys_enabled() -> bool {
+    NAV_ENABLED.load(Ordering::Relaxed)
+}
 static HOOK_THREAD_ID: Mutex<Option<u32>> = Mutex::new(None);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 

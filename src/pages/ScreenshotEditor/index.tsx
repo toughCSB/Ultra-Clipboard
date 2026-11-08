@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import {
   closeScreenshotWindow,
   copyScreenshotColor,
+  copyScreenshotText,
   exportScreenshot,
   getScreenshotImage,
   getScreenshotImageInfo,
@@ -14,6 +15,7 @@ import {
   readScreenshotClipboardImage,
   type ScreenshotExportAction,
   type ScreenshotImageInfo,
+  type ScreenshotTextRegion,
   startScreenshotDrag,
 } from "@/commands";
 import { TAURI_EVENT } from "@/constants/events";
@@ -29,6 +31,9 @@ import {
 } from "@/utils/pixelRect";
 import EditorCanvas, { type ViewSize } from "./components/EditorCanvas";
 import EditorToolbar, { type ToolAnchorRect } from "./components/EditorToolbar";
+import ImageTextSelection, {
+  selectedImageText,
+} from "./components/ImageTextSelection";
 import TextEditor, { type TextEditState } from "./components/TextEditor";
 import ToolOptions, { type OptionsSubject } from "./components/ToolOptions";
 import {
@@ -47,6 +52,7 @@ import {
   replaceShape,
   setBackdrop,
 } from "./model/document";
+import { createDragGesture } from "./model/dragGesture";
 import {
   commitHistory,
   createHistory,
@@ -57,6 +63,7 @@ import {
 import { type PixelSpans, readPixelHex } from "./model/pixels";
 import { applyStyleToShape, styleFromShape } from "./model/shapeStyle";
 import { createShapeId, moveShape, type TextShape } from "./model/shapes";
+import { validTextRegions } from "./model/textSelection";
 import {
   type EditorTool,
   loadToolStyle,
@@ -92,7 +99,17 @@ interface DragPreparation {
   selection: PixelRect | null;
 }
 
-type WindowExportAction = Exclude<ScreenshotExportAction, "prepareDrag">;
+interface TextSelectionMode {
+  area: PixelRect;
+  document: EditorDocument;
+  loading: boolean;
+  regions: ScreenshotTextRegion[];
+}
+
+type WindowExportAction = Exclude<
+  ScreenshotExportAction,
+  "prepareDrag" | "selectText"
+>;
 
 const FIT_MARGIN_CSS = 24;
 const VISIBLE_CONTENT_CSS = 64;
@@ -125,14 +142,34 @@ const ScreenshotEditor: FC = () => {
   const [maximized, setMaximized] = useState(false);
   const [toolAnchor, setToolAnchor] = useState<ToolAnchorRect | null>(null);
   const [toolOptionsOpen, setToolOptionsOpen] = useState(false);
+  const [textSelectionMode, setTextSelectionMode] =
+    useState<TextSelectionMode | null>(null);
+  const [selectedImageTextValue, setSelectedImageTextValue] = useState("");
   const bitmapRef = useRef<ImageBitmap | null>(null);
   const exportedDocumentRef = useRef<EditorDocument | null>(null);
   const dragPreparationRef = useRef<DragPreparation | null>(null);
+  const dragPreparationIdRef = useRef(0);
+  const dragGestureRef = useRef(createDragGesture());
+  const dragDocumentRef = useRef<EditorDocument | null>(null);
+  const dragSelectionRef = useRef<PixelRect | null>(null);
+  const previousDragContextRef = useRef<{
+    document: EditorDocument | null;
+    selection: PixelRect | null;
+  }>({ document: null, selection: null });
   const textEditRef = useRef<TextEditState | null>(null);
   const closingRef = useRef(false);
+  const textRequestGenerationRef = useRef(0);
+  const textSelectionModeRef = useRef<TextSelectionMode | null>(null);
+  const textOverlayRef = useRef<HTMLDivElement>(null);
+  const selectedImageTextRef = useRef("");
+  const pendingTextStartRef = useRef(false);
   const loadStartedAtRef = useRef(performance.now());
   const present = history?.present ?? null;
+  const presentRef = useRef(present);
+  presentRef.current = present;
   const shown = draft ?? present;
+  dragDocumentRef.current = present;
+  dragSelectionRef.current = selection;
   const scale = Math.max(1, image?.info.scaleFactor ?? 1);
   const checker = [token.colorBgLayout, token.colorFillSecondary] as const;
   const bounds = shown ? documentBounds(shown) : null;
@@ -174,8 +211,18 @@ const ScreenshotEditor: FC = () => {
   });
 
   useUnmount(() => {
+    textRequestGenerationRef.current += 1;
+    dragGestureRef.current.cancel();
     bitmapRef.current?.close();
   });
+
+  useEffect(() => {
+    const previous = previousDragContextRef.current;
+    if (previous.document !== present || previous.selection !== selection) {
+      dragGestureRef.current.cancel();
+      previousDragContextRef.current = { document: present, selection };
+    }
+  }, [present, selection]);
 
   const boundsKey = bounds
     ? `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`
@@ -196,7 +243,29 @@ const ScreenshotEditor: FC = () => {
     );
   }, [boundsKey, fitMode, viewSize]);
 
+  const leaveTextSelection = useMemoizedFn(() => {
+    if (
+      !textSelectionModeRef.current &&
+      !pendingTextStartRef.current &&
+      busyAction !== "selectText"
+    ) {
+      return;
+    }
+
+    textRequestGenerationRef.current += 1;
+    pendingTextStartRef.current = false;
+    textSelectionModeRef.current = null;
+    selectedImageTextRef.current = "";
+    window.getSelection()?.removeAllRanges();
+    setSelectedImageTextValue("");
+    setTextSelectionMode(null);
+    setBusyAction((current) => {
+      return current === "selectText" ? null : current;
+    });
+  });
+
   const commit = (next: EditorDocument) => {
+    leaveTextSelection();
     setDraft(null);
     setHistory((current) => {
       return current ? commitHistory(current, next) : current;
@@ -205,6 +274,7 @@ const ScreenshotEditor: FC = () => {
 
   /** Commits a change derived from the latest document, so queued edits never drop each other. */
   const update = (change: (document: EditorDocument) => EditorDocument) => {
+    leaveTextSelection();
     setDraft(null);
     setHistory((current) => {
       return current
@@ -357,6 +427,119 @@ const ScreenshotEditor: FC = () => {
     return exportScreenshot({ action, area, label, pixels });
   };
 
+  const startTextSelection = useMemoizedFn(async (document: EditorDocument) => {
+    if (!image || closingRef.current) return;
+
+    const generation = textRequestGenerationRef.current + 1;
+    textRequestGenerationRef.current = generation;
+    const area = documentBounds(document);
+    const mode: TextSelectionMode = {
+      area,
+      document,
+      loading: true,
+      regions: [],
+    };
+    textSelectionModeRef.current = mode;
+    setTextSelectionMode(mode);
+    setBusyAction("selectText");
+
+    try {
+      const pixels = renderScenePixels(
+        { bitmap: image.bitmap, document },
+        area,
+      );
+      const result = await exportScreenshot({
+        action: "selectText",
+        area,
+        label,
+        pixels,
+      });
+      if (
+        generation !== textRequestGenerationRef.current ||
+        closingRef.current ||
+        presentRef.current !== document
+      ) {
+        return;
+      }
+
+      const next: TextSelectionMode = {
+        ...mode,
+        loading: false,
+        regions: validTextRegions(result.textRegions, area),
+      };
+      textSelectionModeRef.current = next;
+      setTextSelectionMode(next);
+    } catch (error) {
+      if (generation === textRequestGenerationRef.current) {
+        leaveTextSelection();
+      }
+      log.error("select screenshot image text failed", error);
+    } finally {
+      if (generation === textRequestGenerationRef.current) {
+        setBusyAction(null);
+      }
+    }
+  });
+
+  const handleSelectText = () => {
+    if (textSelectionModeRef.current || busyAction === "selectText") {
+      leaveTextSelection();
+      return;
+    }
+    if (!image || !present || busyAction) return;
+
+    setSelection(null);
+    setSelectedId(null);
+    setToolOptionsOpen(false);
+    if (textEditRef.current) {
+      commitTextEdit();
+      pendingTextStartRef.current = true;
+      return;
+    }
+
+    void startTextSelection(present);
+  };
+
+  useEffect(() => {
+    if (!pendingTextStartRef.current || textEdit !== null || !present) return;
+
+    pendingTextStartRef.current = false;
+    void startTextSelection(present);
+  }, [present, startTextSelection, textEdit]);
+
+  useEffect(() => {
+    if (textSelectionMode && textSelectionMode.document !== present) {
+      leaveTextSelection();
+    }
+  }, [leaveTextSelection, present, textSelectionMode]);
+
+  const updateSelectedImageText = useMemoizedFn((text: string) => {
+    selectedImageTextRef.current = text;
+    setSelectedImageTextValue(text);
+  });
+
+  const copySelectedImageText = async () => {
+    const mode = textSelectionModeRef.current;
+    if (!mode || mode.loading) return false;
+
+    const text =
+      selectedImageText(mode.regions, textOverlayRef.current) ||
+      selectedImageTextRef.current;
+    if (!text.trim()) {
+      getMessageApi().info(t("editor.textSelect.hint"));
+      return false;
+    }
+
+    try {
+      await copyScreenshotText(label, text);
+      getMessageApi().success(t("commands:messages.copied"));
+      return true;
+    } catch (error) {
+      log.error("copy selected screenshot text failed", error);
+      return false;
+    }
+  };
+
   const runExport = async (action: WindowExportAction) => {
     if (busyAction || !present) return;
 
@@ -384,9 +567,14 @@ const ScreenshotEditor: FC = () => {
         getMessageApi().success(t("commands:messages.copied"));
       }
 
-      if (action === "save" && result.savedPath) {
+      if ((action === "save" || action === "saveAs") && result.savedPath) {
         getMessageApi().success(
-          t("editor.saved", { name: fileNameOf(result.savedPath) }),
+          t("editor.saved", {
+            name:
+              action === "save"
+                ? result.savedPath
+                : fileNameOf(result.savedPath),
+          }),
         );
       }
     } catch (error) {
@@ -404,12 +592,28 @@ const ScreenshotEditor: FC = () => {
       return current.ready;
     }
 
-    const ready = (async () => {
+    const previousReady = current?.ready;
+    const preparationId = ++dragPreparationIdRef.current;
+    const ready: Promise<boolean> = (async () => {
+      if (previousReady) await previousReady;
+      if (
+        dragDocumentRef.current !== present ||
+        dragSelectionRef.current !== selection
+      ) {
+        return false;
+      }
       try {
-        return (await renderAndExport("prepareDrag")) !== null;
+        const prepared = (await renderAndExport("prepareDrag")) !== null;
+        return (
+          prepared &&
+          dragDocumentRef.current === present &&
+          dragSelectionRef.current === selection
+        );
       } catch (error) {
         log.error("prepare screenshot drag failed", error);
-        dragPreparationRef.current = null;
+        if (dragPreparationIdRef.current === preparationId) {
+          dragPreparationRef.current = null;
+        }
 
         return false;
       }
@@ -424,21 +628,65 @@ const ScreenshotEditor: FC = () => {
     void prepareDrag();
   };
 
-  const handleDragPointerDown = async (
-    event: ReactPointerEvent<HTMLElement>,
-  ) => {
+  const handleDragPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
 
     event.preventDefault();
-    const ready = await prepareDrag();
-    if (!ready) return;
+    dragGestureRef.current.down(event.pointerId, event.clientX, event.clientY);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
+  const handleDragPointerMove = async (
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    const pointer = {
+      buttons: event.buttons,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    const handle = event.currentTarget;
+    const gestureDocument = present;
+    const gestureSelection = selection;
     try {
-      await startScreenshotDrag(label);
-      exportedDocumentRef.current = present;
+      await dragGestureRef.current.move(
+        pointer,
+        async () => {
+          const prepared = await prepareDrag();
+          return (
+            Boolean(prepared) &&
+            dragDocumentRef.current === gestureDocument &&
+            dragSelectionRef.current === gestureSelection
+          );
+        },
+        async () => {
+          if (
+            dragDocumentRef.current !== gestureDocument ||
+            dragSelectionRef.current !== gestureSelection
+          ) {
+            return;
+          }
+          if (handle.hasPointerCapture(pointer.pointerId)) {
+            handle.releasePointerCapture(pointer.pointerId);
+          }
+          await startScreenshotDrag(label);
+        },
+      );
     } catch (error) {
       log.error("start screenshot drag failed", error);
     }
+  };
+
+  const cancelDragGesture = () => {
+    dragGestureRef.current.cancel();
+  };
+
+  const handleBrowserBackPointerDown = (event: PointerEvent) => {
+    if (event.button === 3) cancelDragGesture();
+  };
+
+  const handleBrowserBackMouseDown = (event: MouseEvent) => {
+    if (event.button === 3) cancelDragGesture();
   };
 
   const copyHoverColor = async () => {
@@ -514,6 +762,7 @@ const ScreenshotEditor: FC = () => {
   /** A single click just picks the tool, ready to draw with its last-used
    * settings; `openOptions` (a double-click) also opens its options panel. */
   const changeTool = (next: EditorTool, openOptions = false) => {
+    leaveTextSelection();
     commitTextEdit();
     setTool(next);
     setSelectedId(null);
@@ -557,6 +806,7 @@ const ScreenshotEditor: FC = () => {
   };
 
   const undo = () => {
+    leaveTextSelection();
     setSelection(null);
     setSelectedId(null);
     setDraft(null);
@@ -566,6 +816,7 @@ const ScreenshotEditor: FC = () => {
   };
 
   const redo = () => {
+    leaveTextSelection();
     setSelection(null);
     setSelectedId(null);
     setDraft(null);
@@ -657,6 +908,7 @@ const ScreenshotEditor: FC = () => {
 
   const closeWindow = async () => {
     closingRef.current = true;
+    leaveTextSelection();
 
     try {
       await closeScreenshotWindow(label);
@@ -807,6 +1059,53 @@ const ScreenshotEditor: FC = () => {
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (
+      dragGestureRef.current.active() &&
+      (event.key === "Escape" ||
+        event.key === "Backspace" ||
+        event.key === "BrowserBack" ||
+        (event.altKey && event.key === "ArrowLeft"))
+    ) {
+      event.preventDefault();
+      cancelDragGesture();
+      return;
+    }
+    if (textSelectionModeRef.current || pendingTextStartRef.current) {
+      if (
+        event.key === "Escape" ||
+        event.key === "Backspace" ||
+        event.key === "BrowserBack" ||
+        (event.altKey && event.key === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        leaveTextSelection();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
+        event.preventDefault();
+        void copySelectedImageText();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyW") {
+        event.preventDefault();
+        requestClose();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyS") {
+        event.preventDefault();
+        void runExport("save");
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        present &&
+        [
+          "Digit0",
+          "Digit1",
+          "Equal",
+          "Minus",
+          "Numpad0",
+          "Numpad1",
+          "NumpadAdd",
+          "NumpadSubtract",
+        ].includes(event.code)
+      ) {
+        handleModifiedKey(event, present.crop);
+      }
+      return;
+    }
     if (!present || textEditRef.current) return;
 
     const target = event.target;
@@ -895,13 +1194,26 @@ const ScreenshotEditor: FC = () => {
   };
 
   const handleWindowBlur = () => {
+    cancelDragGesture();
     setPanHeld(false);
     setZoomHeld(false);
+  };
+
+  const preventUnsupportedDrop = (event: DragEvent) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
   };
 
   useEventListener("keydown", handleKeyDown);
   useEventListener("keyup", handleKeyUp);
   useEventListener("blur", handleWindowBlur);
+  useEventListener("pointerup", cancelDragGesture);
+  useEventListener("pointercancel", cancelDragGesture);
+  useEventListener("popstate", cancelDragGesture);
+  useEventListener("pointerdown", handleBrowserBackPointerDown);
+  useEventListener("mousedown", handleBrowserBackMouseDown);
+  useEventListener("dragover", preventUnsupportedDrop);
+  useEventListener("drop", preventUnsupportedDrop);
 
   if (!image || !present || !shown) {
     return <div className="h-screen bg-ant-layout" />;
@@ -928,10 +1240,20 @@ const ScreenshotEditor: FC = () => {
       : style;
 
   const handleCopy = () => {
+    if (textSelectionModeRef.current) {
+      void copySelectedImageText();
+      return;
+    }
+
     void runExport("copy");
   };
 
   const handleCopyAndClose = async () => {
+    if (textSelectionModeRef.current) {
+      if (await copySelectedImageText()) await closeWindow();
+      return;
+    }
+
     await runExport("copy");
     if (exportedDocumentRef.current === present) {
       await closeWindow();
@@ -946,6 +1268,10 @@ const ScreenshotEditor: FC = () => {
     void runExport("save");
   };
 
+  const handleSaveAs = () => {
+    void runExport("saveAs");
+  };
+
   const handlePin = () => {
     void runExport("pin");
   };
@@ -955,6 +1281,7 @@ const ScreenshotEditor: FC = () => {
   };
 
   const handleRecognizeText = () => {
+    leaveTextSelection();
     void runExport("ocr");
   };
 
@@ -973,6 +1300,7 @@ const ScreenshotEditor: FC = () => {
         onDiscardAndClose={handleDiscardAndClose}
         onDragPointerDown={handleDragPointerDown}
         onDragPointerEnter={handleDragPointerEnter}
+        onDragPointerMove={handleDragPointerMove}
         onMaximize={toggleMaximizeWindow}
         onMinimize={minimizeWindow}
         onMoveWindow={moveWindow}
@@ -980,8 +1308,11 @@ const ScreenshotEditor: FC = () => {
         onPin={handlePin}
         onRecognizeText={handleRecognizeText}
         onSave={handleSave}
+        onSaveAs={handleSaveAs}
+        onSelectText={handleSelectText}
         onToolChange={changeTool}
         onZoomToggle={toggleZoom}
+        textSelectionActive={textSelectionMode !== null}
         tool={tool}
         zoom={viewport?.zoom ?? 1}
       />
@@ -1005,7 +1336,23 @@ const ScreenshotEditor: FC = () => {
         viewport={viewport}
         zoomHeld={zoomHeld}
       >
-        {subject && (
+        {textSelectionMode && viewport && viewSize && (
+          <ImageTextSelection
+            area={textSelectionMode.area}
+            loading={textSelectionMode.loading}
+            onCopy={() => {
+              void copySelectedImageText();
+            }}
+            onLeave={leaveTextSelection}
+            onSelectedText={updateSelectedImageText}
+            ratio={viewSize.ratio}
+            regions={textSelectionMode.regions}
+            rootRef={textOverlayRef}
+            selectedText={selectedImageTextValue}
+            viewport={viewport}
+          />
+        )}
+        {!textSelectionMode && subject && (
           <ToolOptions
             anchor={toolAnchor}
             backdrop={shown.backdrop}

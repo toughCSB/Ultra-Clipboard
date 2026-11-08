@@ -23,10 +23,13 @@ export interface RectShape extends ShapeBase, Box {
   fill: boolean;
 }
 
-export interface HighlighterShape extends ShapeBase, Box {
+export interface HighlighterShape extends ShapeBase {
   kind: "highlighter";
+  from: PixelPoint;
+  to: PixelPoint;
   color: string;
   opacity: number;
+  strokeWidth: number;
 }
 
 export interface BlurShape extends ShapeBase, Box {
@@ -131,7 +134,6 @@ export const isBoxShape = (
   shape: Shape,
 ): shape is
   | BlurShape
-  | HighlighterShape
   | ImageShape
   | MagnifierShape
   | RectShape
@@ -142,9 +144,12 @@ export const isBoxShape = (
 
 export const isSegmentShape = (
   shape: Shape,
-): shape is LineShape | RulerShape => {
+): shape is HighlighterShape | LineShape | RulerShape => {
   return (
-    shape.kind === "arrow" || shape.kind === "line" || shape.kind === "ruler"
+    shape.kind === "arrow" ||
+    shape.kind === "highlighter" ||
+    shape.kind === "line" ||
+    shape.kind === "ruler"
   );
 };
 
@@ -203,6 +208,7 @@ export const constrainAngle = (
 export const shapeBounds = (shape: Shape): Box => {
   switch (shape.kind) {
     case "arrow":
+    case "highlighter":
     case "line":
     case "ruler": {
       const pad = shape.strokeWidth / 2;
@@ -291,6 +297,7 @@ export const hitShape = (
 ) => {
   switch (shape.kind) {
     case "arrow":
+    case "highlighter":
     case "line":
     case "ruler":
       return (
@@ -443,6 +450,7 @@ export const hitShapeHandle = (
 export const moveShape = (shape: Shape, dx: number, dy: number): Shape => {
   switch (shape.kind) {
     case "arrow":
+    case "highlighter":
     case "line":
     case "ruler":
       return {
@@ -584,6 +592,7 @@ export const nextCounterValue = (shapes: readonly Shape[]) => {
 export const isDegenerateShape = (shape: Shape, minimum: number) => {
   switch (shape.kind) {
     case "arrow":
+    case "highlighter":
     case "line":
     case "ruler":
       return (

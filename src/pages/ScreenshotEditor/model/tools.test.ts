@@ -5,6 +5,7 @@ import {
   DEFAULT_TOOL_ORDER,
   DEFAULT_TOOL_STYLE,
   HIGHLIGHT_OPACITY_RANGE,
+  HIGHLIGHT_WIDTH_RANGE,
   parseToolOrder,
   parseToolStyle,
   STROKE_RANGE,
@@ -25,6 +26,7 @@ describe("tools", () => {
       blurMode: "smudge",
       color: "#00ff00",
       highlightOpacity: 999,
+      highlightWidth: 999,
       strokeWidth: 999,
       textStyle: "background",
     });
@@ -32,6 +34,7 @@ describe("tools", () => {
     assert.equal(parsed.blurMode, DEFAULT_TOOL_STYLE.blurMode);
     assert.equal(parsed.color, "#00ff00");
     assert.equal(parsed.highlightOpacity, HIGHLIGHT_OPACITY_RANGE.max);
+    assert.equal(parsed.highlightWidth, HIGHLIGHT_WIDTH_RANGE.max);
     assert.equal(parsed.strokeWidth, STROKE_RANGE.max);
     assert.equal(parsed.textStyle, "background");
     assert.deepEqual(parseToolStyle(null), DEFAULT_TOOL_STYLE);
@@ -42,6 +45,10 @@ describe("tools", () => {
     assert.equal(
       parseToolStyle({ highlightOpacity: -1 }).highlightOpacity,
       HIGHLIGHT_OPACITY_RANGE.min,
+    );
+    assert.equal(
+      parseToolStyle({ highlightWidth: "wide" }).highlightWidth,
+      DEFAULT_TOOL_STYLE.highlightWidth,
     );
   });
 

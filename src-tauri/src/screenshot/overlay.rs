@@ -81,13 +81,18 @@ pub enum Reveal {
 pub fn present(app: &AppHandle, session_id: u64, when: Reveal) -> Result<()> {
     let started = Instant::now();
     let state = app.state::<ScreenshotState>();
-    let Some(labels) = state.with_session(|session| {
-        session
-            .frames
-            .iter()
-            .map(|frame| frame.label.clone())
-            .collect::<Vec<_>>()
-    }) else {
+    let Some(labels) = state
+        .with_session(|session| {
+            (session.id == session_id).then(|| {
+                session
+                    .frames
+                    .iter()
+                    .map(|frame| frame.label.clone())
+                    .collect::<Vec<_>>()
+            })
+        })
+        .flatten()
+    else {
         return Ok(());
     };
 
@@ -177,15 +182,25 @@ pub fn refresh(app: &AppHandle, session_id: u64) {
 /// a WebView to boot.
 pub fn prewarm(app: &AppHandle, count: usize) {
     for index in 0..count {
-        if let Err(err) = ensure_window(app, &label_for(index)) {
-            log::warn!("prewarm screenshot overlay {index} failed: {err}");
+        let started = Instant::now();
+        match ensure_window(app, &label_for(index)) {
+            Ok(_) => log::info!(
+                "prewarm screenshot overlay {index} in {}ms",
+                started.elapsed().as_millis()
+            ),
+            Err(err) => log::warn!("prewarm screenshot overlay {index} failed: {err}"),
         }
     }
 }
 
 /// Shows a painted overlay at its monitor bounds. The overlay under the cursor takes focus.
 pub fn reveal(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
-    show(app, label, session_id, true)
+    show(app, label, session_id, true)?;
+    if app.get_webview_window(label).is_some() {
+        app.state::<ScreenshotState>()
+            .mark_overlay_painted(session_id, label);
+    }
+    Ok(())
 }
 
 fn show(app: &AppHandle, label: &str, session_id: u64, allow_focus: bool) -> Result<()> {
@@ -272,13 +287,16 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow> {
     .shadow(false)
     .accept_first_mouse(true)
     .disable_drag_drop_handler()
+    .on_navigation(super::editor::navigation_guard(app, "/screenshot-overlay"))
     .focused(false)
     .visible(false);
 
     #[cfg(target_os = "macos")]
     let builder = builder
         .transparent(true)
-        .background_color(Color(0, 0, 0, 0));
+        .background_color(Color(0, 0, 0, 0))
+        // Hidden overlays must keep their WebView loaded between captures.
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
     #[cfg(target_os = "windows")]
     let builder = builder.background_color(Color(0, 0, 0, 255));
 
@@ -307,20 +325,118 @@ fn schedule_ready_timeout(app: &AppHandle, label: String, session_id: u64) {
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            let is_current = main_app
-                .state::<ScreenshotState>()
-                .with_session(|session| session.id == session_id)
-                .unwrap_or(false);
-            let is_visible = main_app
-                .get_webview_window(&main_label)
-                .and_then(|window| window.is_visible().ok())
-                .unwrap_or(false);
-            if is_current && !is_visible {
+            let state = main_app.state::<ScreenshotState>();
+            cancel_unpainted_overlay(&state, session_id, &main_label, || {
                 log::warn!("screenshot overlay {main_label} was not painted in time");
                 super::cancel_capture(&main_app, Some(session_id));
-            }
+            });
         }) {
             log::warn!("screenshot overlay timeout dispatch failed for {label}: {err}");
         }
     });
+}
+
+fn cancel_unpainted_overlay(
+    state: &ScreenshotState,
+    session_id: u64,
+    label: &str,
+    cancel: impl FnOnce(),
+) -> bool {
+    if !state.overlay_paint_pending(session_id, label) {
+        return false;
+    }
+    cancel();
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use chrono::Local;
+
+    use super::*;
+    use crate::screenshot::state::{MonitorFrame, MonitorGeometry};
+
+    fn session(id: u64) -> CaptureSession {
+        let bounds = PixelRect::new(0, 0, 2, 2);
+        CaptureSession {
+            id,
+            mode: CaptureMode::Area,
+            frames: vec![MonitorFrame {
+                label: label_for(0),
+                monitor: MonitorGeometry {
+                    bounds,
+                    work_area: bounds,
+                    scale_factor: 1.0,
+                },
+                rgba: None,
+            }],
+            windows: Vec::new(),
+            cursor_label: label_for(0),
+            previous_foreground: None,
+            captured_at: Local::now(),
+            source_title: None,
+        }
+    }
+
+    #[test]
+    fn native_visibility_without_frontend_paint_still_times_out() {
+        let state = ScreenshotState::default();
+        let id = state.try_begin_capture().unwrap();
+        assert!(state.set_session(session(id)));
+        let cancelled = Cell::new(0);
+
+        assert!(cancel_unpainted_overlay(&state, id, &label_for(0), || {
+            cancelled.set(cancelled.get() + 1);
+        }));
+        assert_eq!(cancelled.get(), 1);
+    }
+
+    #[test]
+    fn wrong_id_or_label_cannot_acknowledge_or_cancel() {
+        let state = ScreenshotState::default();
+        let id = state.try_begin_capture().unwrap();
+        assert!(state.set_session(session(id)));
+        assert!(!state.mark_overlay_painted(id + 1, &label_for(0)));
+        assert!(!state.mark_overlay_painted(id, &label_for(1)));
+        assert!(!cancel_unpainted_overlay(
+            &state,
+            id + 1,
+            &label_for(0),
+            || panic!("stale cancel")
+        ));
+        assert!(!cancel_unpainted_overlay(
+            &state,
+            id,
+            &label_for(1),
+            || panic!("wrong label")
+        ));
+        assert!(state.overlay_paint_pending(id, &label_for(0)));
+    }
+
+    #[test]
+    fn matching_paint_prevents_timeout_and_old_timer_cannot_cancel_new_session() {
+        let state = ScreenshotState::default();
+        let old = state.try_begin_capture().unwrap();
+        assert!(state.set_session(session(old)));
+        assert!(state.mark_overlay_painted(old, &label_for(0)));
+        assert!(!cancel_unpainted_overlay(
+            &state,
+            old,
+            &label_for(0),
+            || panic!("painted")
+        ));
+        assert!(state.finish_capture(old));
+
+        let current = state.try_begin_capture().unwrap();
+        assert!(state.set_session(session(current)));
+        assert!(!cancel_unpainted_overlay(
+            &state,
+            old,
+            &label_for(0),
+            || panic!("old timer")
+        ));
+        assert!(state.overlay_paint_pending(current, &label_for(0)));
+    }
 }

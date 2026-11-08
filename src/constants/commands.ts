@@ -10,6 +10,7 @@ export const TAURI_COMMAND = {
   CLOSE_SCREENSHOT_WINDOW: "close_screenshot_window",
   COMMIT_SCREENSHOT_SELECTION: "commit_screenshot_selection",
   COPY_SCREENSHOT_COLOR: "copy_screenshot_color",
+  COPY_SCREENSHOT_TEXT: "copy_screenshot_text",
   CREATE_CLIPBOARD_GROUP: "create_clipboard_group",
   DELETE_CLIPBOARD_GROUP: "delete_clipboard_group",
   DELETE_CLIPBOARD_ITEM: "delete_clipboard_item",

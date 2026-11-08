@@ -262,6 +262,15 @@ impl ClipboardHandler for ClipboardChangeHandler {
             }
         };
 
+        let resource_access = tauri::async_runtime::block_on(
+            self.app
+                .state::<crate::storage::StorageAccess>()
+                .read_owned(),
+        );
+        if self.pause.is_paused() {
+            return;
+        }
+
         let mut item = match build_item_with_settings(
             &self.store,
             &payload,
@@ -289,6 +298,7 @@ impl ClipboardHandler for ClipboardChangeHandler {
 
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
+            let _resource_access = resource_access;
             let pool = app.state::<crate::db::DatabaseState>().pool().await;
             match persist_and_notify(&app, &pool, &item, source_app.as_ref()).await {
                 Ok(_) => {

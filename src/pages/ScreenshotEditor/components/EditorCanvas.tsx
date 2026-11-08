@@ -125,10 +125,20 @@ const EditorCanvas: FC<EditorCanvasProps> = (props) => {
   }, [onViewSizeChange]);
 
   useEffect(() => {
+    const container = containerRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!container || !canvas) return;
 
     const handleWheel = (event: WheelEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "input, textarea, [contenteditable='true'], [data-editor-options]",
+        )
+      ) {
+        return;
+      }
       const current = viewportRef.current;
       if (!current) return;
 
@@ -151,10 +161,10 @@ const EditorCanvas: FC<EditorCanvasProps> = (props) => {
       onViewportChange(panViewport(current, -dx * ratio, -dy * ratio));
     };
 
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
-      canvas.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("wheel", handleWheel);
     };
   }, [onViewportChange]);
 

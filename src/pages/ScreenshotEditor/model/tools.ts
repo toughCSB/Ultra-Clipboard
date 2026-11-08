@@ -187,6 +187,7 @@ export interface ToolStyle {
   counterSize: number;
   highlightColor: string;
   highlightOpacity: number;
+  highlightWidth: number;
   magnifierZoom: number;
   rectFill: boolean;
   spotlightOval: boolean;
@@ -216,6 +217,7 @@ export const HIGHLIGHT_PRESETS = [
 
 export const STROKE_RANGE = { max: 24, min: 1 } as const;
 export const HIGHLIGHT_OPACITY_RANGE = { max: 100, min: 20 } as const;
+export const HIGHLIGHT_WIDTH_RANGE = { max: 80, min: 6 } as const;
 export const TEXT_SIZE_RANGE = { max: 96, min: 10 } as const;
 export const COUNTER_SIZE_RANGE = { max: 48, min: 8 } as const;
 export const MAGNIFIER_ZOOMS = [2, 3, 4] as const;
@@ -226,6 +228,7 @@ export const DEFAULT_TOOL_STYLE: ToolStyle = {
   counterSize: 14,
   highlightColor: HIGHLIGHT_PRESETS[0],
   highlightOpacity: 75,
+  highlightWidth: 20,
   magnifierZoom: 2,
   rectFill: false,
   spotlightOval: false,
@@ -277,6 +280,11 @@ export const parseToolStyle = (value: unknown): ToolStyle => {
       stored.highlightOpacity,
       HIGHLIGHT_OPACITY_RANGE,
       fallback.highlightOpacity,
+    ),
+    highlightWidth: clampNumber(
+      stored.highlightWidth,
+      HIGHLIGHT_WIDTH_RANGE,
+      fallback.highlightWidth,
     ),
     magnifierZoom: MAGNIFIER_ZOOMS.includes(
       stored.magnifierZoom as (typeof MAGNIFIER_ZOOMS)[number],

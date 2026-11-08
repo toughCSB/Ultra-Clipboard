@@ -14,6 +14,7 @@
     "discardAndClose": "Discard & Close",
     "discardCapture": "Discard capture",
     "drag": "Drag into another app",
+    "dragHint": "Hold this button and drag the image into mail, chat, or a document · Esc to cancel",
     "imageSizeCaption": "Image size",
     "more": "More tools",
     "ocrCopied": "Copied {{count}} recognized characters.",
@@ -60,8 +61,18 @@
     "reorderHint": "Drag an icon to reorder the toolbar",
     "rulerHint": "Ruler · click to measure automatically, drag to measure freely",
     "save": "Save",
+    "saveAs": "Save As…",
     "saved": "Saved: {{name}}",
     "select": "Select · drag an area, Enter to crop",
+    "textSelect": {
+      "back": "Return to editing",
+      "button": "Select image text",
+      "copy": "Copy selected text",
+      "hint": "Drag across the text to select it",
+      "loading": "Finding text in the image…",
+      "none": "No text was recognized",
+      "ready": "Selected text is ready to copy"
+    },
     "toolbar": "Screenshot tools",
     "tools": {
       "arrow": "Arrow",

@@ -3,6 +3,7 @@
 
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::time::Instant;
 
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{
@@ -15,8 +16,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
-    GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, SetForegroundWindow,
-    GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow,
+    IsWindowVisible, SetForegroundWindow, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
 };
 
 use crate::core::Result;
@@ -25,6 +26,7 @@ use crate::screenshot::state::MonitorGeometry;
 
 /// Desktop shell windows cover every monitor and would hide real windows in window mode.
 const SHELL_BACKGROUND_CLASSES: [&str; 2] = ["Progman", "WorkerW"];
+const MAX_PARALLEL_MONITORS: usize = 4;
 
 /// GDI copies the composed desktop, so an overlay shown before the capture
 /// would be in the frame.
@@ -46,11 +48,45 @@ impl CaptureContext {
     }
 
     pub fn capture_rects(&self, rects: &[PixelRect]) -> Result<Vec<Vec<u8>>> {
-        rects.iter().map(|rect| capture_rect(*rect)).collect()
+        if rects.len() <= 1 {
+            return rects.iter().map(|rect| capture_rect(*rect)).collect();
+        }
+
+        let started = Instant::now();
+        let mut pixels = Vec::with_capacity(rects.len());
+        for group in rects.chunks(MAX_PARALLEL_MONITORS) {
+            // Each task acquires and releases its own GDI contexts on the same thread.
+            let captured = std::thread::scope(|scope| {
+                let tasks = group
+                    .iter()
+                    .map(|&rect| scope.spawn(move || capture_rect(rect)))
+                    .collect::<Vec<_>>();
+                let outcomes = tasks
+                    .into_iter()
+                    .map(|task| {
+                        task.join().unwrap_or_else(|_| {
+                            Err(anyhow::anyhow!("screenshot monitor capture task panicked").into())
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                outcomes.into_iter().collect::<Result<Vec<_>>>()
+            })?;
+            pixels.extend(captured);
+        }
+        log::info!(
+            "Windows screenshot pixels for {} monitor(s) captured in {}ms",
+            rects.len(),
+            started.elapsed().as_millis()
+        );
+        Ok(pixels)
     }
 
     pub fn list_windows(&self) -> Vec<PixelRect> {
         list_windows()
+    }
+
+    pub fn origin_title(&self, _handle: Option<isize>) -> Option<String> {
+        None
     }
 }
 
@@ -156,6 +192,20 @@ pub fn foreground_window() -> Option<isize> {
     let hwnd = unsafe { GetForegroundWindow() };
 
     (hwnd.0 != 0).then_some(hwnd.0)
+}
+
+pub fn foreground_title(handle: Option<isize>) -> Option<String> {
+    let hwnd = HWND(handle?);
+    // SAFETY: The handle came from GetForegroundWindow; an invalidated handle returns no text.
+    unsafe {
+        let len = GetWindowTextLengthW(hwnd);
+        if len <= 0 {
+            return None;
+        }
+        let mut text = vec![0u16; len as usize + 1];
+        let copied = GetWindowTextW(hwnd, &mut text);
+        (copied > 0).then(|| String::from_utf16_lossy(&text[..copied as usize]))
+    }
 }
 
 pub fn restore_foreground(handle: Option<isize>) {

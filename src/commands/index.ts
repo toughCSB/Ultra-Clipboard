@@ -880,7 +880,11 @@ export const writeToClipboard = async (id: string, plain: boolean) => {
     plain,
   });
 
-  getMessageApi().success(i18n.t("commands:messages.copied"));
+  getMessageApi().success({
+    content: i18n.t("commands:messages.copied"),
+    duration: 3,
+    key: "clipboard-copy-success",
+  });
 };
 
 export const pasteClipboardItem = (id: string, plain: boolean) => {
@@ -1282,9 +1286,20 @@ export interface ScreenshotImageInfo {
 export type ScreenshotExportAction =
   | "copy"
   | "save"
+  | "saveAs"
   | "pin"
   | "prepareDrag"
-  | "ocr";
+  | "ocr"
+  | "selectText";
+
+export interface ScreenshotTextRegion {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  lineIndex: number;
+}
 
 export interface ScreenshotExportInput {
   action: ScreenshotExportAction;
@@ -1298,6 +1313,7 @@ export interface ScreenshotExportResult {
   historyRecorded: boolean;
   /** Recognized text for `ocr`; it is already on the clipboard when not empty. */
   text: string | null;
+  textRegions: ScreenshotTextRegion[] | null;
 }
 
 const SCREENSHOT_EXPORT_LABEL_KEYS: Record<ScreenshotExportAction, string> = {
@@ -1306,6 +1322,8 @@ const SCREENSHOT_EXPORT_LABEL_KEYS: Record<ScreenshotExportAction, string> = {
   pin: "commands:labels.pinScreenshot",
   prepareDrag: "commands:labels.drag",
   save: "commands:labels.saveImage",
+  saveAs: "commands:labels.saveImage",
+  selectText: "commands:labels.recognizeText",
 };
 
 export const startScreenshotCapture = (mode: ScreenshotCaptureMode) => {
@@ -1426,6 +1444,14 @@ export const copyScreenshotColor = (color: string) => {
     TAURI_COMMAND.COPY_SCREENSHOT_COLOR,
     "commands:labels.copyColor",
     { color },
+  );
+};
+
+export const copyScreenshotText = (label: string, text: string) => {
+  return call<void>(
+    TAURI_COMMAND.COPY_SCREENSHOT_TEXT,
+    "commands:labels.copy",
+    { label, text },
   );
 };
 

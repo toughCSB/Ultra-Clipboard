@@ -15,6 +15,7 @@ import {
   type EditorTool,
   HIGHLIGHT_OPACITY_RANGE,
   HIGHLIGHT_PRESETS,
+  HIGHLIGHT_WIDTH_RANGE,
   MAGNIFIER_ZOOMS,
   STROKE_RANGE,
   TEXT_SIZE_RANGE,
@@ -244,6 +245,26 @@ const ToolOptions: FC<ToolOptionsProps> = (props) => {
 
   if (subject === "highlighter") {
     sections.push(
+      <Row key="highlightWidth" label={t("editor.options.width")}>
+        <div className="flex items-center gap-2">
+          <Slider
+            aria-label={t("editor.options.width")}
+            className="m-0 flex-1"
+            max={HIGHLIGHT_WIDTH_RANGE.max}
+            min={HIGHLIGHT_WIDTH_RANGE.min}
+            onChange={(highlightWidth) => {
+              onStyleChange({ highlightWidth }, false);
+            }}
+            onChangeComplete={(highlightWidth) => {
+              change({ highlightWidth });
+            }}
+            value={style.highlightWidth}
+          />
+          <span className="w-9 text-right text-ant-secondary text-xs">
+            {style.highlightWidth}
+          </span>
+        </div>
+      </Row>,
       <Row key="highlight" label={t("editor.options.color")}>
         <Swatches
           colors={HIGHLIGHT_PRESETS}

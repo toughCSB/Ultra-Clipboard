@@ -4,6 +4,7 @@
 pub mod change;
 mod model;
 mod store;
+pub(crate) use store::validate_settings;
 
 pub use model::*;
 pub use store::SettingsStore;

@@ -172,7 +172,7 @@ fn write_atomic(path: &Path, settings: &Settings) -> Result<()> {
     Ok(())
 }
 
-fn validate_settings(settings: &Settings) -> Result<()> {
+pub(crate) fn validate_settings(settings: &Settings) -> Result<()> {
     validate_window_open_group(&settings.clipboard.window.select_group_on_open)?;
     crate::sync::validate_configuration(&settings.sync)?;
 

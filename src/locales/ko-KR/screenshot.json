@@ -14,6 +14,7 @@
     "discardAndClose": "삭제하고 닫기",
     "discardCapture": "캡처 버리기",
     "drag": "끌어서 다른 앱에 놓기",
+    "dragHint": "버튼을 누른 채 이미지를 메일·채팅·문서로 끌어놓으세요 · Esc 취소",
     "imageSizeCaption": "이미지 크기",
     "more": "도구 더 보기",
     "ocrCopied": "인식한 텍스트 {{count}}자를 복사했습니다.",
@@ -60,8 +61,18 @@
     "reorderHint": "아이콘을 드래그하면 순서를 바꿀 수 있어요",
     "rulerHint": "자 · 클릭하면 가로·세로 자동 측정, 드래그하면 직접 측정",
     "save": "저장",
+    "saveAs": "다른 이름으로 저장…",
     "saved": "저장됨: {{name}}",
     "select": "선택 · 드래그로 영역 지정, Enter로 자르기",
+    "textSelect": {
+      "back": "편집으로 돌아가기",
+      "button": "이미지 텍스트 선택",
+      "copy": "선택 텍스트 복사",
+      "hint": "글자를 드래그해 선택하세요",
+      "loading": "이미지 글자를 찾는 중…",
+      "none": "인식된 글자가 없습니다",
+      "ready": "선택한 글자를 복사할 수 있습니다"
+    },
     "toolbar": "스크린샷 도구",
     "tools": {
       "arrow": "화살표",

@@ -1,6 +1,7 @@
 import type { PixelPoint } from "@/utils/pixelRect";
 import type {
   CounterShape,
+  HighlighterShape,
   LineShape,
   PenShape,
   RectShape,
@@ -132,6 +133,16 @@ const drawPen = (context: Canvas2D, shape: PenShape) => {
   context.stroke();
 };
 
+const drawMarker = (context: Canvas2D, shape: HighlighterShape) => {
+  context.strokeStyle = shape.color;
+  context.lineWidth = shape.strokeWidth;
+  context.lineCap = "round";
+  context.beginPath();
+  context.moveTo(shape.from.x, shape.from.y);
+  context.lineTo(shape.to.x, shape.to.y);
+  context.stroke();
+};
+
 const drawCounter = (context: Canvas2D, shape: CounterShape) => {
   const { radius, x, y } = shape;
 
@@ -243,22 +254,13 @@ export const drawShape = (
       drawPen(context, shape);
       break;
     case "highlighter":
-      context.fillStyle = shape.color;
-      context.beginPath();
-      context.roundRect(
-        shape.x,
-        shape.y,
-        shape.width,
-        shape.height,
-        Math.min(3, shape.width / 2, shape.height / 2),
-      );
-      // A light ink wash stays visible on dark captures; multiply keeps dark
-      // lettering readable under the vivid marker color on light captures.
+      // A translucent stroke stays visible on dark captures while multiply
+      // keeps lettering readable under the marker on light captures.
       context.globalAlpha = (shape.opacity / 100) * 0.25;
-      context.fill();
+      drawMarker(context, shape);
       context.globalCompositeOperation = "multiply";
       context.globalAlpha = shape.opacity / 100;
-      context.fill();
+      drawMarker(context, shape);
       break;
     case "counter":
       drawCounter(context, shape);

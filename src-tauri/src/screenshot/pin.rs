@@ -46,6 +46,7 @@ pub fn open(app: &AppHandle, image: CapturedImage) -> Result<()> {
     .background_color(Color(0, 0, 0, 255))
     .accept_first_mouse(true)
     .disable_drag_drop_handler()
+    .on_navigation(editor::navigation_guard(app, "/screenshot-pin"))
     .visible(false)
     .build();
 
@@ -180,7 +181,11 @@ pub fn handle_menu_event(app: &AppHandle, id: &str) -> bool {
     }
 
     if let Some(label) = id.strip_prefix(MENU_CLOSE_PREFIX) {
-        super::close_window(app, label);
+        let main_app = app.clone();
+        let label = label.to_owned();
+        if let Err(err) = app.run_on_main_thread(move || super::close_window(&main_app, &label)) {
+            log::error!("dispatch screenshot pin menu close failed: {err}");
+        }
         return true;
     }
 
@@ -278,6 +283,7 @@ mod tests {
             origin_y,
             rgba: Vec::new(),
             captured_at: Local::now(),
+            source_title: None,
         }
     }
 

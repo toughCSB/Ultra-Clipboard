@@ -2,7 +2,7 @@
 //! sends raw RGBA; Rust encodes once and routes the result to clipboard, file,
 //! pin, or drag-out.
 
-use std::io::Cursor;
+use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -10,10 +10,14 @@ use chrono::{DateTime, Local};
 use clipboard_rs::common::RustImage;
 use clipboard_rs::{Clipboard, ClipboardContext, RustImageData};
 use image::{ImageBuffer, ImageFormat, Rgba};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::NSEvent;
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
+#[cfg(target_os = "windows")]
+use winapi::um::winuser::{GetAsyncKeyState, VK_LBUTTON};
 
 use super::pin;
 use super::state::{CapturedImage, DragFile, ScreenshotState};
@@ -42,10 +46,13 @@ const DRAG_PREVIEW_MAX: u32 = 256;
 pub enum ExportAction {
     Copy,
     Save,
+    SaveAs,
     Pin,
     PrepareDrag,
     /// Recognizes text in the pixels and copies it.
     Ocr,
+    /// Returns located text without changing the clipboard.
+    SelectText,
 }
 
 impl ExportAction {
@@ -53,9 +60,11 @@ impl ExportAction {
         match value {
             "copy" => Some(Self::Copy),
             "save" => Some(Self::Save),
+            "saveAs" => Some(Self::SaveAs),
             "pin" => Some(Self::Pin),
             "prepareDrag" => Some(Self::PrepareDrag),
             "ocr" => Some(Self::Ocr),
+            "selectText" => Some(Self::SelectText),
             _ => None,
         }
     }
@@ -77,8 +86,9 @@ pub struct ExportRequest {
 pub struct ExportResult {
     pub saved_path: Option<String>,
     pub history_recorded: bool,
-    /// Recognized text, copied to the clipboard when it is not empty.
+    /// Recognized text; only the Ocr action copies it to the clipboard.
     pub text: Option<String>,
+    pub text_regions: Option<Vec<super::ocr::TextRegion>>,
 }
 
 pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
@@ -137,9 +147,23 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
-        ExportAction::Save => {
+        ExportAction::Save | ExportAction::SaveAs => {
             let png = run_blocking(move || encode_png(width, height, &rgba)).await?;
-            let saved_path = save_png(app, &label, png, source.captured_at).await?;
+            let saved_path = if action == ExportAction::Save {
+                Some(
+                    auto_save_png(app, png, source.captured_at, source.source_title.clone())
+                        .await?,
+                )
+            } else {
+                save_png(
+                    app,
+                    &label,
+                    png,
+                    source.captured_at,
+                    source.source_title.as_deref(),
+                )
+                .await?
+            };
 
             Ok(ExportResult {
                 saved_path,
@@ -157,6 +181,7 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                     origin_y: source.origin_y.saturating_add(offset_y),
                     rgba,
                     captured_at: source.captured_at,
+                    source_title: source.source_title.clone(),
                 },
             )?;
 
@@ -169,7 +194,10 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 .map_err(|err| anyhow::anyhow!(err))?
                 .join(DRAG_DIR)
                 .join(&label);
-            let path = dir.join(file_name(source.captured_at));
+            let path = dir.join(file_name(
+                source.captured_at,
+                source.source_title.as_deref(),
+            ));
             let file = run_blocking(move || {
                 let preview_png = drag_preview(width, height, &rgba);
                 let png = encode_png(width, height, &rgba)?;
@@ -184,23 +212,41 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
             Ok(ExportResult::default())
         }
         ExportAction::Ocr => {
-            let text = run_blocking(move || {
-                let text = super::ocr::recognize(width, height, &rgba)?;
-                if !text.is_empty() {
-                    let context = ClipboardContext::new().map_err(clipboard_error)?;
-                    context.set_text(text.clone()).map_err(clipboard_error)?;
-                }
-
-                Ok(text)
-            })
-            .await?;
+            let text = run_blocking(move || super::ocr::recognize(width, height, &rgba)).await?;
+            if !text.is_empty() {
+                copy_text(&text).await?;
+            }
 
             Ok(ExportResult {
                 text: Some(text),
                 ..ExportResult::default()
             })
         }
+        ExportAction::SelectText => {
+            let recognition =
+                run_blocking(move || super::ocr::recognize_regions(width, height, &rgba)).await?;
+            Ok(ExportResult {
+                text: Some(recognition.text),
+                text_regions: Some(recognition.regions),
+                ..ExportResult::default()
+            })
+        }
     }
+}
+
+pub async fn copy_text(text: &str) -> Result<()> {
+    if text.trim().is_empty() {
+        return Err(invalid("screenshot text is empty"));
+    }
+    if text.len() > 1024 * 1024 {
+        return Err(invalid("screenshot text is too large"));
+    }
+    let text = text.to_owned();
+    run_blocking(move || {
+        let context = ClipboardContext::new().map_err(clipboard_error)?;
+        context.set_text(text).map_err(clipboard_error)
+    })
+    .await
 }
 
 /// Starts a native drag with the file prepared by the last `PrepareDrag` export.
@@ -216,9 +262,16 @@ pub async fn start_drag(app: &AppHandle, label: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         app.run_on_main_thread(move || {
-            if let Err(err) =
-                crate::drag_out::start_drag_files(&window, vec![file.path], file.preview_png)
-            {
+            if NSEvent::pressedMouseButtons() & 1 == 0 {
+                log::debug!("screenshot drag skipped after pointer release");
+                return;
+            }
+            if let Err(err) = crate::drag_out::start_drag_files_with_ghost(
+                &window,
+                vec![file.path],
+                file.preview_png,
+                false,
+            ) {
                 log::error!("start screenshot drag (macos) failed: {err}");
             }
         })
@@ -228,15 +281,25 @@ pub async fn start_drag(app: &AppHandle, label: &str) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         let (tx, rx) = std::sync::mpsc::channel();
+        let main_app = app.clone();
         app.run_on_main_thread(move || {
+            // SAFETY: GetAsyncKeyState reads current input state without owning a handle.
+            if unsafe { GetAsyncKeyState(VK_LBUTTON) as u16 } & 0x8000 == 0 {
+                log::debug!("screenshot drag skipped after pointer release");
+                let _ = tx.send(Ok(()));
+                return;
+            }
+            let restore_nav = NavigationResume::suspend(&main_app);
             // The editor window is a fresh, borderless WebView2 window each
             // capture; skip the ghost-preview wrap (see start_drag_files_with_ghost).
-            let _ = tx.send(crate::drag_out::start_drag_files_with_ghost(
+            let result = crate::drag_out::start_drag_files_with_ghost(
                 &window,
                 vec![file.path],
                 file.preview_png,
                 false,
-            ));
+            );
+            drop(restore_nav);
+            let _ = tx.send(result);
         })
         .map_err(|err| anyhow::anyhow!(err))?;
 
@@ -245,6 +308,40 @@ pub async fn start_drag(app: &AppHandle, label: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+struct NavigationResume<'a> {
+    app: &'a AppHandle,
+    was_enabled: bool,
+}
+
+#[cfg(target_os = "windows")]
+impl<'a> NavigationResume<'a> {
+    fn suspend(app: &'a AppHandle) -> Self {
+        let was_enabled = crate::keyboard::navigation_keys_enabled();
+        if was_enabled {
+            crate::keyboard::disable_navigation_keys();
+        }
+        Self { app, was_enabled }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for NavigationResume<'_> {
+    fn drop(&mut self) {
+        if !self.was_enabled {
+            return;
+        }
+        let clipboard_visible = self
+            .app
+            .get_webview_window(crate::window::CLIPBOARD_WINDOW_LABEL)
+            .and_then(|window| window.is_visible().ok())
+            .unwrap_or(false);
+        if clipboard_visible {
+            crate::keyboard::enable_navigation_keys(self.app);
+        }
+    }
 }
 
 pub async fn copy_window_image(app: &AppHandle, label: &str) -> Result<()> {
@@ -267,7 +364,14 @@ pub async fn save_window_image(app: &AppHandle, label: &str) -> Result<()> {
     })
     .await?;
 
-    save_png(app, label, png, image.captured_at).await?;
+    save_png(
+        app,
+        label,
+        png,
+        image.captured_at,
+        image.source_title.as_deref(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -312,6 +416,10 @@ pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>> {
 /// Writes a PNG to the clipboard and records it in history when capture allows it.
 /// Returns whether a history item was written.
 async fn copy_png(app: &AppHandle, png: Vec<u8>, width: u32, height: u32) -> Result<bool> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let settings = app.state::<SettingsStore>().snapshot();
     let store = app.state::<ImageStore>().inner().clone();
     let guard = app.state::<Arc<WritebackGuard>>().inner().clone();
@@ -362,6 +470,7 @@ async fn save_png(
     parent_label: &str,
     png: Vec<u8>,
     captured_at: DateTime<Local>,
+    source_title: Option<&str>,
 ) -> Result<Option<String>> {
     let lang = crate::i18n::current_language(app);
     let mut dialog = app
@@ -369,7 +478,7 @@ async fn save_png(
         .file()
         .add_filter("PNG", &["png"])
         .set_can_create_directories(true)
-        .set_file_name(file_name(captured_at))
+        .set_file_name(file_name(captured_at, source_title))
         .set_title(screenshot_menu::label(lang, Key::SaveDialogTitle));
 
     if let Ok(directory) = app
@@ -395,6 +504,53 @@ async fn save_png(
     Ok(Some(target.to_string_lossy().into_owned()))
 }
 
+async fn auto_save_png(
+    app: &AppHandle,
+    png: Vec<u8>,
+    captured_at: DateTime<Local>,
+    source_title: Option<String>,
+) -> Result<String> {
+    let directory = app
+        .path()
+        .picture_dir()
+        .or_else(|_| app.path().download_dir())
+        .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
+    let name = file_name(captured_at, source_title.as_deref());
+    let path = run_blocking(move || write_unique_png(&directory, &name, &png)).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+fn write_unique_png(directory: &std::path::Path, name: &str, png: &[u8]) -> Result<PathBuf> {
+    std::fs::create_dir_all(directory).map_err(io_error)?;
+    let stem = name.strip_suffix(".png").unwrap_or(name);
+    for index in 0..10_000 {
+        let name = if index == 0 {
+            name.to_owned()
+        } else {
+            format!("{stem}-{}.png", index + 1)
+        };
+        let path = directory.join(name);
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path);
+        let mut file = match file {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => return Err(io_error(err)),
+        };
+        if let Err(err) = file.write_all(png) {
+            drop(file);
+            if let Err(cleanup_err) = std::fs::remove_file(&path) {
+                log::warn!("remove incomplete screenshot file failed: {cleanup_err}");
+            }
+            return Err(io_error(err));
+        }
+        return Ok(path);
+    }
+    Err(invalid("too many screenshots with the same name"))
+}
+
 fn window_image(app: &AppHandle, label: &str) -> Result<Arc<CapturedImage>> {
     app.state::<ScreenshotState>()
         .image(label)
@@ -418,11 +574,30 @@ fn drag_preview(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
     encode_png(preview_width, preview_height, preview.as_raw()).ok()
 }
 
-fn file_name(captured_at: DateTime<Local>) -> String {
-    format!(
-        "UltraClipboard-screenshot-{}.png",
-        captured_at.format("%Y%m%d-%H%M%S")
-    )
+fn file_name(captured_at: DateTime<Local>, source_title: Option<&str>) -> String {
+    let source = source_title
+        .map(sanitize_file_stem)
+        .filter(|source| !source.is_empty())
+        .unwrap_or_else(|| "Screen".to_owned());
+    format!("{source}-{}.png", captured_at.format("%Y%m%d-%H%M%S"))
+}
+
+fn sanitize_file_stem(title: &str) -> String {
+    let mut stem = String::new();
+    let mut separator = false;
+    for character in title.chars() {
+        if stem.chars().count() >= 72 {
+            break;
+        }
+        if character.is_alphanumeric() {
+            stem.push(character);
+            separator = false;
+        } else if !separator && !stem.is_empty() {
+            stem.push('-');
+            separator = true;
+        }
+    }
+    stem.trim_end_matches('-').to_owned()
 }
 
 fn validate_pixels(width: u32, height: u32, byte_len: usize) -> Result<()> {
@@ -515,12 +690,36 @@ mod tests {
     #[test]
     fn export_actions_parse_frontend_literals() {
         assert_eq!(ExportAction::parse("copy"), Some(ExportAction::Copy));
+        assert_eq!(ExportAction::parse("save"), Some(ExportAction::Save));
+        assert_eq!(ExportAction::parse("saveAs"), Some(ExportAction::SaveAs));
         assert_eq!(
             ExportAction::parse("prepareDrag"),
             Some(ExportAction::PrepareDrag)
         );
         assert_eq!(ExportAction::parse("ocr"), Some(ExportAction::Ocr));
+        assert_eq!(
+            ExportAction::parse("selectText"),
+            Some(ExportAction::SelectText)
+        );
         assert_eq!(ExportAction::parse("drag"), None);
+    }
+
+    #[test]
+    fn screenshot_name_uses_work_window_and_never_overwrites_same_second() {
+        let captured_at = Local::now();
+        let title = "Quarterly plan: Q4 / review?";
+        let name = file_name(captured_at, Some(title));
+        assert!(name.starts_with("Quarterly-plan-Q4-review-"));
+        assert!(!name
+            .chars()
+            .any(|character| ['/', '?', '\\', ':'].contains(&character)));
+
+        let directory = tempfile::tempdir().unwrap();
+        let first = write_unique_png(directory.path(), &name, b"first").unwrap();
+        let second = write_unique_png(directory.path(), &name, b"second").unwrap();
+        assert_ne!(first, second);
+        assert_eq!(std::fs::read(first).unwrap(), b"first");
+        assert_eq!(std::fs::read(second).unwrap(), b"second");
     }
 
     #[test]
