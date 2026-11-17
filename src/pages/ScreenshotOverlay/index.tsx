@@ -24,13 +24,19 @@ import {
   snapEdgeInside,
 } from "@/utils/pixelRect";
 import { drawOverlay } from "./drawOverlay";
+import {
+  createOverlaySession,
+  isCurrentLoad,
+  type OverlaySelectionMode,
+  type OverlaySessionCommand,
+  type OverlaySessionEvent,
+  overlaySessionReducer,
+} from "./model/overlaySession";
 
 interface OverlaySessionPayload {
   label: string;
   sessionId: number | null;
 }
-
-type SelectionMode = "area" | "window";
 
 const HINT_DURATION_MS = 2600;
 const MIN_SELECTION = 2;
@@ -42,33 +48,60 @@ const ScreenshotOverlay: FC = () => {
   const frameCanvasRef = useRef<HTMLCanvasElement>(null);
   const marksCanvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<ImageBitmap | null>(null);
-  const loadGenerationRef = useRef(0);
+  const sessionModelRef = useRef(createOverlaySession());
   const mountedRef = useRef(true);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const pointerRef = useRef<PixelPoint | null>(null);
   const dragOriginRef = useRef<PixelPoint | null>(null);
   const selectionRef = useRef<PixelRect | null>(null);
-  const modeRef = useRef<SelectionMode>("area");
+  const modeRef = useRef<OverlaySelectionMode>("area");
   const drawFrameRef = useRef(0);
-  const committedRef = useRef(false);
-  const sessionIdRef = useRef<number | null>(null);
-  const pendingCommitRef = useRef<PixelRect | null>(null);
   const [session, setSession] = useState<ScreenshotOverlayState | null>(null);
-  const [mode, setMode] = useState<SelectionMode>("area");
+  const [mode, setMode] = useState<OverlaySelectionMode>("area");
   const [hintVisible, setHintVisible] = useState(false);
 
   modeRef.current = mode;
 
-  const reset = () => {
-    loadGenerationRef.current += 1;
+  const dispatch = (event: OverlaySessionEvent) => {
+    const step = overlaySessionReducer(sessionModelRef.current, event);
+    sessionModelRef.current = step.session;
+
+    return step.commands;
+  };
+
+  const runCommands = (commands: OverlaySessionCommand[]) => {
+    for (const command of commands) {
+      switch (command.type) {
+        case "release": {
+          releaseView();
+          break;
+        }
+        case "startSession": {
+          pointerRef.current = null;
+          dragOriginRef.current = null;
+          selectionRef.current = null;
+          setMode(command.mode);
+          setHintVisible(true);
+          break;
+        }
+        case "sendCommit": {
+          void sendCommit(command.sessionId, command.rect);
+          break;
+        }
+        case "sendCancel": {
+          void sendCancel(command.sessionId);
+          break;
+        }
+      }
+    }
+  };
+
+  const releaseView = () => {
     frameRef.current?.close();
     frameRef.current = null;
-    sessionIdRef.current = null;
-    pendingCommitRef.current = null;
     pointerRef.current = null;
     dragOriginRef.current = null;
     selectionRef.current = null;
-    committedRef.current = false;
     releaseCanvases();
     setSession(null);
   };
@@ -84,8 +117,8 @@ const ScreenshotOverlay: FC = () => {
   };
 
   const loadSession = async () => {
-    const generation = loadGenerationRef.current + 1;
-    loadGenerationRef.current = generation;
+    dispatch({ type: "loadStarted" });
+    const generation = sessionModelRef.current.generation;
     const startedAt = performance.now();
     let requestedState: ScreenshotOverlayState | null = null;
 
@@ -93,22 +126,24 @@ const ScreenshotOverlay: FC = () => {
       const state = await getScreenshotOverlayState(label);
       requestedState = state;
       const stateMs = performance.now() - startedAt;
-      if (generation !== loadGenerationRef.current) return;
+      if (!isCurrentLoad(sessionModelRef.current, generation)) return;
       if (!state) {
-        reset();
+        runCommands(
+          dispatch({ generation, snapshot: null, type: "stateLoaded" }),
+        );
         return;
       }
 
       if (state.ready) {
         const transferStartedAt = performance.now();
         const buffer = await getScreenshotOverlayFrame(label, state.sessionId);
-        if (generation !== loadGenerationRef.current) return;
+        if (!isCurrentLoad(sessionModelRef.current, generation)) return;
         const ipcMs = performance.now() - transferStartedAt;
         const decodeStartedAt = performance.now();
         const bitmap = await createImageBitmap(
           new Blob([buffer], { type: "image/png" }),
         );
-        if (generation !== loadGenerationRef.current) {
+        if (!isCurrentLoad(sessionModelRef.current, generation)) {
           bitmap.close();
           return;
         }
@@ -133,28 +168,19 @@ const ScreenshotOverlay: FC = () => {
         frameRef.current = null;
       }
 
-      // The pixels of an overlay shown early arrive as a second load of the
-      // same session; keep what the user has selected so far.
-      if (sessionIdRef.current !== state.sessionId) {
-        sessionIdRef.current = state.sessionId;
-        pendingCommitRef.current = null;
-        pointerRef.current = null;
-        dragOriginRef.current = null;
-        selectionRef.current = null;
-        committedRef.current = false;
-        setMode(state.mode === "window" ? "window" : "area");
-        setHintVisible(true);
-      }
+      const commands = dispatch({
+        generation,
+        snapshot: state,
+        type: "stateLoaded",
+      });
       setSession(state);
-
-      const pending = pendingCommitRef.current;
-      if (state.ready && pending) {
-        pendingCommitRef.current = null;
-        void sendCommit(state.sessionId, pending);
-      }
+      runCommands(commands);
     } catch (error) {
       log.error("load screenshot overlay failed", error);
-      if (generation === loadGenerationRef.current && requestedState?.ready) {
+      if (
+        isCurrentLoad(sessionModelRef.current, generation) &&
+        requestedState?.ready
+      ) {
         try {
           await cancelScreenshotCapture(requestedState.sessionId);
         } catch (cancelError) {
@@ -174,7 +200,7 @@ const ScreenshotOverlay: FC = () => {
         (event) => {
           if (!mountedRef.current || event.payload.label !== label) return;
           if (event.payload.sessionId === null) {
-            reset();
+            runCommands(dispatch({ type: "reset" }));
             return;
           }
 
@@ -194,7 +220,7 @@ const ScreenshotOverlay: FC = () => {
 
   useUnmount(() => {
     mountedRef.current = false;
-    loadGenerationRef.current += 1;
+    dispatch({ type: "unmounted" });
     unlistenRef.current?.();
     cancelAnimationFrame(drawFrameRef.current);
     frameRef.current?.close();
@@ -325,40 +351,28 @@ const ScreenshotOverlay: FC = () => {
     };
   };
 
-  const commit = async (rect: PixelRect) => {
-    if (!session || committedRef.current) return;
-
-    committedRef.current = true;
-
-    // A selection made before the pixels arrive is sent when they do.
-    if (!session.ready) {
-      pendingCommitRef.current = rect;
-      return;
-    }
-
-    await sendCommit(session.sessionId, rect);
+  const commit = (rect: PixelRect) => {
+    runCommands(dispatch({ rect, type: "commitRequested" }));
   };
 
   const sendCommit = async (sessionId: number, rect: PixelRect) => {
     try {
       await commitScreenshotSelection(label, sessionId, rect);
     } catch (error) {
-      committedRef.current = false;
+      dispatch({ type: "commitFailed" });
       log.error("commit screenshot selection failed", error);
     }
   };
 
-  const cancel = async () => {
-    if (!session) return;
-    if (committedRef.current && pendingCommitRef.current === null) return;
+  const cancel = () => {
+    runCommands(dispatch({ type: "cancelRequested" }));
+  };
 
-    committedRef.current = true;
-    pendingCommitRef.current = null;
-
+  const sendCancel = async (sessionId: number) => {
     try {
-      await cancelScreenshotCapture(session.sessionId);
+      await cancelScreenshotCapture(sessionId);
     } catch (error) {
-      committedRef.current = false;
+      dispatch({ type: "cancelFailed" });
       log.error("cancel screenshot capture failed", error);
     }
   };
@@ -367,7 +381,7 @@ const ScreenshotOverlay: FC = () => {
     if (!session) return;
 
     if (event.button === 2) {
-      void cancel();
+      cancel();
       return;
     }
 
@@ -412,7 +426,7 @@ const ScreenshotOverlay: FC = () => {
 
     if (modeRef.current === "window") {
       const target = hoveredWindow(toFramePoint(event));
-      if (target) void commit(target);
+      if (target) commit(target);
       return;
     }
 
@@ -424,7 +438,7 @@ const ScreenshotOverlay: FC = () => {
       selection.width >= MIN_SELECTION &&
       selection.height >= MIN_SELECTION
     ) {
-      void commit(selection);
+      commit(selection);
       return;
     }
 
@@ -437,13 +451,13 @@ const ScreenshotOverlay: FC = () => {
 
     if (event.key === "Escape") {
       event.preventDefault();
-      void cancel();
+      cancel();
       return;
     }
 
     if (event.key === "Enter") {
       event.preventDefault();
-      void commit(bounds(session));
+      commit(bounds(session));
       return;
     }
 

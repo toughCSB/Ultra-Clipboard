@@ -98,12 +98,19 @@ credential store, with environment credentials taking precedence; status exposes
 the source but never the key. Credentials and translation text are not written
 to the settings file, clipboard history, or application logs by this operation.
 
-Translation requests carry a positive JavaScript-safe request ID. A per-window
-registry records cancellations even before export registration, rejects duplicate
-work, and aborts the asynchronous task when cancelled or when the window closes.
-OCR already running on a blocking worker may finish locally, but a cancelled
-operation does not start its subsequent HTTP request. Cancelling an HTTP request
-does not undo a request already accepted by the provider.
+Translation requests carry a positive JavaScript-safe request ID. The translation
+module owns the whole request: the export action only hands it the pixels and the
+ID. A per-window registry records cancellations even before registration, rejects
+duplicate work, and aborts the asynchronous OCR-and-translate task when cancelled
+or when the window closes. OCR already running on a blocking worker may finish
+locally, but a cancelled operation does not start its subsequent HTTP request.
+Cancelling an HTTP request does not undo a request already accepted by the
+provider.
+
+A cancelled request is an explicit outcome: the export result sets
+`translationCancelled` and carries no `translationBlocks`. Empty
+`translationBlocks` always means the image held no text. The frontend ignores a
+cancelled result without a message.
 
 The frontend preserves the original document and renders translation blocks
 through the same canvas path used by copy, save, pin and drag exports. Overflow
