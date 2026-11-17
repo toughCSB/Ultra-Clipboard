@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.3.0...v1.3.1) (2026-11-17)
+
+### Added
+
+- Translate the selected area or the whole screenshot into Korean. Text is recognized on the device and only the recognized text is sent to the OpenAI Responses API. The API key comes from `OPENAI_API_KEY` or the system credential store and is never written to settings or logs.
+
+### Fixed
+
+- On macOS with displays of different scales, open the capture on the display under the pointer, take selected areas from the right display, and place capture overlays, editors and pinned images on the correct display.
+- Keep the capture overlay's shading out of macOS screenshots, which also shortens the time to freeze the screen.
+
 ## [1.3.0](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.2.5...v1.3.0) (2026-11-08)
 
 ### Added
