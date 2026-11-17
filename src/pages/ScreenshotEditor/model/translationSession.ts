@@ -1,4 +1,7 @@
-import type { ScreenshotTranslationBlock } from "@/commands";
+import type {
+  ScreenshotExportResult,
+  ScreenshotTranslationBlock,
+} from "@/commands";
 import type { PixelRect } from "@/utils/pixelRect";
 import type { TranslationLayer } from "../render/translation";
 import type { EditorDocument } from "./document";
@@ -32,10 +35,10 @@ export interface TranslationEditorState extends TranslationToken {
   closing: boolean;
 }
 
-export interface TranslationExportOutcome {
-  translationBlocks?: readonly ScreenshotTranslationBlock[] | null;
-  translationCancelled?: boolean;
-}
+export type TranslationExportOutcome = Pick<
+  ScreenshotExportResult,
+  "translationBlocks" | "translationCancelled"
+>;
 
 export type TranslationResolution =
   | { kind: "cancelled" }

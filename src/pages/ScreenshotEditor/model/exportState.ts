@@ -1,25 +1,33 @@
-export interface ExportState<D> {
+import type { ScreenshotExportAction } from "@/commands";
+import type { EditorDocument } from "./document";
+
+export interface ExportState {
   /** The document the user last got out of the editor, or null before load. */
-  exported: D | null;
+  exported: EditorDocument | null;
 }
 
-export interface ExportOutcome<D> {
-  action: "copy" | "ocr" | "pin" | "save" | "saveAs";
+export interface ExportOutcome {
+  action: Extract<
+    ScreenshotExportAction,
+    "copy" | "ocr" | "pin" | "save" | "saveAs"
+  >;
   /** The document as it is now, which may have moved on during the export. */
-  current: D | null;
+  current: EditorDocument | null;
   /** The document that was rendered. */
-  document: D;
+  document: EditorDocument;
   savedPath: string | null;
   translated: boolean;
 }
 
-export const createExportState = <D>(exported: D | null): ExportState<D> => {
+export const createExportState = (
+  exported: EditorDocument | null,
+): ExportState => {
   return { exported };
 };
 
-export const hasUnexportedChanges = <D>(
-  state: ExportState<D>,
-  present: D | null,
+export const hasUnexportedChanges = (
+  state: ExportState,
+  present: EditorDocument | null,
 ) => {
   return present !== null && state.exported !== present;
 };
@@ -28,10 +36,10 @@ export const hasUnexportedChanges = <D>(
  * Text recognition, a cancelled Save As, a translated render and a document
  * edited during the export all leave the state as it was.
  */
-export const recordExport = <D>(
-  state: ExportState<D>,
-  outcome: ExportOutcome<D>,
-): ExportState<D> => {
+export const recordExport = (
+  state: ExportState,
+  outcome: ExportOutcome,
+): ExportState => {
   if (outcome.action === "ocr") return state;
   if (
     (outcome.action === "save" || outcome.action === "saveAs") &&

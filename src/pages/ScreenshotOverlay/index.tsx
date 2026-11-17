@@ -38,8 +38,6 @@ interface OverlaySessionPayload {
   sessionId: number | null;
 }
 
-type SelectionMode = OverlaySelectionMode;
-
 const HINT_DURATION_MS = 2600;
 const MIN_SELECTION = 2;
 
@@ -56,10 +54,10 @@ const ScreenshotOverlay: FC = () => {
   const pointerRef = useRef<PixelPoint | null>(null);
   const dragOriginRef = useRef<PixelPoint | null>(null);
   const selectionRef = useRef<PixelRect | null>(null);
-  const modeRef = useRef<SelectionMode>("area");
+  const modeRef = useRef<OverlaySelectionMode>("area");
   const drawFrameRef = useRef(0);
   const [session, setSession] = useState<ScreenshotOverlayState | null>(null);
-  const [mode, setMode] = useState<SelectionMode>("area");
+  const [mode, setMode] = useState<OverlaySelectionMode>("area");
   const [hintVisible, setHintVisible] = useState(false);
 
   modeRef.current = mode;

@@ -252,10 +252,10 @@ export const useTranslationSession = (options: TranslationSessionOptions) => {
   };
 
   return {
-    activeLayer: currentLayer,
     begin,
     cancelSettled,
     current,
+    currentLayer,
     leave,
     resumeAfterKey,
     retry,

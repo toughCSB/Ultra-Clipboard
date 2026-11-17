@@ -185,7 +185,13 @@ describe("translation result", () => {
       }),
       { blocks: [], kind: "blocks" },
     );
-    assert.deepEqual(resolveTranslation({}), { blocks: [], kind: "blocks" });
+    assert.deepEqual(
+      resolveTranslation({
+        translationBlocks: null,
+        translationCancelled: false,
+      }),
+      { blocks: [], kind: "blocks" },
+    );
   });
 
   it("returns the translated blocks", () => {

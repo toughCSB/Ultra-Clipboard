@@ -176,7 +176,7 @@ const ScreenshotEditor: FC = () => {
     useState<ScreenshotTranslationStatus["source"]>(null);
   const [translationKeyBusy, setTranslationKeyBusy] = useState(false);
   const bitmapRef = useRef<ImageBitmap | null>(null);
-  const exportStateRef = useRef(createExportState<EditorDocument>(null));
+  const exportStateRef = useRef(createExportState(null));
   const dragPreparationRef = useRef(createDragPreparationCache());
   const dragGestureRef = useRef(createDragGesture());
   const dragDocumentRef = useRef<EditorDocument | null>(null);
@@ -208,6 +208,7 @@ const ScreenshotEditor: FC = () => {
     onBusyChange: (busy) => {
       setBusyAction((current) => {
         if (busy) return "translate";
+
         return current === "translate" ? null : current;
       });
     },
@@ -487,8 +488,8 @@ const ScreenshotEditor: FC = () => {
 
     const document = present;
     const area = selection ?? documentBounds(present);
-    const mode = translation.current();
-    const layer = mode?.document === present ? activeLayer(mode) : null;
+    const session = translation.current();
+    const layer = session?.document === present ? activeLayer(session) : null;
     const pixels = renderScenePixels(
       {
         bitmap: image.bitmap,
@@ -789,7 +790,7 @@ const ScreenshotEditor: FC = () => {
     return {
       document: present,
       selection,
-      translation: translation.activeLayer(),
+      translation: translation.currentLayer(),
     };
   };
 
@@ -797,7 +798,7 @@ const ScreenshotEditor: FC = () => {
     return {
       document: dragDocumentRef.current,
       selection: dragSelectionRef.current,
-      translation: translation.activeLayer(),
+      translation: translation.currentLayer(),
     };
   };
 

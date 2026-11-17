@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { createDocument } from "./document";
 import {
   createExportState,
   type ExportOutcome,
@@ -7,14 +8,11 @@ import {
   recordExport,
 } from "./exportState";
 
-type Doc = { id: string };
+const crop = { height: 10, width: 10, x: 0, y: 0 };
+const original = createDocument(crop);
+const edited = createDocument(crop);
 
-const original: Doc = { id: "original" };
-const edited: Doc = { id: "edited" };
-
-const outcome = (
-  patch: Partial<ExportOutcome<Doc>> = {},
-): ExportOutcome<Doc> => {
+const outcome = (patch: Partial<ExportOutcome> = {}): ExportOutcome => {
   return {
     action: "copy",
     current: edited,
@@ -41,10 +39,7 @@ describe("screenshot export state", () => {
   });
 
   it("is clean when there is no document", () => {
-    assert.equal(
-      hasUnexportedChanges(createExportState<Doc>(null), null),
-      false,
-    );
+    assert.equal(hasUnexportedChanges(createExportState(null), null), false);
   });
 
   it("copy, pin, save and saveAs clear the dirty flag", () => {
@@ -89,7 +84,7 @@ describe("screenshot export state", () => {
   });
 
   it("an export of a document that was edited meanwhile keeps it dirty", () => {
-    const newer: Doc = { id: "newer" };
+    const newer = createDocument(crop);
     const next = recordExport(
       createExportState(original),
       outcome({ current: newer }),

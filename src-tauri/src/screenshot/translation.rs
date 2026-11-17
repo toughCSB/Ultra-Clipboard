@@ -77,7 +77,7 @@ impl TranslationFlights {
             return Ok(TranslationOutcome::Cancelled);
         }
         let blocks = result.map_err(|_| {
-            AppError::Other(anyhow::anyhow!("screenshot translation task failed"))
+            AppError::Other(anyhow::anyhow!("the translation task stopped unexpectedly"))
         })??;
         Ok(TranslationOutcome::Blocks(blocks))
     }
@@ -629,7 +629,7 @@ pub async fn recognize_and_translate(
                 super::ocr::recognize_regions(width, height, &rgba)
             })
             .await
-            .map_err(|_| AppError::Other(anyhow::anyhow!("screenshot task join failed")))?
+            .map_err(|_| AppError::Other(anyhow::anyhow!("text recognition stopped unexpectedly")))?
             .map(|recognition| recognition.regions)
         },
         translate,

@@ -1,10 +1,11 @@
+import type { ScreenshotCaptureMode } from "@/commands";
 import type { PixelRect } from "@/utils/pixelRect";
 
 export type OverlaySelectionMode = "area" | "window";
 
 /** The part of the backend overlay state the session model depends on. */
 export interface OverlaySnapshot {
-  mode: string;
+  mode: ScreenshotCaptureMode;
   ready: boolean;
   sessionId: number;
 }
