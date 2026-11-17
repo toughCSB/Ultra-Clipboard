@@ -2,6 +2,7 @@
 //! output actions. Rust owns capture, window geometry, clipboard, and files;
 //! the frontend paints frames and edits pixels.
 
+pub mod api;
 mod backend;
 mod editor;
 mod frame_transport;
@@ -21,7 +22,6 @@ use std::time::{Duration, Instant};
 
 use chrono::Local;
 use serde::{Deserialize, Serialize};
-use tauri::ipc::Request;
 use tauri::{AppHandle, Manager, Window};
 use tokio::sync::oneshot;
 
@@ -244,10 +244,6 @@ pub async fn overlay_frame(app: &AppHandle, label: &str, session_id: u64) -> Res
     Ok(png)
 }
 
-pub fn reveal_overlay(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
-    overlay::reveal(app, label, session_id)
-}
-
 /// Crops the frozen frame to the confirmed selection and opens the editor.
 pub fn commit_selection(
     app: &AppHandle,
@@ -433,24 +429,6 @@ fn paint_timed_out(app: &AppHandle, session_id: u64, label: &str) {
     }
 }
 
-pub fn image_info(app: &AppHandle, label: &str) -> Result<ImageInfo> {
-    app.state::<ScreenshotState>()
-        .image(label)
-        .map(|image| ImageInfo::from_image(&image))
-        .ok_or_else(|| AppError::Other(anyhow::anyhow!("screenshot window is closed")))
-}
-
-pub fn image_pixels(app: &AppHandle, label: &str) -> Result<Vec<u8>> {
-    app.state::<ScreenshotState>()
-        .image(label)
-        .map(|image| image.rgba.clone())
-        .ok_or_else(|| AppError::Other(anyhow::anyhow!("screenshot window is closed")))
-}
-
-pub fn reveal_window(app: &AppHandle, label: &str) -> Result<()> {
-    reveal_painted_window(app, label)
-}
-
 /// Shows an editor or pin window whose frontend painted and brings it to the
 /// front. When it is the editor of a pending handoff, the overlays hide first.
 fn reveal_painted_window(app: &AppHandle, label: &str) -> Result<()> {
@@ -504,10 +482,6 @@ pub fn close_window(app: &AppHandle, label: &str) {
     }
 }
 
-pub fn parse_export_request(request: &Request<'_>) -> Result<output::ExportRequest> {
-    output::parse_request(request)
-}
-
 pub async fn export(app: &AppHandle, request: output::ExportRequest) -> Result<ExportResult> {
     let started = Instant::now();
     let action = request.action;
@@ -520,59 +494,6 @@ pub async fn export(app: &AppHandle, request: output::ExportRequest) -> Result<E
     );
 
     result
-}
-
-pub async fn translation_status() -> Result<TranslationStatus> {
-    translation::status().await
-}
-
-pub async fn set_translation_key(key: String) -> Result<()> {
-    translation::set_key(key).await
-}
-
-pub async fn remove_translation_key() -> Result<()> {
-    translation::remove_key().await
-}
-
-pub fn cancel_translation(app: &AppHandle, label: &str, request_id: u64) {
-    app.state::<translation::TranslationFlights>()
-        .cancel(label, request_id);
-}
-
-pub async fn start_drag(app: &AppHandle, label: &str) -> Result<()> {
-    output::start_drag(app, label).await
-}
-
-pub async fn copy_color(color: &str) -> Result<()> {
-    output::copy_color(color).await
-}
-
-pub async fn copy_text(app: &AppHandle, label: &str, text: &str) -> Result<()> {
-    if app.state::<ScreenshotState>().image(label).is_none() {
-        return Err(AppError::Other(anyhow::anyhow!(
-            "screenshot window is closed"
-        )));
-    }
-
-    output::copy_text(text).await
-}
-
-pub async fn read_clipboard_image() -> Result<Vec<u8>> {
-    output::read_clipboard_png().await
-}
-
-pub fn set_pin_scale(
-    app: &AppHandle,
-    label: &str,
-    scale: f64,
-    anchor_x: f64,
-    anchor_y: f64,
-) -> Result<()> {
-    pin::set_scale(app, label, scale, anchor_x, anchor_y)
-}
-
-pub fn show_pin_menu(app: &AppHandle, label: &str) -> Result<()> {
-    pin::show_menu(app, label)
 }
 
 /// Handles native menu events owned by screenshot windows.

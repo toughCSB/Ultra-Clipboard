@@ -1,17 +1,18 @@
-//! Screenshot commands. They validate window labels and delegate to `crate::screenshot`.
+//! Screenshot commands. Each parses its arguments and makes one call into
+//! `crate::screenshot::api`, which owns label policy and main-thread ordering.
 
 use tauri::ipc::{Request, Response};
 use tauri::AppHandle;
 
-use crate::core::{AppError, Result};
+use crate::core::Result;
+use crate::screenshot::api::{any, editor_window, image_window, overlay, pin_window};
 use crate::screenshot::{
-    self, CaptureMode, ExportResult, ImageInfo, OverlayState, PixelRect, TranslationStatus,
-    EDITOR_WINDOW_LABEL_PREFIX, OVERLAY_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX,
+    CaptureMode, ExportResult, ImageInfo, OverlayState, PixelRect, TranslationStatus,
 };
 
 #[tauri::command]
 pub async fn start_screenshot_capture(app: AppHandle, mode: CaptureMode) -> Result<()> {
-    screenshot::start_capture(&app, mode);
+    any::start_capture(&app, mode);
 
     Ok(())
 }
@@ -21,9 +22,7 @@ pub async fn get_screenshot_overlay_state(
     app: AppHandle,
     label: String,
 ) -> Result<Option<OverlayState>> {
-    require_prefix(&label, &[OVERLAY_WINDOW_LABEL_PREFIX])?;
-
-    Ok(screenshot::overlay_state(&app, &label))
+    overlay::state(&app, &label)
 }
 
 #[tauri::command]
@@ -32,10 +31,8 @@ pub async fn get_screenshot_overlay_frame(
     label: String,
     session_id: u64,
 ) -> Result<Response> {
-    require_prefix(&label, &[OVERLAY_WINDOW_LABEL_PREFIX])?;
-
     Ok(Response::new(
-        screenshot::overlay_frame(&app, &label, session_id).await?,
+        overlay::frame(&app, &label, session_id).await?,
     ))
 }
 
@@ -45,12 +42,7 @@ pub async fn notify_screenshot_overlay_ready(
     label: String,
     session_id: u64,
 ) -> Result<()> {
-    require_prefix(&label, &[OVERLAY_WINDOW_LABEL_PREFIX])?;
-
-    screenshot::on_main_thread(&app, move |app| {
-        screenshot::reveal_overlay(&app, &label, session_id)
-    })
-    .await?
+    overlay::ready(&app, label, session_id).await
 }
 
 #[tauri::command]
@@ -60,89 +52,52 @@ pub async fn commit_screenshot_selection(
     session_id: u64,
     rect: PixelRect,
 ) -> Result<()> {
-    require_prefix(&label, &[OVERLAY_WINDOW_LABEL_PREFIX])?;
-
-    screenshot::on_main_thread(&app, move |app| {
-        screenshot::commit_selection(&app, &label, session_id, rect)
-    })
-    .await?
+    overlay::commit_selection(&app, label, session_id, rect).await
 }
 
 #[tauri::command]
 pub async fn cancel_screenshot_capture(app: AppHandle, session_id: Option<u64>) -> Result<()> {
-    screenshot::on_main_thread(&app, move |app| {
-        screenshot::cancel_capture(&app, session_id);
-    })
-    .await
+    any::cancel_capture(&app, session_id).await
 }
 
 #[tauri::command]
 pub async fn get_screenshot_image_info(app: AppHandle, label: String) -> Result<ImageInfo> {
-    require_prefix(
-        &label,
-        &[EDITOR_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX],
-    )?;
-
-    screenshot::image_info(&app, &label)
+    image_window::info(&app, &label)
 }
 
 #[tauri::command]
 pub async fn get_screenshot_image(app: AppHandle, label: String) -> Result<Response> {
-    require_prefix(
-        &label,
-        &[EDITOR_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX],
-    )?;
-
-    Ok(Response::new(screenshot::image_pixels(&app, &label)?))
+    Ok(Response::new(image_window::pixels(&app, &label)?))
 }
 
 #[tauri::command]
 pub async fn notify_screenshot_window_ready(app: AppHandle, label: String) -> Result<()> {
-    require_prefix(
-        &label,
-        &[EDITOR_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX],
-    )?;
-
-    screenshot::on_main_thread(&app, move |app| screenshot::reveal_window(&app, &label)).await?
+    image_window::ready(&app, label).await
 }
 
 #[tauri::command]
 pub async fn close_screenshot_window(app: AppHandle, label: String) -> Result<()> {
-    require_prefix(
-        &label,
-        &[EDITOR_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX],
-    )?;
-
-    screenshot::on_main_thread(&app, move |app| {
-        screenshot::close_window(&app, &label);
-    })
-    .await
+    image_window::close(&app, label).await
 }
 
 #[tauri::command]
 pub async fn export_screenshot(app: AppHandle, request: Request<'_>) -> Result<ExportResult> {
-    let export = screenshot::parse_export_request(&request)?;
-    require_prefix(
-        &export.label,
-        &[EDITOR_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX],
-    )?;
-
-    screenshot::export(&app, export).await
+    image_window::export(&app, &request).await
 }
 
 #[tauri::command]
 pub async fn get_screenshot_translation_status() -> Result<TranslationStatus> {
-    screenshot::translation_status().await
+    any::translation_status().await
 }
 
 #[tauri::command]
 pub async fn set_screenshot_translation_key(key: String) -> Result<()> {
-    screenshot::set_translation_key(key).await
+    any::set_translation_key(key).await
 }
 
 #[tauri::command]
 pub async fn remove_screenshot_translation_key() -> Result<()> {
-    screenshot::remove_translation_key().await
+    any::remove_translation_key().await
 }
 
 #[tauri::command]
@@ -151,33 +106,27 @@ pub async fn cancel_screenshot_translation(
     label: String,
     request_id: u64,
 ) -> Result<()> {
-    require_prefix(&label, &[EDITOR_WINDOW_LABEL_PREFIX])?;
-    screenshot::cancel_translation(&app, &label, request_id);
-    Ok(())
+    editor_window::cancel_translation(&app, &label, request_id)
 }
 
 #[tauri::command]
 pub async fn start_screenshot_drag(app: AppHandle, label: String) -> Result<()> {
-    require_prefix(&label, &[EDITOR_WINDOW_LABEL_PREFIX])?;
-
-    screenshot::start_drag(&app, &label).await
+    editor_window::start_drag(&app, &label).await
 }
 
 #[tauri::command]
 pub async fn copy_screenshot_color(color: String) -> Result<()> {
-    screenshot::copy_color(&color).await
+    any::copy_color(&color).await
 }
 
 #[tauri::command]
 pub async fn copy_screenshot_text(app: AppHandle, label: String, text: String) -> Result<()> {
-    require_prefix(&label, &[EDITOR_WINDOW_LABEL_PREFIX])?;
-
-    screenshot::copy_text(&app, &label, &text).await
+    editor_window::copy_text(&app, &label, &text).await
 }
 
 #[tauri::command]
 pub async fn read_screenshot_clipboard_image() -> Result<Response> {
-    Ok(Response::new(screenshot::read_clipboard_image().await?))
+    Ok(Response::new(any::read_clipboard_image().await?))
 }
 
 #[tauri::command]
@@ -188,27 +137,10 @@ pub async fn set_screenshot_pin_scale(
     anchor_x: f64,
     anchor_y: f64,
 ) -> Result<()> {
-    require_prefix(&label, &[PIN_WINDOW_LABEL_PREFIX])?;
-
-    screenshot::on_main_thread(&app, move |app| {
-        screenshot::set_pin_scale(&app, &label, scale, anchor_x, anchor_y)
-    })
-    .await?
+    pin_window::set_scale(&app, label, scale, anchor_x, anchor_y).await
 }
 
 #[tauri::command]
 pub async fn show_screenshot_pin_menu(app: AppHandle, label: String) -> Result<()> {
-    require_prefix(&label, &[PIN_WINDOW_LABEL_PREFIX])?;
-
-    screenshot::on_main_thread(&app, move |app| screenshot::show_pin_menu(&app, &label)).await?
-}
-
-fn require_prefix(label: &str, prefixes: &[&str]) -> Result<()> {
-    if prefixes.iter().any(|prefix| label.starts_with(prefix)) {
-        return Ok(());
-    }
-
-    Err(AppError::Other(anyhow::anyhow!(
-        "screenshot window label is invalid"
-    )))
+    pin_window::show_menu(&app, label).await
 }
