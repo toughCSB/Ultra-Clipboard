@@ -5,7 +5,7 @@ use tauri::AppHandle;
 
 use crate::core::{AppError, Result};
 use crate::screenshot::{
-    self, CaptureMode, ExportResult, ImageInfo, OverlayState, PixelRect,
+    self, CaptureMode, ExportResult, ImageInfo, OverlayState, PixelRect, TranslationStatus,
     EDITOR_WINDOW_LABEL_PREFIX, OVERLAY_WINDOW_LABEL_PREFIX, PIN_WINDOW_LABEL_PREFIX,
 };
 
@@ -128,6 +128,32 @@ pub async fn export_screenshot(app: AppHandle, request: Request<'_>) -> Result<E
     )?;
 
     screenshot::export(&app, export).await
+}
+
+#[tauri::command]
+pub async fn get_screenshot_translation_status() -> Result<TranslationStatus> {
+    screenshot::translation_status().await
+}
+
+#[tauri::command]
+pub async fn set_screenshot_translation_key(key: String) -> Result<()> {
+    screenshot::set_translation_key(key).await
+}
+
+#[tauri::command]
+pub async fn remove_screenshot_translation_key() -> Result<()> {
+    screenshot::remove_translation_key().await
+}
+
+#[tauri::command]
+pub async fn cancel_screenshot_translation(
+    app: AppHandle,
+    label: String,
+    request_id: u64,
+) -> Result<()> {
+    require_prefix(&label, &[EDITOR_WINDOW_LABEL_PREFIX])?;
+    screenshot::cancel_translation(&app, &label, request_id);
+    Ok(())
 }
 
 #[tauri::command]

@@ -58,6 +58,8 @@ interface EditorToolbarProps {
   onSaveAs: () => void;
   onSelectText: () => void;
   textSelectionActive: boolean;
+  onTranslate: () => void;
+  translationActive: boolean;
   /** `openOptions` (a double-click) also opens the tool's options panel. */
   onToolChange: (tool: EditorTool, openOptions?: boolean) => void;
   onZoomToggle: () => void;
@@ -111,6 +113,8 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
     onSaveAs,
     onSelectText,
     textSelectionActive,
+    onTranslate,
+    translationActive,
     onToolChange,
     onZoomToggle,
   } = props;
@@ -392,6 +396,14 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
           loading={busyAction === "selectText"}
           onClick={onSelectText}
           title={t("editor.textSelect.button")}
+        />
+        <ToolbarButton
+          active={translationActive}
+          disabled={busy && busyAction !== "translate"}
+          icon="i-lucide:languages"
+          loading={busyAction === "translate"}
+          onClick={onTranslate}
+          title={t("editor.translation.button")}
         />
       </div>
 

@@ -11,6 +11,7 @@ mod output;
 mod overlay;
 mod pin;
 mod state;
+mod translation;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -29,6 +30,7 @@ pub use editor::ImageInfo;
 pub use geometry::PixelRect;
 pub use output::ExportResult;
 pub use overlay::OverlayState;
+pub use translation::TranslationStatus;
 
 use state::{CaptureSession, CapturedImage, MonitorFrame, MonitorGeometry, ScreenshotState};
 
@@ -63,6 +65,7 @@ pub enum CaptureMode {
 
 pub fn init(app: &AppHandle) {
     app.manage(ScreenshotState::default());
+    app.manage(translation::TranslationFlights::default());
     prewarm_overlays(app);
 }
 
@@ -361,6 +364,8 @@ pub fn reveal_window(app: &AppHandle, label: &str) -> Result<()> {
 
 /// Releases a screenshot window's pixels and temporary drag file, then destroys it.
 pub fn close_window(app: &AppHandle, label: &str) {
+    app.state::<translation::TranslationFlights>()
+        .cancel_label(label);
     let state = app.state::<ScreenshotState>();
     if let Some(drag_file) = state.remove_window(label) {
         if let Some(directory) = drag_file.path.parent() {
@@ -397,6 +402,23 @@ pub async fn export(app: &AppHandle, request: output::ExportRequest) -> Result<E
     );
 
     result
+}
+
+pub async fn translation_status() -> Result<TranslationStatus> {
+    translation::status().await
+}
+
+pub async fn set_translation_key(key: String) -> Result<()> {
+    translation::set_key(key).await
+}
+
+pub async fn remove_translation_key() -> Result<()> {
+    translation::remove_key().await
+}
+
+pub fn cancel_translation(app: &AppHandle, label: &str, request_id: u64) {
+    app.state::<translation::TranslationFlights>()
+        .cancel(label, request_id);
 }
 
 pub async fn start_drag(app: &AppHandle, label: &str) -> Result<()> {

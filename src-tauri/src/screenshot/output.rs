@@ -4,6 +4,7 @@
 
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use chrono::{DateTime, Local};
@@ -34,6 +35,7 @@ const LABEL_HEADER: &str = "x-screenshot-label";
 const ACTION_HEADER: &str = "x-screenshot-action";
 const WIDTH_HEADER: &str = "x-screenshot-width";
 const HEIGHT_HEADER: &str = "x-screenshot-height";
+const REQUEST_ID_HEADER: &str = "x-screenshot-request-id";
 const OFFSET_X_HEADER: &str = "x-screenshot-offset-x";
 const OFFSET_Y_HEADER: &str = "x-screenshot-offset-y";
 
@@ -53,6 +55,8 @@ pub enum ExportAction {
     Ocr,
     /// Returns located text without changing the clipboard.
     SelectText,
+    /// Recognizes text and returns translated layout blocks.
+    Translate,
 }
 
 impl ExportAction {
@@ -65,6 +69,7 @@ impl ExportAction {
             "prepareDrag" => Some(Self::PrepareDrag),
             "ocr" => Some(Self::Ocr),
             "selectText" => Some(Self::SelectText),
+            "translate" => Some(Self::Translate),
             _ => None,
         }
     }
@@ -75,6 +80,7 @@ pub struct ExportRequest {
     pub action: ExportAction,
     pub width: u32,
     pub height: u32,
+    pub request_id: Option<u64>,
     /// Offset of the exported area inside the editor image, in image pixels.
     pub offset_x: i32,
     pub offset_y: i32,
@@ -89,6 +95,7 @@ pub struct ExportResult {
     /// Recognized text; only the Ocr action copies it to the clipboard.
     pub text: Option<String>,
     pub text_regions: Option<Vec<super::ocr::TextRegion>>,
+    pub translation_blocks: Option<Vec<super::translation::TranslationBlock>>,
 }
 
 pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
@@ -107,6 +114,15 @@ pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
         .ok_or_else(|| invalid("screenshot export action is invalid"))?;
     let width = parse_number::<u32>(header(WIDTH_HEADER)?)?;
     let height = parse_number::<u32>(header(HEIGHT_HEADER)?)?;
+    let request_id = if action == ExportAction::Translate {
+        let id = parse_number::<u64>(header(REQUEST_ID_HEADER)?)?;
+        if id == 0 || id > super::translation::MAX_REQUEST_ID {
+            return Err(invalid("screenshot translation request ID is invalid"));
+        }
+        Some(id)
+    } else {
+        None
+    };
     let offset_x = parse_number::<i32>(header(OFFSET_X_HEADER)?)?;
     let offset_y = parse_number::<i32>(header(OFFSET_Y_HEADER)?)?;
     validate_pixels(width, height, body.len())?;
@@ -116,6 +132,7 @@ pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
         action,
         width,
         height,
+        request_id,
         offset_x,
         offset_y,
         rgba: body.clone(),
@@ -124,14 +141,36 @@ pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
 
 pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportResult> {
     let state = app.state::<ScreenshotState>();
-    let source = state
-        .image(&request.label)
-        .ok_or_else(|| invalid("screenshot window is closed"))?;
+    let flights = app.state::<super::translation::TranslationFlights>();
+    let flight = if request.action == ExportAction::Translate {
+        let id = request
+            .request_id
+            .ok_or_else(|| invalid("screenshot translation request ID is missing"))?;
+        let Some(cancelled) = flights.start(&request.label, id)? else {
+            return Ok(cancelled_translation());
+        };
+        Some((id, cancelled))
+    } else {
+        None
+    };
+    let source = match state.image(&request.label) {
+        Some(source) => source,
+        None => {
+            if let Some((id, cancelled)) = &flight {
+                flights.finish(&request.label, *id);
+                if cancelled.load(Ordering::Acquire) {
+                    return Ok(cancelled_translation());
+                }
+            }
+            return Err(invalid("screenshot window is closed"));
+        }
+    };
     let ExportRequest {
         label,
         action,
         width,
         height,
+        request_id: _,
         offset_x,
         offset_y,
         rgba,
@@ -231,6 +270,40 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
+        ExportAction::Translate => {
+            let (id, cancelled) = flight.expect("translation flight registered");
+            let cancelled_task = cancelled.clone();
+            let job = tauri::async_runtime::spawn(async move {
+                if cancelled_task.load(Ordering::Acquire) {
+                    return Ok(Vec::new());
+                }
+                let recognition =
+                    run_blocking(move || super::ocr::recognize_regions(width, height, &rgba))
+                        .await?;
+                if cancelled_task.load(Ordering::Acquire) {
+                    return Ok(Vec::new());
+                }
+                super::translation::translate(recognition.regions).await
+            });
+            flights.attach(&label, id, job.inner().abort_handle());
+            let result = job.await;
+            flights.finish(&label, id);
+            if cancelled.load(Ordering::Acquire) {
+                return Ok(cancelled_translation());
+            }
+            let blocks = result.map_err(|_| invalid("screenshot translation task failed"))??;
+            Ok(ExportResult {
+                translation_blocks: Some(blocks),
+                ..ExportResult::default()
+            })
+        }
+    }
+}
+
+fn cancelled_translation() -> ExportResult {
+    ExportResult {
+        translation_blocks: Some(Vec::new()),
+        ..ExportResult::default()
     }
 }
 
@@ -700,6 +773,10 @@ mod tests {
         assert_eq!(
             ExportAction::parse("selectText"),
             Some(ExportAction::SelectText)
+        );
+        assert_eq!(
+            ExportAction::parse("translate"),
+            Some(ExportAction::Translate)
         );
         assert_eq!(ExportAction::parse("drag"), None);
     }

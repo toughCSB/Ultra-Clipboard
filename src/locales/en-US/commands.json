@@ -44,6 +44,7 @@
     "loadPreviewState": "Load preview state",
     "loadRunAsAdminStatus": "Load administrator launch state",
     "loadScreenshot": "Load screenshot",
+    "loadScreenshotTranslationStatus": "Load screenshot translation settings",
     "loadSettings": "Load settings",
     "loadStorageLocation": "Load data directory",
     "loadStorageUsage": "Load storage usage",
@@ -63,6 +64,7 @@
     "pullWebdavBackup": "Download from WebDAV",
     "pushWebdavBackup": "Upload to WebDAV",
     "recognizeText": "Recognize text",
+    "removeScreenshotTranslationKey": "Remove screenshot translation key",
     "resetSettings": "Reset preferences",
     "resetStorageLocation": "Reset data directory",
     "restartAsAdmin": "Restart as administrator",
@@ -78,10 +80,12 @@
     "setClipboardWindowAutoHideSuspended": "Keep window visible",
     "setClipboardWindowPinned": "Pin window",
     "setRunAsAdmin": "Set administrator launch",
+    "setScreenshotTranslationKey": "Save screenshot translation key",
     "skipUpdateVersion": "Skip update version",
     "suspendGlobalShortcuts": "Suspend global shortcuts",
     "testSyncPeer": "Check sync shared key",
     "toggleFavorite": "Favorite",
+    "translateScreenshot": "Translate screenshot",
     "unpinItem": "Unpin item"
   },
   "messages": {

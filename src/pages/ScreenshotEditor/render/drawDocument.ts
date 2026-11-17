@@ -8,6 +8,7 @@ import {
 import type { SpotlightShape } from "../model/shapes";
 import { drawShape } from "./drawShapes";
 import { drawSpotlights } from "./effects";
+import { drawTranslation, type TranslationLayer } from "./translation";
 
 export type Canvas2D =
   | CanvasRenderingContext2D
@@ -20,6 +21,7 @@ export interface EditorScene {
   document: EditorDocument;
   /** Shape left out while it is edited in place, such as text under its editor. */
   hiddenShapeId?: string | null;
+  translation?: TranslationLayer;
 }
 
 export const BACKDROP_GRADIENTS: Record<BackdropBackground, readonly string[]> =
@@ -132,6 +134,8 @@ export const drawDocument = (
       drawShape(context, bitmap, shape);
     }
   }
+
+  if (scene.translation) drawTranslation(context, scene.translation);
 
   context.restore();
 };

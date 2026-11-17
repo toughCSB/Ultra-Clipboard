@@ -73,6 +73,33 @@ the editor viewport and presents selectable text; selected text is copied throug
 the screenshot text command. The existing area OCR action still copies its whole
 recognized result.
 
+Screenshot translation is an explicit action on the selected area or the rendered
+document. OCR runs locally; only recognized text and block IDs are sent to the
+OpenAI Responses API. The client requests structured Korean output with
+`store: false`, validates response IDs, and bounds input, response size, retries
+and total request time. Credentials come from `OPENAI_API_KEY` or the native OS
+credential store, with environment credentials taking precedence; status exposes
+the source but never the key. Credentials and translation text are not written
+to the settings file, clipboard history, or application logs by this operation.
+
+Translation requests carry a positive JavaScript-safe request ID. A per-window
+registry records cancellations even before export registration, rejects duplicate
+work, and aborts the asynchronous task when cancelled or when the window closes.
+OCR already running on a blocking worker may finish locally, but a cancelled
+operation does not start its subsequent HTTP request. Cancelling an HTTP request
+does not undo a request already accepted by the provider.
+
+The frontend preserves the original document and renders translation blocks
+through the same canvas path used by copy, save, pin and drag exports. Overflow
+is visibly marked and full source/translation text remains available separately.
+Exporting the translated variant does not mark unsaved original edits as saved;
+cancelling a Save As dialog does not mark either variant as exported.
+
+Translation text keeps the dominant source ink color when the surrounding
+background is uniform and the source pixels provide a reliable color sample.
+Antialiased edges are excluded from the dominant ink estimate. Mixed colors,
+textured backgrounds and insufficient samples use contrasting dark or light text.
+
 ## Verification
 
 `cargo test screenshot:: --lib` covers stale identities, cancelled pixels,
