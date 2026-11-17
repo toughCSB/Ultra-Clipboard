@@ -5,7 +5,6 @@ import type { FC, PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  cancelScreenshotTranslation,
   closeScreenshotWindow,
   copyScreenshotColor,
   copyScreenshotText,
@@ -19,7 +18,6 @@ import {
   type ScreenshotExportAction,
   type ScreenshotImageInfo,
   type ScreenshotTextRegion,
-  type ScreenshotTranslationBlock,
   type ScreenshotTranslationStatus,
   setScreenshotTranslationKey,
   startScreenshotDrag,
@@ -48,6 +46,7 @@ import {
   type TextEditRequest,
   useCanvasInteraction,
 } from "./hooks/useCanvasInteraction";
+import { useTranslationSession } from "./hooks/useTranslationSession";
 import {
   addShape,
   type Backdrop,
@@ -80,6 +79,12 @@ import {
   toolByCode,
 } from "./model/tools";
 import {
+  activeLayer,
+  isAwaitingKey,
+  isLoading,
+  translatedText,
+} from "./model/translationSession";
+import {
   centerViewport,
   clampViewport,
   fitViewport,
@@ -90,10 +95,7 @@ import {
 } from "./model/viewport";
 import { renderScenePixels } from "./render/renderPixels";
 import { measureTextBox, TEXT_LINE_HEIGHT, textPadding } from "./render/text";
-import {
-  createTranslationLayer,
-  type TranslationLayer,
-} from "./render/translation";
+import type { TranslationLayer } from "./render/translation";
 
 interface LoadedImage {
   bitmap: ImageBitmap;
@@ -117,17 +119,6 @@ interface TextSelectionMode {
   document: EditorDocument;
   loading: boolean;
   regions: ScreenshotTextRegion[];
-}
-
-interface TranslationMode {
-  area: PixelRect;
-  blocks: ScreenshotTranslationBlock[];
-  document: EditorDocument;
-  failed: boolean;
-  layer: TranslationLayer | null;
-  loading: boolean;
-  selection: PixelRect | null;
-  showOriginal: boolean;
 }
 
 type WindowExportAction = Exclude<
@@ -169,8 +160,6 @@ const ScreenshotEditor: FC = () => {
   const [textSelectionMode, setTextSelectionMode] =
     useState<TextSelectionMode | null>(null);
   const [selectedImageTextValue, setSelectedImageTextValue] = useState("");
-  const [translationMode, setTranslationMode] =
-    useState<TranslationMode | null>(null);
   const [translationKeyModalOpen, setTranslationKeyModalOpen] = useState(false);
   const [translationKeyConfigured, setTranslationKeyConfigured] =
     useState(false);
@@ -187,7 +176,6 @@ const ScreenshotEditor: FC = () => {
   const dragGestureRef = useRef(createDragGesture());
   const dragDocumentRef = useRef<EditorDocument | null>(null);
   const dragSelectionRef = useRef<PixelRect | null>(null);
-  const dragTranslationRef = useRef<TranslationLayer | null>(null);
   const previousDragContextRef = useRef<{
     document: EditorDocument | null;
     selection: PixelRect | null;
@@ -199,23 +187,48 @@ const ScreenshotEditor: FC = () => {
   const textOverlayRef = useRef<HTMLDivElement>(null);
   const selectedImageTextRef = useRef("");
   const pendingTextStartRef = useRef(false);
-  const translationModeRef = useRef<TranslationMode | null>(null);
-  const translationGenerationRef = useRef(0);
-  const activeTranslationRequestRef = useRef<number | null>(null);
-  const translationCancelRef = useRef<Promise<void> | null>(null);
-  const lastTranslationRequestIdRef = useRef(0);
-  const pendingTranslationRef = useRef<{
-    document: EditorDocument;
-    selection: PixelRect | null;
-  } | null>(null);
   const loadStartedAtRef = useRef(performance.now());
   const present = history?.present ?? null;
   const presentRef = useRef(present);
   presentRef.current = present;
   const shown = draft ?? present;
-  const activeTranslation =
-    translationMode?.showOriginal === false ? translationMode.layer : null;
-  dragTranslationRef.current = activeTranslation;
+  const applyTranslationKeyStatus = (status: ScreenshotTranslationStatus) => {
+    setTranslationKeyConfigured(status.configured);
+    setTranslationKeyModel(status.model);
+    setTranslationKeySource(status.source);
+  };
+
+  const translation = useTranslationSession({
+    label,
+    onBusyChange: (busy) => {
+      setBusyAction((current) => {
+        if (busy) return "translate";
+        return current === "translate" ? null : current;
+      });
+    },
+    onKeyStatus: applyTranslationKeyStatus,
+    onLayerChange: () => {
+      dragPreparationRef.current = null;
+      dragPreparationIdRef.current += 1;
+    },
+    onNeedsKey: () => {
+      setTranslationKeyModalOpen(true);
+    },
+    readEditor: () => {
+      return {
+        closing: closingRef.current,
+        document: presentRef.current,
+        selection: dragSelectionRef.current,
+      };
+    },
+    renderPixels: (document, area) => {
+      if (!image) return null;
+
+      return renderScenePixels({ bitmap: image.bitmap, document }, area);
+    },
+  });
+  const translationSession = translation.session;
+  const activeTranslation = activeLayer(translationSession);
   dragDocumentRef.current = present;
   dragSelectionRef.current = selection;
   const scale = Math.max(1, image?.info.scaleFactor ?? 1);
@@ -223,36 +236,6 @@ const ScreenshotEditor: FC = () => {
   const bounds = shown ? documentBounds(shown) : null;
 
   textEditRef.current = textEdit;
-
-  const cancelActiveTranslationRequest = useMemoizedFn(() => {
-    const requestId = activeTranslationRequestRef.current;
-    if (requestId === null) return translationCancelRef.current;
-
-    activeTranslationRequestRef.current = null;
-    const cancelled = (async () => {
-      try {
-        await cancelScreenshotTranslation(label, requestId);
-      } catch (error) {
-        log.warn("cancel screenshot translation failed", error);
-      }
-    })();
-    translationCancelRef.current = cancelled;
-
-    return cancelled;
-  });
-
-  const nextTranslationRequestId = () => {
-    const next = Math.max(
-      Date.now() * 1000,
-      lastTranslationRequestIdRef.current + 1,
-    );
-    if (!Number.isSafeInteger(next)) {
-      throw new Error("translation request id is not a safe integer");
-    }
-    lastTranslationRequestIdRef.current = next;
-
-    return next;
-  };
 
   useMount(async () => {
     try {
@@ -290,8 +273,6 @@ const ScreenshotEditor: FC = () => {
 
   useUnmount(() => {
     textRequestGenerationRef.current += 1;
-    translationGenerationRef.current += 1;
-    void cancelActiveTranslationRequest();
     dragGestureRef.current.cancel();
     bitmapRef.current?.close();
   });
@@ -344,31 +325,9 @@ const ScreenshotEditor: FC = () => {
     });
   });
 
-  const leaveTranslation = useMemoizedFn(() => {
-    if (
-      !translationModeRef.current &&
-      !pendingTranslationRef.current &&
-      busyAction !== "translate"
-    ) {
-      return;
-    }
-
-    translationGenerationRef.current += 1;
-    void cancelActiveTranslationRequest();
-    pendingTranslationRef.current = null;
-    translationModeRef.current = null;
-    dragTranslationRef.current = null;
-    dragPreparationRef.current = null;
-    dragPreparationIdRef.current += 1;
-    setTranslationMode(null);
-    setBusyAction((current) => {
-      return current === "translate" ? null : current;
-    });
-  });
-
   const commit = (next: EditorDocument) => {
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     setDraft(null);
     setHistory((current) => {
       return current ? commitHistory(current, next) : current;
@@ -378,7 +337,7 @@ const ScreenshotEditor: FC = () => {
   /** Commits a change derived from the latest document, so queued edits never drop each other. */
   const update = (change: (document: EditorDocument) => EditorDocument) => {
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     setDraft(null);
     setHistory((current) => {
       return current
@@ -524,21 +483,20 @@ const ScreenshotEditor: FC = () => {
 
     const document = present;
     const area = selection ?? documentBounds(present);
-    const mode = translationModeRef.current;
-    const translation =
-      mode?.document === present && !mode.showOriginal ? mode.layer : null;
+    const mode = translation.current();
+    const layer = mode?.document === present ? activeLayer(mode) : null;
     const pixels = renderScenePixels(
       {
         bitmap: image.bitmap,
         document: present,
-        translation: translation ?? void 0,
+        translation: layer ?? void 0,
       },
       area,
     );
 
     const result = await exportScreenshot({ action, area, label, pixels });
 
-    return { document, result, translated: translation !== null };
+    return { document, result, translated: layer !== null };
   };
 
   const startTextSelection = useMemoizedFn(async (document: EditorDocument) => {
@@ -602,7 +560,7 @@ const ScreenshotEditor: FC = () => {
     }
     if (!image || !present || busyAction) return;
 
-    leaveTranslation();
+    translation.leave();
     setSelection(null);
     setSelectedId(null);
     setToolOptionsOpen(false);
@@ -630,13 +588,13 @@ const ScreenshotEditor: FC = () => {
 
   useEffect(() => {
     if (
-      translationMode &&
-      (translationMode.document !== present ||
-        translationMode.selection !== selection)
+      translationSession &&
+      (translationSession.document !== present ||
+        translationSession.selection !== selection)
     ) {
-      leaveTranslation();
+      translation.leave();
     }
-  }, [leaveTranslation, present, selection, translationMode]);
+  }, [translation.leave, present, selection, translationSession]);
 
   const updateSelectedImageText = useMemoizedFn((text: string) => {
     selectedImageTextRef.current = text;
@@ -665,166 +623,15 @@ const ScreenshotEditor: FC = () => {
     }
   };
 
-  const startTranslation = useMemoizedFn(
-    async (document: EditorDocument, selectedArea: PixelRect | null) => {
-      if (!image || closingRef.current) return;
-
-      const generation = translationGenerationRef.current + 1;
-      translationGenerationRef.current = generation;
-      pendingTranslationRef.current = null;
-      const area = selectedArea ?? documentBounds(document);
-      const loadingMode: TranslationMode = {
-        area,
-        blocks: [],
-        document,
-        failed: false,
-        layer: null,
-        loading: true,
-        selection: selectedArea,
-        showOriginal: false,
-      };
-      translationModeRef.current = loadingMode;
-      setTranslationMode(loadingMode);
-      setBusyAction("translate");
-
-      try {
-        if (translationCancelRef.current) {
-          await translationCancelRef.current;
-        }
-        if (
-          generation !== translationGenerationRef.current ||
-          closingRef.current ||
-          presentRef.current !== document ||
-          dragSelectionRef.current !== selectedArea
-        ) {
-          return;
-        }
-
-        const pixels = renderScenePixels(
-          { bitmap: image.bitmap, document },
-          area,
-        );
-        const requestId = nextTranslationRequestId();
-        activeTranslationRequestRef.current = requestId;
-        const result = await exportScreenshot({
-          action: "translate",
-          area,
-          label,
-          pixels,
-          requestId,
-        });
-        if (activeTranslationRequestRef.current === requestId) {
-          activeTranslationRequestRef.current = null;
-        }
-        if (
-          generation !== translationGenerationRef.current ||
-          closingRef.current ||
-          presentRef.current !== document ||
-          dragSelectionRef.current !== selectedArea
-        ) {
-          return;
-        }
-
-        const blocks = result.translationBlocks ?? [];
-        const layer = createTranslationLayer(area, blocks, pixels);
-        const readyMode: TranslationMode = {
-          ...loadingMode,
-          blocks,
-          layer,
-          loading: false,
-        };
-        translationModeRef.current = readyMode;
-        dragTranslationRef.current = layer;
-        dragPreparationRef.current = null;
-        dragPreparationIdRef.current += 1;
-        setTranslationMode(readyMode);
-      } catch (error) {
-        if (generation !== translationGenerationRef.current) return;
-        void cancelActiveTranslationRequest();
-        const failedMode: TranslationMode = {
-          ...loadingMode,
-          failed: true,
-          loading: false,
-        };
-        translationModeRef.current = failedMode;
-        setTranslationMode(failedMode);
-        log.error("translate screenshot failed", error);
-      } finally {
-        if (generation === translationGenerationRef.current) {
-          setBusyAction(null);
-        }
-      }
-    },
-  );
-
-  const applyTranslationKeyStatus = (status: ScreenshotTranslationStatus) => {
-    setTranslationKeyConfigured(status.configured);
-    setTranslationKeyModel(status.model);
-    setTranslationKeySource(status.source);
-  };
-
   const handleTranslate = async () => {
-    if (translationModeRef.current || busyAction === "translate") {
-      leaveTranslation();
+    if (translation.current() || busyAction === "translate") {
+      translation.leave();
       return;
     }
     if (!image || !present || busyAction) return;
 
     leaveTextSelection();
-    const document = present;
-    const selectedArea = selection;
-    const generation = translationGenerationRef.current + 1;
-    translationGenerationRef.current = generation;
-    pendingTranslationRef.current = { document, selection: selectedArea };
-    const checkingMode: TranslationMode = {
-      area: selectedArea ?? documentBounds(document),
-      blocks: [],
-      document,
-      failed: false,
-      layer: null,
-      loading: true,
-      selection: selectedArea,
-      showOriginal: false,
-    };
-    translationModeRef.current = checkingMode;
-    setTranslationMode(checkingMode);
-    setBusyAction("translate");
-
-    try {
-      const status = await getScreenshotTranslationStatus();
-      if (
-        generation !== translationGenerationRef.current ||
-        closingRef.current ||
-        presentRef.current !== document ||
-        dragSelectionRef.current !== selectedArea
-      ) {
-        return;
-      }
-
-      applyTranslationKeyStatus(status);
-      if (!status.configured) {
-        setTranslationKeyModalOpen(true);
-        return;
-      }
-
-      void startTranslation(document, selectedArea);
-    } catch (error) {
-      if (generation === translationGenerationRef.current) {
-        pendingTranslationRef.current = null;
-        const failedMode: TranslationMode = {
-          ...checkingMode,
-          failed: true,
-          loading: false,
-        };
-        translationModeRef.current = failedMode;
-        setTranslationMode(failedMode);
-      }
-      log.error("read screenshot translation status failed", error);
-    } finally {
-      if (generation === translationGenerationRef.current) {
-        setBusyAction(null);
-      }
-    }
+    await translation.begin(present, selection);
   };
 
   const handleSaveTranslationKey = async (key: string) => {
@@ -839,15 +646,7 @@ const ScreenshotEditor: FC = () => {
       applyTranslationKeyStatus(status);
       if (!status.configured) return;
       setTranslationKeyModalOpen(false);
-      const pending = pendingTranslationRef.current;
-      if (
-        pending &&
-        !closingRef.current &&
-        presentRef.current === pending.document &&
-        dragSelectionRef.current === pending.selection
-      ) {
-        void startTranslation(pending.document, pending.selection);
-      }
+      translation.resumeAfterKey();
     } catch (error) {
       log.error(
         saved
@@ -871,7 +670,7 @@ const ScreenshotEditor: FC = () => {
       const status = await getScreenshotTranslationStatus();
       applyTranslationKeyStatus(status);
       setTranslationKeyModalOpen(false);
-      leaveTranslation();
+      translation.leave();
     } catch (error) {
       log.error(
         removed
@@ -885,7 +684,7 @@ const ScreenshotEditor: FC = () => {
   };
 
   const cancelTranslationKeyModal = () => {
-    if (pendingTranslationRef.current) leaveTranslation();
+    if (isAwaitingKey(translation.current())) translation.leave();
     setTranslationKeyModalOpen(false);
     setBusyAction((current) => {
       return current === "translate" ? null : current;
@@ -904,33 +703,17 @@ const ScreenshotEditor: FC = () => {
     }
   };
 
-  const toggleTranslationOriginal = () => {
-    const current = translationModeRef.current;
-    if (!current || current.loading) return;
-
-    const next = { ...current, showOriginal: !current.showOriginal };
-    translationModeRef.current = next;
-    dragTranslationRef.current = next.showOriginal ? null : next.layer;
-    dragPreparationRef.current = null;
-    dragPreparationIdRef.current += 1;
-    setTranslationMode(next);
-  };
-
   const retryTranslation = () => {
-    const current = translationModeRef.current;
-    if (!current?.failed || busyAction) return;
+    if (busyAction) return;
 
-    void startTranslation(current.document, current.selection);
+    translation.retry();
   };
 
   const copyTranslationText = async () => {
-    const mode = translationModeRef.current;
-    if (!mode || mode.loading) return;
+    const session = translation.current();
+    if (!session || isLoading(session)) return;
 
-    const text = mode.blocks
-      .map((block) => block.translatedText)
-      .filter((line) => line.trim().length > 0)
-      .join("\n");
+    const text = translatedText(session);
     if (!text) return;
 
     try {
@@ -998,11 +781,11 @@ const ScreenshotEditor: FC = () => {
     if (!present) return null;
 
     const current = dragPreparationRef.current;
-    const translation = dragTranslationRef.current;
+    const layer = translation.activeLayer();
     if (
       current?.document === present &&
       current.selection === selection &&
-      current.translation === translation
+      current.translation === layer
     ) {
       return current.ready;
     }
@@ -1014,7 +797,7 @@ const ScreenshotEditor: FC = () => {
       if (
         dragDocumentRef.current !== present ||
         dragSelectionRef.current !== selection ||
-        dragTranslationRef.current !== translation
+        translation.activeLayer() !== layer
       ) {
         return false;
       }
@@ -1024,7 +807,7 @@ const ScreenshotEditor: FC = () => {
           prepared &&
           dragDocumentRef.current === present &&
           dragSelectionRef.current === selection &&
-          dragTranslationRef.current === translation
+          translation.activeLayer() === layer
         );
       } catch (error) {
         log.error("prepare screenshot drag failed", error);
@@ -1040,7 +823,7 @@ const ScreenshotEditor: FC = () => {
       document: present,
       ready,
       selection,
-      translation,
+      translation: layer,
     };
 
     return ready;
@@ -1070,7 +853,7 @@ const ScreenshotEditor: FC = () => {
     const handle = event.currentTarget;
     const gestureDocument = present;
     const gestureSelection = selection;
-    const gestureTranslation = dragTranslationRef.current;
+    const gestureTranslation = translation.activeLayer();
     try {
       await dragGestureRef.current.move(
         pointer,
@@ -1080,14 +863,14 @@ const ScreenshotEditor: FC = () => {
             Boolean(prepared) &&
             dragDocumentRef.current === gestureDocument &&
             dragSelectionRef.current === gestureSelection &&
-            dragTranslationRef.current === gestureTranslation
+            translation.activeLayer() === gestureTranslation
           );
         },
         async () => {
           if (
             dragDocumentRef.current !== gestureDocument ||
             dragSelectionRef.current !== gestureSelection ||
-            dragTranslationRef.current !== gestureTranslation
+            translation.activeLayer() !== gestureTranslation
           ) {
             return;
           }
@@ -1188,7 +971,7 @@ const ScreenshotEditor: FC = () => {
    * settings; `openOptions` (a double-click) also opens its options panel. */
   const changeTool = (next: EditorTool, openOptions = false) => {
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     commitTextEdit();
     setTool(next);
     setSelectedId(null);
@@ -1233,7 +1016,7 @@ const ScreenshotEditor: FC = () => {
 
   const undo = () => {
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     setSelection(null);
     setSelectedId(null);
     setDraft(null);
@@ -1244,7 +1027,7 @@ const ScreenshotEditor: FC = () => {
 
   const redo = () => {
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     setSelection(null);
     setSelectedId(null);
     setDraft(null);
@@ -1337,13 +1120,14 @@ const ScreenshotEditor: FC = () => {
   const closeWindow = async () => {
     closingRef.current = true;
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     setTranslationKeyModalOpen(false);
 
     try {
-      if (translationCancelRef.current) {
+      const cancelSettled = translation.cancelSettled();
+      if (cancelSettled) {
         await Promise.race([
-          translationCancelRef.current,
+          cancelSettled,
           new Promise<void>((resolve) => {
             window.setTimeout(resolve, 1000);
           }),
@@ -1360,7 +1144,7 @@ const ScreenshotEditor: FC = () => {
     if (closingRef.current) return;
 
     leaveTextSelection();
-    leaveTranslation();
+    translation.leave();
     setTranslationKeyModalOpen(false);
     commitTextEdit();
 
@@ -1513,13 +1297,13 @@ const ScreenshotEditor: FC = () => {
     }
     if (translationKeyModalOpen) return;
     if (
-      translationModeRef.current &&
+      translation.current() &&
       event.target instanceof HTMLElement &&
       event.target.closest('[role="dialog"]')
     ) {
       return;
     }
-    if (translationModeRef.current) {
+    if (translation.current()) {
       if (
         event.key === "Escape" ||
         event.key === "Backspace" ||
@@ -1527,7 +1311,7 @@ const ScreenshotEditor: FC = () => {
         (event.altKey && event.key === "ArrowLeft")
       ) {
         event.preventDefault();
-        leaveTranslation();
+        translation.leave();
       } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
         event.preventDefault();
         void runExport("copy");
@@ -1803,7 +1587,7 @@ const ScreenshotEditor: FC = () => {
         onZoomToggle={toggleZoom}
         textSelectionActive={textSelectionMode !== null}
         tool={tool}
-        translationActive={translationMode !== null}
+        translationActive={translationSession !== null}
         zoom={viewport?.zoom ?? 1}
       />
 
@@ -1841,21 +1625,21 @@ const ScreenshotEditor: FC = () => {
             viewport={viewport}
           />
         )}
-        {translationMode && (
+        {translationSession && (
           <TranslationControls
-            blocks={translationMode.blocks}
-            failed={translationMode.failed}
-            loading={translationMode.loading}
+            blocks={translationSession.blocks}
+            failed={translationSession.phase === "failed"}
+            loading={isLoading(translationSession)}
             onCopyText={copyTranslationText}
-            onLeave={leaveTranslation}
+            onLeave={translation.leave}
             onManageKey={openTranslationKeyModal}
             onRetry={retryTranslation}
-            onToggleOriginal={toggleTranslationOriginal}
-            overflowCount={translationMode.layer?.overflowCount ?? 0}
-            showOriginal={translationMode.showOriginal}
+            onToggleOriginal={translation.toggleShowOriginal}
+            overflowCount={translationSession.layer?.overflowCount ?? 0}
+            showOriginal={translationSession.showOriginal}
           />
         )}
-        {!textSelectionMode && !translationMode && subject && (
+        {!textSelectionMode && !translationSession && subject && (
           <ToolOptions
             anchor={toolAnchor}
             backdrop={shown.backdrop}

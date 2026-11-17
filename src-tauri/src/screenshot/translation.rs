@@ -1,6 +1,7 @@
 //! Screenshot OCR layout and Korean translation. Only recognized text leaves this process.
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,6 +25,14 @@ const MAX_RESPONSE_BYTES: usize = 128_000;
 const MAX_KEY_BYTES: usize = 4_096;
 pub const MAX_REQUEST_ID: u64 = 9_007_199_254_740_991;
 
+/// How one translation request ended. Cancellation is distinct from an image that
+/// holds no text, which is `Blocks` with an empty list.
+#[derive(Debug)]
+pub enum TranslationOutcome {
+    Blocks(Vec<TranslationBlock>),
+    Cancelled,
+}
+
 #[derive(Default)]
 pub struct TranslationFlights {
     inner: Mutex<FlightState>,
@@ -44,7 +53,36 @@ struct Flight {
 }
 
 impl TranslationFlights {
-    pub fn start(&self, label: &str, request_id: u64) -> Result<Option<Arc<AtomicBool>>> {
+    /// Owns one request from registration to cleanup. `job` receives the
+    /// cancellation flag and runs as an abortable task; a cancel, a window close or a
+    /// late start all end as `Cancelled` instead of an error or empty blocks.
+    pub async fn run<F, Fut>(
+        &self,
+        label: &str,
+        request_id: u64,
+        job: F,
+    ) -> Result<TranslationOutcome>
+    where
+        F: FnOnce(Arc<AtomicBool>) -> Fut,
+        Fut: Future<Output = Result<Vec<TranslationBlock>>> + Send + 'static,
+    {
+        let Some(cancelled) = self.start(label, request_id)? else {
+            return Ok(TranslationOutcome::Cancelled);
+        };
+        let task = tauri::async_runtime::spawn(job(cancelled.clone()));
+        self.attach(label, request_id, task.inner().abort_handle());
+        let result = task.await;
+        self.finish(label, request_id);
+        if cancelled.load(Ordering::Acquire) {
+            return Ok(TranslationOutcome::Cancelled);
+        }
+        let blocks = result.map_err(|_| {
+            AppError::Other(anyhow::anyhow!("screenshot translation task failed"))
+        })??;
+        Ok(TranslationOutcome::Blocks(blocks))
+    }
+
+    fn start(&self, label: &str, request_id: u64) -> Result<Option<Arc<AtomicBool>>> {
         if request_id == 0 || request_id > MAX_REQUEST_ID {
             return Err(fail("Invalid screenshot translation request ID"));
         }
@@ -83,7 +121,7 @@ impl TranslationFlights {
         Ok(Some(cancelled))
     }
 
-    pub fn attach(&self, label: &str, request_id: u64, abort: AbortHandle) {
+    fn attach(&self, label: &str, request_id: u64, abort: AbortHandle) {
         let mut state = self
             .inner
             .lock()
@@ -141,7 +179,7 @@ impl TranslationFlights {
         }
     }
 
-    pub fn finish(&self, label: &str, request_id: u64) {
+    fn finish(&self, label: &str, request_id: u64) {
         let mut state = self
             .inner
             .lock()
@@ -576,7 +614,50 @@ async fn send_with_retry(client: &Client, url: &str, key: &str, body: &[u8]) -> 
     Err(fail("translation rate limit reached"))
 }
 
-pub async fn translate(regions: Vec<TextRegion>) -> Result<Vec<TranslationBlock>> {
+/// OCR then translation for one request. Cancellation is checked before and after
+/// OCR so a cancelled request never starts its HTTP call.
+pub async fn recognize_and_translate(
+    cancelled: Arc<AtomicBool>,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+) -> Result<Vec<TranslationBlock>> {
+    pipeline(
+        &cancelled,
+        async move {
+            tauri::async_runtime::spawn_blocking(move || {
+                super::ocr::recognize_regions(width, height, &rgba)
+            })
+            .await
+            .map_err(|_| AppError::Other(anyhow::anyhow!("screenshot task join failed")))?
+            .map(|recognition| recognition.regions)
+        },
+        translate,
+    )
+    .await
+}
+
+async fn pipeline<Ocr, Translate, TranslateFut>(
+    cancelled: &AtomicBool,
+    ocr: Ocr,
+    translate: Translate,
+) -> Result<Vec<TranslationBlock>>
+where
+    Ocr: Future<Output = Result<Vec<TextRegion>>>,
+    Translate: FnOnce(Vec<TextRegion>) -> TranslateFut,
+    TranslateFut: Future<Output = Result<Vec<TranslationBlock>>>,
+{
+    if cancelled.load(Ordering::Acquire) {
+        return Ok(Vec::new());
+    }
+    let regions = ocr.await?;
+    if cancelled.load(Ordering::Acquire) {
+        return Ok(Vec::new());
+    }
+    translate(regions).await
+}
+
+async fn translate(regions: Vec<TextRegion>) -> Result<Vec<TranslationBlock>> {
     let mut blocks = group(&regions)?;
     if blocks.is_empty() {
         return Ok(blocks);
@@ -643,6 +724,161 @@ mod tests {
         flights.cancel_label("editor-1");
         assert!(flights.start("editor-1", 500).unwrap().is_none());
         assert!(flights.start("editor-2", 500).unwrap().is_some());
+    }
+
+    fn block(id: &str) -> TranslationBlock {
+        TranslationBlock {
+            id: id.into(),
+            source_text: "s".into(),
+            translated_text: "t".into(),
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        }
+    }
+
+    /// Starts a run whose job never finishes and resolves once the job is running.
+    async fn start_stuck_run(
+        flights: &Arc<TranslationFlights>,
+        request_id: u64,
+    ) -> tokio::task::JoinHandle<Result<TranslationOutcome>> {
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let running = flights.clone();
+        let handle = tokio::spawn(async move {
+            running
+                .run("editor-1", request_id, move |_| async move {
+                    let _ = started_tx.send(());
+                    std::future::pending::<Result<Vec<TranslationBlock>>>().await
+                })
+                .await
+        });
+        started_rx.await.unwrap();
+        handle
+    }
+
+    #[tokio::test]
+    async fn completed_job_returns_blocks_and_frees_the_label() {
+        let flights = TranslationFlights::default();
+        let outcome = flights
+            .run("editor-1", 10, |_| async { Ok(vec![block("block-0")]) })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, TranslationOutcome::Blocks(blocks) if blocks.len() == 1));
+        assert!(flights.start("editor-1", 11).unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn cancel_before_start_never_runs_the_job() {
+        let flights = TranslationFlights::default();
+        flights.cancel("editor-1", 20);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let outcome = flights
+            .run("editor-1", 20, move |_| async move {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Ok(Vec::new())
+            })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, TranslationOutcome::Cancelled));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn cancel_during_ocr_aborts_and_reports_cancelled() {
+        let flights = Arc::new(TranslationFlights::default());
+        let handle = start_stuck_run(&flights, 30).await;
+        assert!(flights.cancel("editor-1", 30));
+        let outcome = handle.await.unwrap().unwrap();
+        assert!(matches!(outcome, TranslationOutcome::Cancelled));
+        assert!(flights.start("editor-1", 31).unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn cancel_after_ocr_skips_the_http_request() {
+        let cancelled = AtomicBool::new(false);
+        let http_calls = AtomicUsize::new(0);
+        let blocks = pipeline(
+            &cancelled,
+            async {
+                cancelled.store(true, Ordering::Release);
+                Ok(Vec::new())
+            },
+            |_| async {
+                http_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![block("block-0")])
+            },
+        )
+        .await
+        .unwrap();
+        assert!(blocks.is_empty());
+        assert_eq!(http_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn uncancelled_pipeline_runs_ocr_then_translation() {
+        let cancelled = AtomicBool::new(false);
+        let blocks = pipeline(&cancelled, async { Ok(Vec::new()) }, |regions| async move {
+            assert!(regions.is_empty());
+            Ok(vec![block("block-0")])
+        })
+        .await
+        .unwrap();
+        assert_eq!(blocks.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn window_close_cancels_running_and_later_requests() {
+        let flights = Arc::new(TranslationFlights::default());
+        let handle = start_stuck_run(&flights, 40).await;
+        flights.cancel_label("editor-1");
+        assert!(matches!(
+            handle.await.unwrap().unwrap(),
+            TranslationOutcome::Cancelled
+        ));
+        let late = flights
+            .run("editor-1", 41, |_| async { Ok(vec![block("block-0")]) })
+            .await
+            .unwrap();
+        assert!(matches!(late, TranslationOutcome::Cancelled));
+    }
+
+    #[tokio::test]
+    async fn duplicate_or_stale_request_id_is_rejected() {
+        let flights = TranslationFlights::default();
+        flights
+            .run("editor-1", 50, |_| async { Ok(Vec::new()) })
+            .await
+            .unwrap();
+        for id in [50, 49, 0, MAX_REQUEST_ID + 1] {
+            assert!(flights
+                .run("editor-1", id, |_| async { Ok(Vec::new()) })
+                .await
+                .is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn running_request_rejects_a_second_one() {
+        let flights = Arc::new(TranslationFlights::default());
+        let handle = start_stuck_run(&flights, 70).await;
+        assert!(flights
+            .run("editor-1", 71, |_| async { Ok(Vec::new()) })
+            .await
+            .is_err());
+        flights.cancel("editor-1", 70);
+        handle.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn job_error_surfaces_when_not_cancelled() {
+        let flights = TranslationFlights::default();
+        let error = flights
+            .run("editor-1", 60, |_| async { Err(fail("boom")) })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("boom"));
     }
 
     #[tokio::test]

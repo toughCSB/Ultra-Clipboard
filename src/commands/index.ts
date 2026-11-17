@@ -1333,6 +1333,8 @@ export interface ScreenshotExportResult {
   text: string | null;
   textRegions: ScreenshotTextRegion[] | null;
   translationBlocks: ScreenshotTranslationBlock[] | null;
+  /** The translate request was cancelled; there are no blocks, which is not "no text found". */
+  translationCancelled: boolean;
 }
 
 const SCREENSHOT_EXPORT_LABEL_KEYS: Record<ScreenshotExportAction, string> = {

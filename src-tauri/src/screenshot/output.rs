@@ -4,7 +4,6 @@
 
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use chrono::{DateTime, Local};
@@ -96,6 +95,8 @@ pub struct ExportResult {
     pub text: Option<String>,
     pub text_regions: Option<Vec<super::ocr::TextRegion>>,
     pub translation_blocks: Option<Vec<super::translation::TranslationBlock>>,
+    /// The translation request was cancelled; `translation_blocks` is absent.
+    pub translation_cancelled: bool,
 }
 
 pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
@@ -141,29 +142,11 @@ pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
 
 pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportResult> {
     let state = app.state::<ScreenshotState>();
-    let flights = app.state::<super::translation::TranslationFlights>();
-    let flight = if request.action == ExportAction::Translate {
-        let id = request
-            .request_id
-            .ok_or_else(|| invalid("screenshot translation request ID is missing"))?;
-        let Some(cancelled) = flights.start(&request.label, id)? else {
-            return Ok(cancelled_translation());
-        };
-        Some((id, cancelled))
-    } else {
-        None
-    };
-    let source = match state.image(&request.label) {
-        Some(source) => source,
-        None => {
-            if let Some((id, cancelled)) = &flight {
-                flights.finish(&request.label, *id);
-                if cancelled.load(Ordering::Acquire) {
-                    return Ok(cancelled_translation());
-                }
-            }
-            return Err(invalid("screenshot window is closed"));
-        }
+    if request.action == ExportAction::Translate {
+        return export_translation(app, request).await;
+    }
+    let Some(source) = state.image(&request.label) else {
+        return Err(invalid("screenshot window is closed"));
     };
     let ExportRequest {
         label,
@@ -270,41 +253,50 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
-        ExportAction::Translate => {
-            let (id, cancelled) = flight.expect("translation flight registered");
-            let cancelled_task = cancelled.clone();
-            let job = tauri::async_runtime::spawn(async move {
-                if cancelled_task.load(Ordering::Acquire) {
-                    return Ok(Vec::new());
-                }
-                let recognition =
-                    run_blocking(move || super::ocr::recognize_regions(width, height, &rgba))
-                        .await?;
-                if cancelled_task.load(Ordering::Acquire) {
-                    return Ok(Vec::new());
-                }
-                super::translation::translate(recognition.regions).await
-            });
-            flights.attach(&label, id, job.inner().abort_handle());
-            let result = job.await;
-            flights.finish(&label, id);
-            if cancelled.load(Ordering::Acquire) {
-                return Ok(cancelled_translation());
-            }
-            let blocks = result.map_err(|_| invalid("screenshot translation task failed"))??;
-            Ok(ExportResult {
-                translation_blocks: Some(blocks),
-                ..ExportResult::default()
-            })
-        }
+        ExportAction::Translate => Err(invalid("screenshot translation is handled separately")),
     }
 }
 
-fn cancelled_translation() -> ExportResult {
-    ExportResult {
-        translation_blocks: Some(Vec::new()),
-        ..ExportResult::default()
-    }
+/// Hands the pixels to the translation flow, which owns registration, cancellation
+/// and cleanup. The window check runs inside the flow so a window closed mid-request
+/// reads as cancelled, not as an error.
+async fn export_translation(app: &AppHandle, request: ExportRequest) -> Result<ExportResult> {
+    let id = request
+        .request_id
+        .ok_or_else(|| invalid("screenshot translation request ID is missing"))?;
+    let ExportRequest {
+        label,
+        width,
+        height,
+        rgba,
+        ..
+    } = request;
+    let flights = app.state::<super::translation::TranslationFlights>();
+    let handle = app.clone();
+    let window_label = label.clone();
+    let outcome = flights
+        .run(&label, id, move |cancelled| async move {
+            if handle
+                .state::<ScreenshotState>()
+                .image(&window_label)
+                .is_none()
+            {
+                return Err(invalid("screenshot window is closed"));
+            }
+            super::translation::recognize_and_translate(cancelled, width, height, rgba).await
+        })
+        .await?;
+
+    Ok(match outcome {
+        super::translation::TranslationOutcome::Blocks(blocks) => ExportResult {
+            translation_blocks: Some(blocks),
+            ..ExportResult::default()
+        },
+        super::translation::TranslationOutcome::Cancelled => ExportResult {
+            translation_cancelled: true,
+            ..ExportResult::default()
+        },
+    })
 }
 
 pub async fn copy_text(text: &str) -> Result<()> {
