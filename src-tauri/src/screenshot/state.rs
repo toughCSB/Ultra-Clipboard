@@ -99,12 +99,7 @@ impl ScreenshotState {
 
     /// Reserves a capture identity before native work starts.
     pub fn try_begin_capture(&self) -> Option<u64> {
-        self.apply(Event::Reserve)
-            .into_iter()
-            .find_map(|effect| match effect {
-                Effect::Reserved(id) => Some(id),
-                _ => None,
-            })
+        self.lock().session.reserve()
     }
 
     pub fn with_session<R>(&self, read: impl FnOnce(&CaptureSession) -> R) -> Option<R> {

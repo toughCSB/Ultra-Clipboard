@@ -23,8 +23,6 @@ pub enum Reveal {
 }
 
 pub enum Event {
-    /// Reserves a capture identity before native work starts.
-    Reserve,
     /// Publishes the session of the reserved capture, with or without pixels.
     Publish(CaptureSession),
     /// Stores the pixels of a session that was published without them.
@@ -61,7 +59,6 @@ pub enum Event {
 }
 
 pub enum Effect {
-    Reserved(u64),
     PresentOverlays {
         id: u64,
         reveal: Reveal,
@@ -128,7 +125,6 @@ impl Session {
 
     pub fn apply(&mut self, event: Event) -> Vec<Effect> {
         match event {
-            Event::Reserve => self.reserve(),
             Event::Publish(session) => self.publish(session),
             Event::Fill {
                 id,
@@ -156,15 +152,17 @@ impl Session {
         }
     }
 
-    fn reserve(&mut self) -> Vec<Effect> {
+    /// Reserves a capture identity before native work starts. `None` while
+    /// another capture or editor handoff is active.
+    pub fn reserve(&mut self) -> Option<u64> {
         if !matches!(self.phase, Phase::Idle) {
-            return Vec::new();
+            return None;
         }
 
         let id = self.next_id();
         self.phase = Phase::Reserved { id };
 
-        vec![Effect::Reserved(id)]
+        Some(id)
     }
 
     fn publish(&mut self, session: CaptureSession) -> Vec<Effect> {
@@ -250,25 +248,24 @@ impl Session {
         frame_label: String,
         selection: PixelRect,
     ) -> Vec<Effect> {
-        let Phase::Presented { session, .. } = &self.phase else {
-            return Vec::new();
+        let (session, painted) = match std::mem::take(&mut self.phase) {
+            Phase::Presented { session, painted } if session.id == id => (session, painted),
+            other => {
+                self.phase = other;
+
+                return Vec::new();
+            }
         };
-        if session.id != id {
-            return Vec::new();
-        }
         if !session.is_ready() {
+            self.phase = Phase::Presented { session, painted };
+
             return vec![Effect::RejectUnreadyCommit];
         }
 
         let editor_label = format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", self.next_id());
-        let Phase::Presented { session, .. } = std::mem::replace(
-            &mut self.phase,
-            Phase::Handoff {
-                id,
-                editor_label: editor_label.clone(),
-            },
-        ) else {
-            return Vec::new();
+        self.phase = Phase::Handoff {
+            id,
+            editor_label: editor_label.clone(),
         };
 
         vec![Effect::OpenEditor {
@@ -364,7 +361,6 @@ mod tests {
         effects
             .iter()
             .map(|effect| match effect {
-                Effect::Reserved(_) => "reserved",
                 Effect::PresentOverlays {
                     reveal: Reveal::Immediate,
                     ..
@@ -409,10 +405,7 @@ mod tests {
     }
 
     fn reserve(state: &mut Session) -> u64 {
-        match state.apply(Event::Reserve).as_slice() {
-            [Effect::Reserved(id)] => *id,
-            _ => panic!("capture was not reserved"),
-        }
+        state.reserve().expect("capture was not reserved")
     }
 
     fn early_session(state: &mut Session, foreground: Option<isize>) -> u64 {
@@ -463,7 +456,7 @@ mod tests {
         let mut state = Session::default();
         let first = reserve(&mut state);
 
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
         assert!(fail(&mut state, first, false).is_empty());
         assert_ne!(reserve(&mut state), first);
     }
@@ -549,7 +542,7 @@ mod tests {
         reserve(&mut state);
 
         assert!(cancel(&mut state, None).is_empty());
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
     }
 
     #[test]
@@ -562,7 +555,7 @@ mod tests {
         assert!(fail(&mut state, old, true).is_empty());
 
         assert_eq!(state.current().map(|session| session.id), Some(current));
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
     }
 
     #[test]
@@ -585,7 +578,7 @@ mod tests {
 
         assert!(fail(&mut state, id, false).is_empty());
 
-        assert!(!state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_some());
     }
 
     #[test]
@@ -596,7 +589,7 @@ mod tests {
 
         assert_eq!(kinds(&fail(&mut state, id, false)), ["hide", "restore"]);
 
-        assert!(!state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_some());
     }
 
     #[test]
@@ -653,10 +646,10 @@ mod tests {
 
         assert!(editor_label(&effects).starts_with(EDITOR_WINDOW_LABEL_PREFIX));
         assert!(state.current().is_none());
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
         assert!(cancel(&mut state, Some(id)).is_empty());
         assert!(fail(&mut state, id, true).is_empty());
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
     }
 
     #[test]
@@ -670,14 +663,14 @@ mod tests {
         assert!(state
             .apply(Event::EditorSettled { label: other })
             .is_empty());
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
 
         let effects = state.apply(Event::EditorSettled {
             label: label.clone(),
         });
         assert_eq!(kinds(&effects), ["hide"]);
         assert!(state.apply(Event::EditorSettled { label }).is_empty());
-        assert!(!state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_some());
     }
 
     #[test]
@@ -696,7 +689,7 @@ mod tests {
         assert!(state
             .apply(Event::EditorSettled { label: first_label })
             .is_empty());
-        assert!(state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_none());
         assert_eq!(
             kinds(&state.apply(Event::EditorSettled {
                 label: second_label
@@ -714,7 +707,7 @@ mod tests {
 
         assert!(state.apply(Event::EditorFailed { id: id + 1 }).is_empty());
         assert_eq!(kinds(&state.apply(Event::EditorFailed { id })), ["hide"]);
-        assert!(!state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_some());
     }
 
     #[test]
@@ -747,7 +740,7 @@ mod tests {
         });
 
         assert_eq!(kinds(&effects), ["open-direct-editor"]);
-        assert!(!state.apply(Event::Reserve).is_empty());
+        assert!(state.reserve().is_some());
     }
 
     #[test]

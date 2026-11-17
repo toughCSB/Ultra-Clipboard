@@ -172,8 +172,7 @@ fn window_size(image: &CapturedImage, monitor: &MonitorGeometry) -> (f64, f64) {
     let (area_width, area_height) = backend::work_area_logical_size(monitor);
     let max_width = area_width * WORK_AREA_RATIO;
     let max_height = area_height * WORK_AREA_RATIO;
-    let image_width = f64::from(image.width) / image.scale_factor.max(1.0);
-    let image_height = f64::from(image.height) / image.scale_factor.max(1.0);
+    let (image_width, image_height) = backend::image_logical_size(image);
 
     let width = (image_width + CANVAS_MARGIN).clamp(MIN_WIDTH.min(max_width), max_width);
     let height = (image_height + TOOLBAR_HEIGHT + CANVAS_MARGIN)

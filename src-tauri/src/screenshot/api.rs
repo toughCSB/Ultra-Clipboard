@@ -45,6 +45,10 @@ fn require(label: &str, kinds: &[WindowKind]) -> Result<()> {
     )))
 }
 
+fn closed() -> AppError {
+    AppError::Other(anyhow::anyhow!("screenshot window is closed"))
+}
+
 /// Operations without a window label.
 pub mod any {
     use super::*;
@@ -167,10 +171,6 @@ pub mod image_window {
 
         super::super::export(app, export).await
     }
-
-    fn closed() -> AppError {
-        AppError::Other(anyhow::anyhow!("screenshot window is closed"))
-    }
 }
 
 /// Operations for editor windows.
@@ -194,9 +194,7 @@ pub mod editor_window {
     pub async fn copy_text(app: &AppHandle, label: &str, text: &str) -> Result<()> {
         require(label, EDITOR_ONLY)?;
         if app.state::<ScreenshotState>().image(label).is_none() {
-            return Err(AppError::Other(anyhow::anyhow!(
-                "screenshot window is closed"
-            )));
+            return Err(closed());
         }
 
         output::copy_text(text).await

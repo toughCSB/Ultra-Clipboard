@@ -6,7 +6,7 @@
 use tauri::{Position, WebviewWindow};
 
 use super::geometry::PixelRect;
-use super::state::MonitorGeometry;
+use super::state::{CapturedImage, MonitorGeometry};
 use crate::core::Result;
 
 #[cfg(target_os = "macos")]
@@ -58,6 +58,16 @@ pub fn work_area_logical_size(monitor: &MonitorGeometry) -> (f64, f64) {
     (
         f64::from(monitor.work_area.width) / scale,
         f64::from(monitor.work_area.height) / scale,
+    )
+}
+
+/// The size of a captured image in logical units.
+pub fn image_logical_size(image: &CapturedImage) -> (f64, f64) {
+    let scale = image.scale_factor.max(1.0);
+
+    (
+        f64::from(image.width) / scale,
+        f64::from(image.height) / scale,
     )
 }
 

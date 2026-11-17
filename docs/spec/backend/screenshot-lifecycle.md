@@ -11,13 +11,16 @@ native work starts, including captures which do not use a selection overlay.
   capture identity. Delayed pixels, failures, and timeouts cannot end a newer
   capture.
 - Taking a selection session does not release the active capture reservation.
-  Cancellation releases it after hiding overlays and restoring the foreground;
-  editor handoff releases it after hiding overlays for the matching editor.
+  Cancellation and editor handoff release it in the same main-thread step that
+  hides the overlays and restores the foreground. A new capture can only be
+  reserved from the main thread (`begin_capture` is dispatched there), so it
+  cannot start between the release and its window effects. Reserving off the
+  main thread would break this guarantee.
 - The matching editor may complete its handoff only once. A late readiness or
   close callback from another editor cannot hide the current overlays.
 
 The rules live in `screenshot/session.rs`: given the current phase and an event
-(reserve, publish, fill, overlay painted, paint timeout, commit selection,
+(publish, fill, overlay painted, paint timeout, commit selection,
 direct capture, editor failed, editor settled, cancel, fail) it returns the
 effects to run (present, refresh or hide overlays, restore foreground, open an
 editor, open the permission preference). It does not touch Tauri, threads or

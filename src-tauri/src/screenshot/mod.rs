@@ -289,7 +289,6 @@ fn run_effects(app: &AppHandle, effects: Vec<Effect>) -> Result<()> {
 
 fn run_effect(app: &AppHandle, effect: Effect) -> Result<()> {
     match effect {
-        Effect::Reserved(_) => Ok(()),
         Effect::PresentOverlays { id, reveal } => {
             let started = Instant::now();
             if let Err(err) = overlay::present(app, id, reveal) {
