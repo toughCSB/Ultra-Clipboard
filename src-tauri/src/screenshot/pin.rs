@@ -252,7 +252,7 @@ fn schedule_ready_fallback(app: &AppHandle, label: String) {
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            if let Err(err) = editor::reveal(&main_app, &main_label) {
+            if let Err(err) = super::reveal_painted_window(&main_app, &main_label) {
                 log::warn!("reveal screenshot pin {main_label} after fallback failed: {err}");
             }
         }) {

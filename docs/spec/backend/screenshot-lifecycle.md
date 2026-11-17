@@ -16,6 +16,15 @@ native work starts, including captures which do not use a selection overlay.
 - The matching editor may complete its handoff only once. A late readiness or
   close callback from another editor cannot hide the current overlays.
 
+The rules live in `screenshot/session.rs`: given the current phase and an event
+(reserve, publish, fill, overlay painted, paint timeout, commit selection,
+direct capture, editor failed, editor settled, cancel, fail) it returns the
+effects to run (present, refresh or hide overlays, restore foreground, open an
+editor, open the permission preference). It does not touch Tauri, threads or
+windows. The adapter in `screenshot/mod.rs` applies each event and runs its
+effects on the main thread. `reveal_painted_window` serves editors and pins and
+settles the overlay handoff only when the label matches the pending editor.
+
 ## Window Effects
 
 Capture lifecycle window effects run on Tauri's main thread. Async commands
@@ -106,10 +115,10 @@ textured backgrounds and insufficient samples use contrasting dark or light text
 
 ## Verification
 
-`cargo test screenshot:: --lib` covers stale identities, cancelled pixels,
-matching and repeated editor handoffs, and cancellation effects through the
-same helper used by production cancellation. Assertions include whether hide
-and foreground restoration occur, not just the final session value.
+`cargo test screenshot::session --lib` covers stale identities, cancelled pixels,
+matching and repeated editor handoffs, paint timeouts, and failure effects
+through the same events production uses. Assertions include whether hide and
+foreground restoration occur, not just the final session value.
 
 Native capture, focus restoration, and first-paint display still require a
 desktop check on each supported platform; state tests do not prove native

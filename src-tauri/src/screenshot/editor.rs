@@ -49,21 +49,20 @@ impl ImageInfo {
 }
 
 /// Opens a hidden editor sized around the image on the capture monitor.
-/// The window is shown once the frontend has painted the image.
+/// The window is shown once the frontend has painted the image. A handoff
+/// editor uses the label its session reserved.
 pub fn open(
     app: &AppHandle,
     image: CapturedImage,
     monitor: MonitorGeometry,
-    handoff_overlay: Option<u64>,
+    handoff_label: Option<String>,
 ) -> Result<()> {
     let started = Instant::now();
     let state = app.state::<ScreenshotState>();
-    let label = format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id());
+    let label =
+        handoff_label.unwrap_or_else(|| format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id()));
     let (width, height) = window_size(&image, &monitor);
     state.insert_image(&label, image);
-    if let Some(id) = handoff_overlay {
-        state.begin_editor_handoff(id, &label);
-    }
 
     let builder = WebviewWindowBuilder::new(
         app,
@@ -139,34 +138,6 @@ fn is_screenshot_document(url: &tauri::Url, route: &str, dev_url: Option<&tauri:
             == Some(route)
 }
 
-/// Shows a painted editor or pin window and brings it to the front.
-pub fn reveal(app: &AppHandle, label: &str) -> Result<()> {
-    let Some(window) = app.get_webview_window(label) else {
-        finish_overlay_handoff(app, label);
-        return Ok(());
-    };
-    if window.is_visible().unwrap_or(false) {
-        finish_overlay_handoff(app, label);
-        return Ok(());
-    }
-
-    if let Err(err) = window.show() {
-        finish_overlay_handoff(app, label);
-        return Err(anyhow::anyhow!(err).into());
-    }
-    finish_overlay_handoff(app, label);
-    window.set_focus().map_err(|err| anyhow::anyhow!(err))?;
-
-    Ok(())
-}
-
-fn finish_overlay_handoff(app: &AppHandle, label: &str) {
-    let state = app.state::<ScreenshotState>();
-    state.complete_editor_handoff(label, || {
-        super::overlay::hide_all(app);
-    });
-}
-
 /// Asks the editor frontend to run its close flow, which confirms unsaved edits.
 pub fn request_close(app: &AppHandle, label: &str) {
     let non_editor_document = app
@@ -220,7 +191,7 @@ fn schedule_ready_fallback(app: &AppHandle, label: String) {
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            if let Err(err) = reveal(&main_app, &main_label) {
+            if let Err(err) = super::reveal_painted_window(&main_app, &main_label) {
                 log::warn!("reveal screenshot window {main_label} after fallback failed: {err}");
             }
         }) {
