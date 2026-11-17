@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.2](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.3.1...v1.3.2) (2026-11-18)
+
+### Fixed
+
+- On macOS, place a pinned image through the display layout even when the display list cannot be read, instead of using raw capture pixels.
+- Tell a cancelled screenshot translation apart from an image without text, so cancelling never shows a "no text found" result.
+
+### Changed
+
+- Reorganize screenshot capture internals: capture session rules, display coordinates, window commands, the overlay, translation and editor shortcuts each live in one tested place. Capture, editing and shortcuts behave as before.
+
 ## [1.3.1](https://github.com/toughCSB/Ultra-Clipboard/compare/v1.3.0...v1.3.1) (2026-11-17)
 
 ### Added
