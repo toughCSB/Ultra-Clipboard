@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindo
 
 use super::backend;
 use super::geometry::PixelRect;
+use super::session::{Event, Reveal};
 use super::state::{CaptureSession, MonitorGeometry, ScreenshotState};
 use super::{CaptureMode, OVERLAY_WINDOW_LABEL_PREFIX, OVERLAY_WINDOW_TITLE};
 use crate::core::events;
@@ -66,15 +67,6 @@ pub fn state_for(session: &CaptureSession, label: &str) -> Option<OverlayState> 
     })
 }
 
-/// When an overlay becomes visible.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Reveal {
-    /// After the frontend draws the frozen frame (see [`reveal`]).
-    AfterPaint,
-    /// Right away and without focus, over the live screen, before the capture.
-    Now,
-}
-
 /// Prepares one overlay per captured monitor and asks each frontend to paint.
 pub fn present(app: &AppHandle, session_id: u64, when: Reveal) -> Result<()> {
     let started = Instant::now();
@@ -111,7 +103,7 @@ pub fn present(app: &AppHandle, session_id: u64, when: Reveal) -> Result<()> {
         }
         schedule_ready_timeout(app, label.clone(), session_id);
 
-        if when == Reveal::Now {
+        if when == Reveal::Immediate {
             show(app, label, session_id, false)?;
         }
     }
@@ -195,8 +187,10 @@ pub fn prewarm(app: &AppHandle, count: usize) {
 pub fn reveal(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
     show(app, label, session_id, true)?;
     if app.get_webview_window(label).is_some() {
-        app.state::<ScreenshotState>()
-            .mark_overlay_painted(session_id, label);
+        app.state::<ScreenshotState>().apply(Event::OverlayPainted {
+            id: session_id,
+            label: label.to_owned(),
+        });
     }
     Ok(())
 }
@@ -323,118 +317,9 @@ fn schedule_ready_timeout(app: &AppHandle, label: String, session_id: u64) {
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            let state = main_app.state::<ScreenshotState>();
-            cancel_unpainted_overlay(&state, session_id, &main_label, || {
-                log::warn!("screenshot overlay {main_label} was not painted in time");
-                super::cancel_capture(&main_app, Some(session_id));
-            });
+            super::paint_timed_out(&main_app, session_id, &main_label);
         }) {
             log::warn!("screenshot overlay timeout dispatch failed for {label}: {err}");
         }
     });
-}
-
-fn cancel_unpainted_overlay(
-    state: &ScreenshotState,
-    session_id: u64,
-    label: &str,
-    cancel: impl FnOnce(),
-) -> bool {
-    if !state.overlay_paint_pending(session_id, label) {
-        return false;
-    }
-    cancel();
-    true
-}
-
-#[cfg(test)]
-mod tests {
-    use std::cell::Cell;
-
-    use chrono::Local;
-
-    use super::*;
-    use crate::screenshot::state::{MonitorFrame, MonitorGeometry};
-
-    fn session(id: u64) -> CaptureSession {
-        let bounds = PixelRect::new(0, 0, 2, 2);
-        CaptureSession {
-            id,
-            mode: CaptureMode::Area,
-            frames: vec![MonitorFrame {
-                label: label_for(0),
-                monitor: MonitorGeometry {
-                    bounds,
-                    work_area: bounds,
-                    scale_factor: 1.0,
-                },
-                rgba: None,
-            }],
-            windows: Vec::new(),
-            cursor_label: label_for(0),
-            previous_foreground: None,
-            captured_at: Local::now(),
-            source_title: None,
-        }
-    }
-
-    #[test]
-    fn native_visibility_without_frontend_paint_still_times_out() {
-        let state = ScreenshotState::default();
-        let id = state.try_begin_capture().unwrap();
-        assert!(state.set_session(session(id)));
-        let cancelled = Cell::new(0);
-
-        assert!(cancel_unpainted_overlay(&state, id, &label_for(0), || {
-            cancelled.set(cancelled.get() + 1);
-        }));
-        assert_eq!(cancelled.get(), 1);
-    }
-
-    #[test]
-    fn wrong_id_or_label_cannot_acknowledge_or_cancel() {
-        let state = ScreenshotState::default();
-        let id = state.try_begin_capture().unwrap();
-        assert!(state.set_session(session(id)));
-        assert!(!state.mark_overlay_painted(id + 1, &label_for(0)));
-        assert!(!state.mark_overlay_painted(id, &label_for(1)));
-        assert!(!cancel_unpainted_overlay(
-            &state,
-            id + 1,
-            &label_for(0),
-            || panic!("stale cancel")
-        ));
-        assert!(!cancel_unpainted_overlay(
-            &state,
-            id,
-            &label_for(1),
-            || panic!("wrong label")
-        ));
-        assert!(state.overlay_paint_pending(id, &label_for(0)));
-    }
-
-    #[test]
-    fn matching_paint_prevents_timeout_and_old_timer_cannot_cancel_new_session() {
-        let state = ScreenshotState::default();
-        let old = state.try_begin_capture().unwrap();
-        assert!(state.set_session(session(old)));
-        assert!(state.mark_overlay_painted(old, &label_for(0)));
-        assert!(!cancel_unpainted_overlay(
-            &state,
-            old,
-            &label_for(0),
-            || panic!("painted")
-        ));
-        assert!(state.finish_capture(old));
-
-        let current = state.try_begin_capture().unwrap();
-        assert!(state.set_session(session(current)));
-        assert!(!cancel_unpainted_overlay(
-            &state,
-            old,
-            &label_for(0),
-            || panic!("old timer")
-        ));
-        assert!(state.overlay_paint_pending(current, &label_for(0)));
-    }
 }

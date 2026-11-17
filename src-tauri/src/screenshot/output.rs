@@ -14,6 +14,7 @@ use image::{ImageBuffer, ImageFormat, Rgba};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSEvent;
 use serde::Serialize;
+use tauri::http::HeaderMap;
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
@@ -102,9 +103,13 @@ pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
     let InvokeBody::Raw(body) = request.body() else {
         return Err(invalid("screenshot export must send raw pixels"));
     };
+
+    parse_parts(request.headers(), body)
+}
+
+fn parse_parts(headers: &HeaderMap, body: &[u8]) -> Result<ExportRequest> {
     let header = |name: &str| -> Result<&str> {
-        request
-            .headers()
+        headers
             .get(name)
             .and_then(|value| value.to_str().ok())
             .ok_or_else(|| invalid("screenshot export headers are incomplete"))
@@ -135,7 +140,7 @@ pub fn parse_request(request: &Request<'_>) -> Result<ExportRequest> {
         request_id,
         offset_x,
         offset_y,
-        rgba: body.clone(),
+        rgba: body.to_vec(),
     })
 }
 
@@ -779,6 +784,103 @@ mod tests {
             Some(ExportAction::Translate)
         );
         assert_eq!(ExportAction::parse("drag"), None);
+    }
+
+    fn export_headers(action: &str, width: &str, height: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (name, value) in [
+            (LABEL_HEADER, "screenshot-editor-1"),
+            (ACTION_HEADER, action),
+            (WIDTH_HEADER, width),
+            (HEIGHT_HEADER, height),
+            (OFFSET_X_HEADER, "3"),
+            (OFFSET_Y_HEADER, "-4"),
+        ] {
+            headers.insert(name, value.parse().unwrap());
+        }
+
+        headers
+    }
+
+    fn parse_error(headers: &HeaderMap, body: &[u8]) -> String {
+        parse_parts(headers, body).err().unwrap().to_string()
+    }
+
+    #[test]
+    fn export_request_parses_valid_headers() {
+        let headers = export_headers("saveAs", "2", "1");
+        let request = parse_parts(&headers, &[0; 8]).unwrap();
+
+        assert_eq!(request.label, "screenshot-editor-1");
+        assert_eq!(request.action, ExportAction::SaveAs);
+        assert_eq!((request.width, request.height), (2, 1));
+        assert_eq!((request.offset_x, request.offset_y), (3, -4));
+        assert_eq!(request.request_id, None);
+        assert_eq!(request.rgba.len(), 8);
+    }
+
+    #[test]
+    fn export_request_rejects_missing_header() {
+        let mut headers = export_headers("copy", "2", "1");
+        headers.remove(LABEL_HEADER);
+        assert!(parse_error(&headers, &[0; 8]).contains("headers are incomplete"));
+
+        let mut headers = export_headers("copy", "2", "1");
+        headers.remove(OFFSET_X_HEADER);
+        assert!(parse_error(&headers, &[0; 8]).contains("headers are incomplete"));
+    }
+
+    #[test]
+    fn export_request_rejects_bad_action_and_numbers() {
+        let headers = export_headers("drag", "2", "1");
+        assert!(parse_error(&headers, &[0; 8]).contains("action is invalid"));
+
+        let headers = export_headers("copy", "wide", "1");
+        assert!(parse_error(&headers, &[0; 8]).contains("headers are invalid"));
+    }
+
+    #[test]
+    fn export_request_rejects_pixel_length_mismatch() {
+        let headers = export_headers("copy", "2", "1");
+
+        assert!(parse_error(&headers, &[0; 7]).contains("pixels do not match"));
+    }
+
+    #[test]
+    fn translate_request_needs_a_bounded_request_id() {
+        let mut headers = export_headers("translate", "2", "1");
+        assert!(parse_error(&headers, &[0; 8]).contains("headers are incomplete"));
+
+        for id in [
+            "0",
+            &(super::super::translation::MAX_REQUEST_ID + 1).to_string(),
+        ] {
+            headers.insert(REQUEST_ID_HEADER, id.parse().unwrap());
+            assert!(parse_error(&headers, &[0; 8]).contains("request ID is invalid"));
+        }
+
+        headers.insert(REQUEST_ID_HEADER, "7".parse().unwrap());
+        assert_eq!(parse_parts(&headers, &[0; 8]).unwrap().request_id, Some(7));
+    }
+
+    #[test]
+    fn export_header_names_match_the_frontend_definition() {
+        let frontend = include_str!("../../../src/commands/index.ts");
+
+        for name in [
+            LABEL_HEADER,
+            ACTION_HEADER,
+            WIDTH_HEADER,
+            HEIGHT_HEADER,
+            REQUEST_ID_HEADER,
+            OFFSET_X_HEADER,
+            OFFSET_Y_HEADER,
+        ] {
+            assert!(
+                frontend.contains(&format!("\"{name}\"")),
+                "frontend does not send {name}"
+            );
+        }
     }
 
     #[test]

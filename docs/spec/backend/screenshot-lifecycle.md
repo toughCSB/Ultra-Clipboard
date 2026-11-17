@@ -11,10 +11,22 @@ native work starts, including captures which do not use a selection overlay.
   capture identity. Delayed pixels, failures, and timeouts cannot end a newer
   capture.
 - Taking a selection session does not release the active capture reservation.
-  Cancellation releases it after hiding overlays and restoring the foreground;
-  editor handoff releases it after hiding overlays for the matching editor.
+  Cancellation and editor handoff release it in the same main-thread step that
+  hides the overlays and restores the foreground. A new capture can only be
+  reserved from the main thread (`begin_capture` is dispatched there), so it
+  cannot start between the release and its window effects. Reserving off the
+  main thread would break this guarantee.
 - The matching editor may complete its handoff only once. A late readiness or
   close callback from another editor cannot hide the current overlays.
+
+The rules live in `screenshot/session.rs`: given the current phase and an event
+(publish, fill, overlay painted, paint timeout, commit selection,
+direct capture, editor failed, editor settled, cancel, fail) it returns the
+effects to run (present, refresh or hide overlays, restore foreground, open an
+editor, open the permission preference). It does not touch Tauri, threads or
+windows. The adapter in `screenshot/mod.rs` applies each event and runs its
+effects on the main thread. `reveal_painted_window` serves editors and pins and
+settles the overlay handoff only when the label matches the pending editor.
 
 ## Window Effects
 
@@ -49,8 +61,12 @@ macOS lays displays out in points, and a 1x display next to a 2x display would
 overlap if each origin used its own scale. Capture pixels therefore keep each
 display's scale inside the display, but place every display origin at two
 pixels per point. Code that crosses into macOS points goes through the backend:
-`cursor_monitor` finds the display under the pointer from Core Graphics points,
-and `window_frame` places overlays, editors, and pins with logical positions.
+`monitors` lists displays from any thread, `cursor_monitor` finds the display
+under the pointer from Core Graphics points, `window_frame` places overlays,
+editors, and pins with logical positions, `center_window` centres an editor,
+and `resize_around_anchor` rescales a pin in logical units so its anchor stays
+fixed on a display of any scale. Both OS adapters expose the same set; callers
+outside `screenshot/backend/` do not multiply or divide by a scale factor.
 Tauri's physical positions are not used on macOS, because Tauri converts them
 with the main display's scale or with the scale of the display a window sits on.
 
@@ -102,10 +118,10 @@ textured backgrounds and insufficient samples use contrasting dark or light text
 
 ## Verification
 
-`cargo test screenshot:: --lib` covers stale identities, cancelled pixels,
-matching and repeated editor handoffs, and cancellation effects through the
-same helper used by production cancellation. Assertions include whether hide
-and foreground restoration occur, not just the final session value.
+`cargo test screenshot::session --lib` covers stale identities, cancelled pixels,
+matching and repeated editor handoffs, paint timeouts, and failure effects
+through the same events production uses. Assertions include whether hide and
+foreground restoration occur, not just the final session value.
 
 Native capture, focus restoration, and first-paint display still require a
 desktop check on each supported platform; state tests do not prove native

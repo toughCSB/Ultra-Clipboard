@@ -6,12 +6,11 @@ use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::window::Color;
-use tauri::{
-    AppHandle, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewUrl,
-    WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Manager, Position, Size, WebviewUrl, WebviewWindowBuilder};
 
+use super::backend;
 use super::geometry::PixelRect;
+use super::state::MonitorGeometry;
 use super::state::{CapturedImage, ScreenshotState};
 use super::{editor, output, PIN_WINDOW_LABEL_PREFIX};
 use crate::core::{AppError, Result};
@@ -90,28 +89,15 @@ pub fn set_scale(
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| AppError::Other(anyhow::anyhow!("pin window is closed")))?;
-    let position = window
-        .outer_position()
-        .map_err(|err| anyhow::anyhow!(err))?;
-    let size = window.inner_size().map_err(|err| anyhow::anyhow!(err))?;
-    let current = PixelRect::new(position.x, position.y, size.width, size.height);
-    let next = scaled_bounds(
-        current,
-        image.width,
-        image.height,
-        scale,
+    let (width, height) = target_size(&image, scale);
+
+    backend::resize_around_anchor(
+        &window,
+        width,
+        height,
         anchor_x.clamp(0.0, 1.0),
         anchor_y.clamp(0.0, 1.0),
-    );
-
-    window
-        .set_size(PhysicalSize::new(next.width, next.height))
-        .map_err(|err| anyhow::anyhow!(err))?;
-    window
-        .set_position(PhysicalPosition::new(next.x, next.y))
-        .map_err(|err| anyhow::anyhow!(err))?;
-
-    Ok(())
+    )
 }
 
 pub fn show_menu(app: &AppHandle, label: &str) -> Result<()> {
@@ -195,23 +181,40 @@ pub fn handle_menu_event(app: &AppHandle, id: &str) -> bool {
 
 /// Fits the pin inside the monitor the image came from, or the first one.
 fn initial_frame(app: &AppHandle, image: &CapturedImage) -> (Position, Size) {
-    let monitors = super::monitors_from_any_thread(app).unwrap_or_else(|err| {
+    let monitors = backend::monitors(app).unwrap_or_else(|err| {
         log::warn!("screenshot pin could not read monitors: {err}");
         Vec::new()
     });
-    let origin = (f64::from(image.origin_x), f64::from(image.origin_y));
-    let Some(monitor) = monitors
-        .iter()
-        .find(|monitor| monitor.bounds.contains_point(origin.0, origin.1))
-        .or_else(|| monitors.first())
-    else {
-        return (
-            PhysicalPosition::new(image.origin_x, image.origin_y).into(),
-            PhysicalSize::new(image.width, image.height).into(),
-        );
+
+    pin_frame(&monitors, image)
+}
+
+fn pin_frame(monitors: &[MonitorGeometry], image: &CapturedImage) -> (Position, Size) {
+    let monitor = backend::monitor_at_pixel(
+        monitors,
+        f64::from(image.origin_x),
+        f64::from(image.origin_y),
+    )
+    .and_then(|index| monitors.get(index))
+    .or_else(|| monitors.first());
+    let Some(monitor) = monitor else {
+        return backend::window_frame(&capture_monitor(image), capture_area(image));
     };
 
-    super::backend::window_frame(monitor, fit_inside(image, monitor.bounds))
+    backend::window_frame(monitor, fit_inside(image, monitor.bounds))
+}
+
+fn capture_area(image: &CapturedImage) -> PixelRect {
+    PixelRect::new(image.origin_x, image.origin_y, image.width, image.height)
+}
+
+/// Stands in for the monitor when none could be read: the capture itself.
+fn capture_monitor(image: &CapturedImage) -> MonitorGeometry {
+    MonitorGeometry {
+        bounds: capture_area(image),
+        work_area: capture_area(image),
+        scale_factor: image.scale_factor,
+    }
 }
 
 fn fit_inside(image: &CapturedImage, area: PixelRect) -> PixelRect {
@@ -230,25 +233,13 @@ fn fit_inside(image: &CapturedImage, area: PixelRect) -> PixelRect {
     PixelRect::new(x as i32, y as i32, width, height)
 }
 
-fn scaled_bounds(
-    current: PixelRect,
-    image_width: u32,
-    image_height: u32,
-    scale: f64,
-    anchor_x: f64,
-    anchor_y: f64,
-) -> PixelRect {
+/// The pin size in pixels for `scale` of its image.
+fn target_size(image: &CapturedImage, scale: f64) -> (u32, u32) {
     let scale = scale.clamp(MIN_SCALE, MAX_SCALE);
-    let width = ((f64::from(image_width) * scale).round() as u32).max(MIN_SIDE);
-    let height = ((f64::from(image_height) * scale).round() as u32).max(MIN_SIDE);
-    let pivot_x = f64::from(current.x) + f64::from(current.width) * anchor_x;
-    let pivot_y = f64::from(current.y) + f64::from(current.height) * anchor_y;
 
-    PixelRect::new(
-        (pivot_x - f64::from(width) * anchor_x).round() as i32,
-        (pivot_y - f64::from(height) * anchor_y).round() as i32,
-        width,
-        height,
+    (
+        ((f64::from(image.width) * scale).round() as u32).max(MIN_SIDE),
+        ((f64::from(image.height) * scale).round() as u32).max(MIN_SIDE),
     )
 }
 
@@ -261,7 +252,7 @@ fn schedule_ready_fallback(app: &AppHandle, label: String) {
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            if let Err(err) = editor::reveal(&main_app, &main_label) {
+            if let Err(err) = super::reveal_painted_window(&main_app, &main_label) {
                 log::warn!("reveal screenshot pin {main_label} after fallback failed: {err}");
             }
         }) {
@@ -306,21 +297,52 @@ mod tests {
     }
 
     #[test]
-    fn scaling_keeps_anchor_point_fixed() {
-        let current = PixelRect::new(100, 100, 400, 200);
-        let next = scaled_bounds(current, 400, 200, 2.0, 0.5, 0.5);
+    fn scaling_is_clamped() {
+        let image = image(0, 0, 400, 200);
 
-        assert_eq!(next, PixelRect::new(-100, 0, 800, 400));
+        assert_eq!(target_size(&image, 100.0).0, 1600);
+        assert_eq!(target_size(&image, 0.001).1, 20);
+    }
+
+    fn monitor(x: i32, width: u32, height: u32, scale: f64) -> MonitorGeometry {
+        let bounds = PixelRect::new(x, 0, width, height);
+
+        MonitorGeometry {
+            bounds,
+            work_area: bounds,
+            scale_factor: scale,
+        }
     }
 
     #[test]
-    fn scaling_is_clamped() {
-        let current = PixelRect::new(0, 0, 400, 200);
+    fn pin_without_monitors_still_goes_through_the_backend() {
+        let image = image(400, 900, 320, 180);
 
         assert_eq!(
-            scaled_bounds(current, 400, 200, 100.0, 0.0, 0.0).width,
-            1600
+            pin_frame(&[], &image),
+            backend::window_frame(&capture_monitor(&image), capture_area(&image))
         );
-        assert_eq!(scaled_bounds(current, 400, 200, 0.001, 0.0, 0.0).height, 20);
+    }
+
+    #[test]
+    fn pin_uses_the_monitor_holding_the_capture_origin() {
+        let monitors = [monitor(0, 1920, 1080, 1.0), monitor(1920, 3840, 2160, 2.0)];
+        let image = image(2000, 100, 320, 180);
+
+        assert_eq!(
+            pin_frame(&monitors, &image),
+            backend::window_frame(&monitors[1], PixelRect::new(2000, 100, 320, 180))
+        );
+    }
+
+    #[test]
+    fn pin_off_every_monitor_falls_back_to_the_first() {
+        let monitors = [monitor(0, 1920, 1080, 1.0), monitor(1920, 3840, 2160, 2.0)];
+        let image = image(9000, 9000, 320, 180);
+
+        assert_eq!(
+            pin_frame(&monitors, &image),
+            backend::window_frame(&monitors[0], fit_inside(&image, monitors[0].bounds))
+        );
     }
 }

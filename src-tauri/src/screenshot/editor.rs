@@ -5,9 +5,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-use super::geometry::PixelRect;
+use super::backend;
 use super::state::{CapturedImage, MonitorGeometry, ScreenshotState};
 use super::EDITOR_WINDOW_LABEL_PREFIX;
 use crate::core::events;
@@ -49,21 +49,20 @@ impl ImageInfo {
 }
 
 /// Opens a hidden editor sized around the image on the capture monitor.
-/// The window is shown once the frontend has painted the image.
+/// The window is shown once the frontend has painted the image. A handoff
+/// editor uses the label its session reserved.
 pub fn open(
     app: &AppHandle,
     image: CapturedImage,
     monitor: MonitorGeometry,
-    handoff_overlay: Option<u64>,
+    handoff_label: Option<String>,
 ) -> Result<()> {
     let started = Instant::now();
     let state = app.state::<ScreenshotState>();
-    let label = format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id());
+    let label =
+        handoff_label.unwrap_or_else(|| format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id()));
     let (width, height) = window_size(&image, &monitor);
     state.insert_image(&label, image);
-    if let Some(id) = handoff_overlay {
-        state.begin_editor_handoff(id, &label);
-    }
 
     let builder = WebviewWindowBuilder::new(
         app,
@@ -95,7 +94,7 @@ pub fn open(
         }
     };
 
-    if let Err(err) = center_on_monitor(&window, &monitor) {
+    if let Err(err) = backend::center_window(&window, &monitor) {
         log::warn!("center screenshot editor {label} failed: {err}");
     }
     log::info!(
@@ -139,34 +138,6 @@ fn is_screenshot_document(url: &tauri::Url, route: &str, dev_url: Option<&tauri:
             == Some(route)
 }
 
-/// Shows a painted editor or pin window and brings it to the front.
-pub fn reveal(app: &AppHandle, label: &str) -> Result<()> {
-    let Some(window) = app.get_webview_window(label) else {
-        finish_overlay_handoff(app, label);
-        return Ok(());
-    };
-    if window.is_visible().unwrap_or(false) {
-        finish_overlay_handoff(app, label);
-        return Ok(());
-    }
-
-    if let Err(err) = window.show() {
-        finish_overlay_handoff(app, label);
-        return Err(anyhow::anyhow!(err).into());
-    }
-    finish_overlay_handoff(app, label);
-    window.set_focus().map_err(|err| anyhow::anyhow!(err))?;
-
-    Ok(())
-}
-
-fn finish_overlay_handoff(app: &AppHandle, label: &str) {
-    let state = app.state::<ScreenshotState>();
-    state.complete_editor_handoff(label, || {
-        super::overlay::hide_all(app);
-    });
-}
-
 /// Asks the editor frontend to run its close flow, which confirms unsaved edits.
 pub fn request_close(app: &AppHandle, label: &str) {
     let non_editor_document = app
@@ -198,40 +169,16 @@ pub fn request_close(app: &AppHandle, label: &str) {
 }
 
 fn window_size(image: &CapturedImage, monitor: &MonitorGeometry) -> (f64, f64) {
-    let scale = monitor.scale_factor.max(1.0);
-    let max_width = f64::from(monitor.work_area.width) / scale * WORK_AREA_RATIO;
-    let max_height = f64::from(monitor.work_area.height) / scale * WORK_AREA_RATIO;
-    let image_width = f64::from(image.width) / image.scale_factor.max(1.0);
-    let image_height = f64::from(image.height) / image.scale_factor.max(1.0);
+    let (area_width, area_height) = backend::work_area_logical_size(monitor);
+    let max_width = area_width * WORK_AREA_RATIO;
+    let max_height = area_height * WORK_AREA_RATIO;
+    let (image_width, image_height) = backend::image_logical_size(image);
 
     let width = (image_width + CANVAS_MARGIN).clamp(MIN_WIDTH.min(max_width), max_width);
     let height = (image_height + TOOLBAR_HEIGHT + CANVAS_MARGIN)
         .clamp(MIN_HEIGHT.min(max_height), max_height);
 
     (width.round(), height.round())
-}
-
-fn center_on_monitor(window: &WebviewWindow, monitor: &MonitorGeometry) -> Result<()> {
-    // The window may sit on a display with another scale; measure it in that
-    // display's units, then in the target monitor's pixels.
-    let size = window
-        .outer_size()
-        .map_err(|err| anyhow::anyhow!(err))?
-        .to_logical::<f64>(window.scale_factor().map_err(|err| anyhow::anyhow!(err))?)
-        .to_physical::<u32>(monitor.scale_factor);
-    let area = monitor.work_area;
-    let x = i64::from(area.x) + (i64::from(area.width) - i64::from(size.width)).max(0) / 2;
-    let y = i64::from(area.y) + (i64::from(area.height) - i64::from(size.height)).max(0) / 2;
-    let (position, _) = super::backend::window_frame(
-        monitor,
-        PixelRect::new(x as i32, y as i32, size.width, size.height),
-    );
-
-    window
-        .set_position(position)
-        .map_err(|err| anyhow::anyhow!(err))?;
-
-    Ok(())
 }
 
 fn schedule_ready_fallback(app: &AppHandle, label: String) {
@@ -243,7 +190,7 @@ fn schedule_ready_fallback(app: &AppHandle, label: String) {
         let main_app = app.clone();
         let main_label = label.clone();
         if let Err(err) = app.run_on_main_thread(move || {
-            if let Err(err) = reveal(&main_app, &main_label) {
+            if let Err(err) = super::reveal_painted_window(&main_app, &main_label) {
                 log::warn!("reveal screenshot window {main_label} after fallback failed: {err}");
             }
         }) {
