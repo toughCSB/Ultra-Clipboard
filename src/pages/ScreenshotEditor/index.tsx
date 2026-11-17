@@ -28,7 +28,6 @@ import { getMessageApi, getModalApi } from "@/utils/feedback";
 import { log } from "@/utils/log";
 import {
   intersectRects,
-  isArrowKey,
   nudgeRect,
   type PixelPoint,
   type PixelRect,
@@ -61,12 +60,28 @@ import {
 } from "./model/document";
 import { createDragGesture } from "./model/dragGesture";
 import {
+  createDragPreparationCache,
+  type DragIdentity,
+  sameDragIdentity,
+} from "./model/dragPreparation";
+import {
+  createExportState,
+  hasUnexportedChanges,
+  recordExport,
+} from "./model/exportState";
+import {
   commitHistory,
   createHistory,
   type History,
   redoHistory,
   undoHistory,
 } from "./model/history";
+import {
+  type EditorCommand,
+  type KeyMode,
+  type KeyTarget,
+  resolveKey,
+} from "./model/keymap";
 import { type PixelSpans, readPixelHex } from "./model/pixels";
 import { applyStyleToShape, styleFromShape } from "./model/shapeStyle";
 import { createShapeId, moveShape, type TextShape } from "./model/shapes";
@@ -76,7 +91,6 @@ import {
   loadToolStyle,
   saveToolStyle,
   type ToolStyle,
-  toolByCode,
 } from "./model/tools";
 import {
   activeLayer,
@@ -95,7 +109,6 @@ import {
 } from "./model/viewport";
 import { renderScenePixels } from "./render/renderPixels";
 import { measureTextBox, TEXT_LINE_HEIGHT, textPadding } from "./render/text";
-import type { TranslationLayer } from "./render/translation";
 
 interface LoadedImage {
   bitmap: ImageBitmap;
@@ -105,13 +118,6 @@ interface LoadedImage {
 
 interface CloseRequestPayload {
   label: string;
-}
-
-interface DragPreparation {
-  document: EditorDocument;
-  ready: Promise<boolean>;
-  selection: PixelRect | null;
-  translation: TranslationLayer | null;
 }
 
 interface TextSelectionMode {
@@ -170,9 +176,8 @@ const ScreenshotEditor: FC = () => {
     useState<ScreenshotTranslationStatus["source"]>(null);
   const [translationKeyBusy, setTranslationKeyBusy] = useState(false);
   const bitmapRef = useRef<ImageBitmap | null>(null);
-  const exportedDocumentRef = useRef<EditorDocument | null>(null);
-  const dragPreparationRef = useRef<DragPreparation | null>(null);
-  const dragPreparationIdRef = useRef(0);
+  const exportStateRef = useRef(createExportState<EditorDocument>(null));
+  const dragPreparationRef = useRef(createDragPreparationCache());
   const dragGestureRef = useRef(createDragGesture());
   const dragDocumentRef = useRef<EditorDocument | null>(null);
   const dragSelectionRef = useRef<PixelRect | null>(null);
@@ -208,8 +213,7 @@ const ScreenshotEditor: FC = () => {
     },
     onKeyStatus: applyTranslationKeyStatus,
     onLayerChange: () => {
-      dragPreparationRef.current = null;
-      dragPreparationIdRef.current += 1;
+      dragPreparationRef.current.invalidate();
     },
     onNeedsKey: () => {
       setTranslationKeyModalOpen(true);
@@ -263,7 +267,7 @@ const ScreenshotEditor: FC = () => {
       });
 
       bitmapRef.current = bitmap;
-      exportedDocumentRef.current = initial;
+      exportStateRef.current = createExportState(initial);
       setImage({ bitmap, info, pixels });
       setHistory(createHistory(initial));
     } catch (error) {
@@ -750,9 +754,13 @@ const ScreenshotEditor: FC = () => {
         return false;
       }
 
-      if (!translated && presentRef.current === document) {
-        exportedDocumentRef.current = document;
-      }
+      exportStateRef.current = recordExport(exportStateRef.current, {
+        action,
+        current: presentRef.current,
+        document,
+        savedPath: result.savedPath,
+        translated,
+      });
 
       if (action === "copy") {
         getMessageApi().success(t("commands:messages.copied"));
@@ -777,56 +785,35 @@ const ScreenshotEditor: FC = () => {
     }
   };
 
-  const prepareDrag = () => {
+  const wantedDragIdentity = (): DragIdentity => {
+    return {
+      document: present,
+      selection,
+      translation: translation.activeLayer(),
+    };
+  };
+
+  const liveDragIdentity = (): DragIdentity => {
+    return {
+      document: dragDocumentRef.current,
+      selection: dragSelectionRef.current,
+      translation: translation.activeLayer(),
+    };
+  };
+
+  const prepareDrag = (wanted = wantedDragIdentity()) => {
     if (!present) return null;
 
-    const current = dragPreparationRef.current;
-    const layer = translation.activeLayer();
-    if (
-      current?.document === present &&
-      current.selection === selection &&
-      current.translation === layer
-    ) {
-      return current.ready;
-    }
-
-    const previousReady = current?.ready;
-    const preparationId = ++dragPreparationIdRef.current;
-    const ready: Promise<boolean> = (async () => {
-      if (previousReady) await previousReady;
-      if (
-        dragDocumentRef.current !== present ||
-        dragSelectionRef.current !== selection ||
-        translation.activeLayer() !== layer
-      ) {
-        return false;
-      }
-      try {
-        const prepared = (await renderAndExport("prepareDrag")) !== null;
-        return (
-          prepared &&
-          dragDocumentRef.current === present &&
-          dragSelectionRef.current === selection &&
-          translation.activeLayer() === layer
-        );
-      } catch (error) {
+    return dragPreparationRef.current.prepare(
+      wanted,
+      liveDragIdentity,
+      async () => {
+        return (await renderAndExport("prepareDrag")) !== null;
+      },
+      (error) => {
         log.error("prepare screenshot drag failed", error);
-        if (dragPreparationIdRef.current === preparationId) {
-          dragPreparationRef.current = null;
-        }
-
-        return false;
-      }
-    })();
-
-    dragPreparationRef.current = {
-      document: present,
-      ready,
-      selection,
-      translation: layer,
-    };
-
-    return ready;
+      },
+    );
   };
 
   const handleDragPointerEnter = () => {
@@ -851,29 +838,19 @@ const ScreenshotEditor: FC = () => {
       y: event.clientY,
     };
     const handle = event.currentTarget;
-    const gestureDocument = present;
-    const gestureSelection = selection;
-    const gestureTranslation = translation.activeLayer();
+    const gesture = wantedDragIdentity();
+    const stillCurrent = () => {
+      return sameDragIdentity(liveDragIdentity(), gesture);
+    };
     try {
       await dragGestureRef.current.move(
         pointer,
         async () => {
-          const prepared = await prepareDrag();
-          return (
-            Boolean(prepared) &&
-            dragDocumentRef.current === gestureDocument &&
-            dragSelectionRef.current === gestureSelection &&
-            translation.activeLayer() === gestureTranslation
-          );
+          const prepared = await prepareDrag(gesture);
+          return Boolean(prepared) && stillCurrent();
         },
         async () => {
-          if (
-            dragDocumentRef.current !== gestureDocument ||
-            dragSelectionRef.current !== gestureSelection ||
-            translation.activeLayer() !== gestureTranslation
-          ) {
-            return;
-          }
+          if (!stillCurrent()) return;
           if (handle.hasPointerCapture(pointer.pointerId)) {
             handle.releasePointerCapture(pointer.pointerId);
           }
@@ -1148,7 +1125,7 @@ const ScreenshotEditor: FC = () => {
     setTranslationKeyModalOpen(false);
     commitTextEdit();
 
-    if (!present || exportedDocumentRef.current === present) {
+    if (!hasUnexportedChanges(exportStateRef.current, present)) {
       void closeWindow();
       return;
     }
@@ -1207,257 +1184,120 @@ const ScreenshotEditor: FC = () => {
     return true;
   };
 
-  const handleModifiedKey = (event: KeyboardEvent, crop: PixelRect) => {
-    const run = (action: () => void) => {
-      event.preventDefault();
-      action();
-    };
-    const key = event.key;
-
-    if (selection && isArrowKey(key)) {
-      run(() => {
-        setSelection(
-          nudgeRect(selection, key, event.shiftKey ? 10 : 1, true, crop),
-        );
-      });
-      return;
-    }
-
-    switch (event.code) {
-      case "KeyC":
-        run(() => {
-          void runExport("copy");
-        });
+  const runCommand = (command: EditorCommand) => {
+    switch (command.type) {
+      case "actualSize":
+        showActualSize();
         return;
-      case "KeyS":
-        run(() => {
-          void runExport("save");
-        });
+      case "cancelDrag":
+        cancelDragGesture();
         return;
-      case "KeyV":
-        run(() => {
-          void pasteImage();
-        });
+      case "clearSelection":
+        setSelection(null);
         return;
-      case "KeyZ":
-        run(event.shiftKey ? redo : undo);
+      case "close":
+        requestClose();
         return;
-      case "KeyY":
-        run(redo);
+      case "copy":
+        void runExport("copy");
         return;
-      case "KeyW":
-        run(requestClose);
+      case "copyAndClose":
+        void handleCopyAndClose();
         return;
-      case "Enter":
-        run(() => {
-          void handleCopyAndClose();
-        });
+      case "copyColor":
+        void copyHoverColor();
         return;
-      case "KeyO":
-        if (event.shiftKey) {
-          run(() => {
-            void runExport("ocr");
-          });
+      case "copyImageText":
+        void copySelectedImageText();
+        return;
+      case "crop":
+        cropToSelection();
+        return;
+      case "deleteShape":
+        deleteSelectedShape();
+        return;
+      case "deselectShape":
+        setSelectedId(null);
+        return;
+      case "fit":
+        fit();
+        return;
+      case "holdPan":
+        setPanHeld(true);
+        return;
+      case "holdZoom":
+        setZoomHeld(true);
+        return;
+      case "leaveTextSelection":
+        leaveTextSelection();
+        return;
+      case "leaveTranslation":
+        translation.leave();
+        return;
+      case "nudgeSelection":
+        if (selection && present) {
+          setSelection(
+            nudgeRect(
+              selection,
+              command.key,
+              command.step,
+              command.extend,
+              present.crop,
+            ),
+          );
         }
         return;
-      case "Digit0":
-      case "Numpad0":
-        run(fit);
+      case "nudgeShape":
+        nudgeSelectedShape(command.key, command.step);
         return;
-      case "Digit1":
-      case "Numpad1":
-        run(showActualSize);
+      case "ocr":
+        void runExport("ocr");
         return;
-      case "Equal":
-      case "NumpadAdd":
-        run(() => {
-          zoomBy(ZOOM_STEP);
-        });
+      case "paste":
+        void pasteImage();
         return;
-      case "Minus":
-      case "NumpadSubtract":
-        run(() => {
-          zoomBy(1 / ZOOM_STEP);
-        });
+      case "redo":
+        redo();
+        return;
+      case "save":
+        void runExport("save");
+        return;
+      case "selectTool":
+        changeTool(command.tool);
+        return;
+      case "undo":
+        undo();
+        return;
+      case "zoom":
+        zoomBy(command.direction === "in" ? ZOOM_STEP : 1 / ZOOM_STEP);
         return;
     }
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (
-      dragGestureRef.current.active() &&
-      (event.key === "Escape" ||
-        event.key === "Backspace" ||
-        event.key === "BrowserBack" ||
-        (event.altKey && event.key === "ArrowLeft"))
-    ) {
-      event.preventDefault();
-      cancelDragGesture();
-      return;
-    }
-    if (translationKeyModalOpen) return;
-    if (
-      translation.current() &&
-      event.target instanceof HTMLElement &&
-      event.target.closest('[role="dialog"]')
-    ) {
-      return;
-    }
-    if (translation.current()) {
-      if (
-        event.key === "Escape" ||
-        event.key === "Backspace" ||
-        event.key === "BrowserBack" ||
-        (event.altKey && event.key === "ArrowLeft")
-      ) {
-        event.preventDefault();
-        translation.leave();
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
-        event.preventDefault();
-        void runExport("copy");
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyS") {
-        event.preventDefault();
-        void runExport("save");
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyW") {
-        event.preventDefault();
-        requestClose();
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "Enter") {
-        event.preventDefault();
-        void handleCopyAndClose();
-      } else if (
-        (event.ctrlKey || event.metaKey) &&
-        present &&
-        [
-          "Digit0",
-          "Digit1",
-          "Equal",
-          "Minus",
-          "Numpad0",
-          "Numpad1",
-          "NumpadAdd",
-          "NumpadSubtract",
-        ].includes(event.code)
-      ) {
-        handleModifiedKey(event, present.crop);
-      }
-      return;
-    }
-    if (textSelectionModeRef.current || pendingTextStartRef.current) {
-      if (
-        event.key === "Escape" ||
-        event.key === "Backspace" ||
-        event.key === "BrowserBack" ||
-        (event.altKey && event.key === "ArrowLeft")
-      ) {
-        event.preventDefault();
-        leaveTextSelection();
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
-        event.preventDefault();
-        void copySelectedImageText();
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyW") {
-        event.preventDefault();
-        requestClose();
-      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyS") {
-        event.preventDefault();
-        void runExport("save");
-      } else if (
-        (event.ctrlKey || event.metaKey) &&
-        present &&
-        [
-          "Digit0",
-          "Digit1",
-          "Equal",
-          "Minus",
-          "Numpad0",
-          "Numpad1",
-          "NumpadAdd",
-          "NumpadSubtract",
-        ].includes(event.code)
-      ) {
-        handleModifiedKey(event, present.crop);
-      }
-      return;
-    }
-    if (!present || textEditRef.current) return;
+    const mode: KeyMode = translation.current()
+      ? "translation"
+      : textSelectionModeRef.current || pendingTextStartRef.current
+        ? "textSelection"
+        : "edit";
+    const action = resolveKey(event, {
+      dragActive: dragGestureRef.current.active(),
+      hasDocument: present !== null,
+      hasSelectedId: selectedId !== null,
+      hasSelectedShape: present
+        ? findShape(present, selectedId) !== null
+        : false,
+      hasSelection: selection !== null,
+      keyModalOpen: translationKeyModalOpen,
+      mode,
+      target: keyTargetOf(event.target),
+      textEditing: textEditRef.current !== null,
+      tool,
+    });
+    if (!action) return;
 
-    const target = event.target;
-    if (
-      target instanceof HTMLElement &&
-      (target.closest("input, textarea, [contenteditable='true']") ||
-        target.closest("[data-editor-options]"))
-    ) {
-      return;
-    }
-
-    const key = event.key;
-
-    if (key === "Tab") {
-      event.preventDefault();
-      void copyHoverColor();
-      return;
-    }
-
-    if (event.code === "Space") {
-      event.preventDefault();
-      setPanHeld(true);
-      return;
-    }
-
-    if (event.ctrlKey || event.metaKey) {
-      handleModifiedKey(event, present.crop);
-      return;
-    }
-
-    if (event.altKey) return;
-
-    if (event.code === "KeyZ") {
-      setZoomHeld(true);
-      return;
-    }
-
-    if (key === "Delete" || key === "Backspace") {
-      if (selectedId) {
-        event.preventDefault();
-        deleteSelectedShape();
-      }
-      return;
-    }
-
-    if (key === "Enter") {
-      event.preventDefault();
-      cropToSelection();
-      return;
-    }
-
-    if (key === "Escape") {
-      if (selectedId) setSelectedId(null);
-      else if (selection) setSelection(null);
-      else if (tool !== "select") changeTool("select");
-      return;
-    }
-
-    if (isArrowKey(key)) {
-      const step = event.shiftKey ? 10 : 1;
-
-      if (nudgeSelectedShape(key, step)) {
-        event.preventDefault();
-        return;
-      }
-
-      if (selection) {
-        event.preventDefault();
-        setSelection(nudgeRect(selection, key, step, false, present.crop));
-      }
-      return;
-    }
-
-    if (event.repeat) return;
-
-    const definition = toolByCode(event.code);
-    if (definition) {
-      event.preventDefault();
-      changeTool(definition.id);
-    }
+    if (action.preventDefault) event.preventDefault();
+    runCommand(action.command);
   };
 
   const handleKeyUp = (event: KeyboardEvent) => {
@@ -1686,6 +1526,19 @@ const ScreenshotEditor: FC = () => {
     </div>
   );
 };
+
+function keyTargetOf(target: EventTarget | null): KeyTarget {
+  if (!(target instanceof HTMLElement)) {
+    return { inDialog: false, inField: false };
+  }
+
+  return {
+    inDialog: target.closest('[role="dialog"]') !== null,
+    inField:
+      target.closest("input, textarea, [contenteditable='true']") !== null ||
+      target.closest("[data-editor-options]") !== null,
+  };
+}
 
 function fileNameOf(path: string) {
   return path.split(/[\\/]/).pop() ?? path;
