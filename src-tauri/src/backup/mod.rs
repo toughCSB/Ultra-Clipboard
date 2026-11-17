@@ -28,7 +28,8 @@ use archive::{
     RESOURCES_ARCHIVE_DIR, SETTINGS_FILENAME,
 };
 use container::{inspect_backup_reader, read_backup_payload, write_container, FORMAT_VERSION};
-use merge::{merge_history, open_backup_db};
+use merge::merge_history;
+pub(crate) use merge::open_backup_db;
 
 pub const BACKUP_EXTENSION: &str = "ecopastebak";
 
@@ -179,8 +180,9 @@ pub async fn import_history_backup(
 
     match options.strategy {
         BackupImportStrategy::Merge => {
-            let pool = db.pool().await;
-            merge_import(app, &pool, temp.path(), &options).await
+            let access = app.state::<crate::storage::StorageAccess>();
+            let _operation = access.operation().await;
+            merge_import(app, db, temp.path(), &options).await
         }
         BackupImportStrategy::Overwrite => overwrite_import(app, db, temp.path(), &options).await,
     }
@@ -448,24 +450,35 @@ fn backup_source_paths(app: &AppHandle) -> Result<BackupSourcePaths> {
 
 async fn merge_import(
     app: &AppHandle,
-    pool: &SqlitePool,
+    db: &crate::db::DatabaseState,
     root: &Path,
     _options: &ImportHistoryBackupOptions,
 ) -> Result<ImportHistoryBackupResult> {
+    let resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
+    let pool = db.pool().await;
     let db_path = root.join(DB_ARCHIVE_DIR).join(DB_FILENAME);
     let backup_pool = open_backup_db(&db_path).await?;
-    let outcome = merge_history(pool, &backup_pool).await?;
-    let resources = root.join(RESOURCES_ARCHIVE_DIR);
-    let imported_resources =
-        copy_dir_missing(&resources, &crate::core::paths::resources_dir(app)?)?;
-    emit_clipboard_imported(app);
-
     let settings_path = root.join(CONFIG_ARCHIVE_DIR).join(SETTINGS_FILENAME);
     let mut patch = read_json_file(&settings_path)?;
     if let Some(settings) = patch.as_object_mut() {
         settings.remove("sync");
     }
-    change::commit(app, SettingsWrite::Patch(patch), OnEffectFailure::LogOnly).await?;
+    let resources = root.join(RESOURCES_ARCHIVE_DIR);
+    let imported_resources =
+        copy_dir_missing(&resources, &crate::core::paths::resources_dir(app)?)?;
+    let outcome = merge_history(&pool, &backup_pool).await?;
+    emit_clipboard_imported(app);
+    drop(resource_access);
+
+    change::commit_during_storage_operation(
+        app,
+        SettingsWrite::Patch(patch),
+        OnEffectFailure::LogOnly,
+    )
+    .await?;
 
     Ok(ImportHistoryBackupResult {
         strategy: BackupImportStrategy::Merge,
@@ -483,33 +496,12 @@ async fn overwrite_import(
     root: &Path,
     _options: &ImportHistoryBackupOptions,
 ) -> Result<ImportHistoryBackupResult> {
-    let _pause_guard = pause_watcher(app);
-
-    let db_src = root.join(DB_ARCHIVE_DIR).join(DB_FILENAME);
-    let app_for_db = app.clone();
-    db.close_and_replace(|| {
-        let app = app_for_db.clone();
-        let db_src = db_src.clone();
-        async move {
-            replace_live_database(&app, &db_src)?;
-            crate::db::init(&app).await
-        }
-    })
-    .await?;
-
-    let resources_src = root.join(RESOURCES_ARCHIVE_DIR);
-    if resources_src.exists() {
-        replace_dir(&resources_src, &crate::core::paths::resources_dir(app)?)?;
-    }
-
-    refresh_apps_registry(app).await;
-    emit_clipboard_imported(app);
-
-    let settings_path = root.join(CONFIG_ARCHIVE_DIR).join(SETTINGS_FILENAME);
-    change::commit(
+    crate::storage::overwrite::overwrite(
         app,
-        SettingsWrite::ReplaceFromFile(&settings_path),
-        OnEffectFailure::LogOnly,
+        db,
+        &root.join(DB_ARCHIVE_DIR).join(DB_FILENAME),
+        &root.join(RESOURCES_ARCHIVE_DIR),
+        &root.join(CONFIG_ARCHIVE_DIR).join(SETTINGS_FILENAME),
     )
     .await?;
 
@@ -521,56 +513,6 @@ async fn overwrite_import(
         imported_settings: true,
         requires_restart: false,
     })
-}
-
-struct WatcherPauseRestore {
-    pause: Option<crate::clipboard::WatcherPause>,
-    previous: bool,
-}
-
-impl Drop for WatcherPauseRestore {
-    fn drop(&mut self) {
-        if let Some(pause) = &self.pause {
-            pause.set_paused(self.previous);
-        }
-    }
-}
-
-fn pause_watcher(app: &AppHandle) -> WatcherPauseRestore {
-    let pause = app.try_state::<crate::clipboard::WatcherPause>();
-    let previous = pause.as_ref().is_some_and(|state| state.is_paused());
-    if let Some(state) = pause.as_ref() {
-        state.set_paused(true);
-    }
-
-    WatcherPauseRestore {
-        pause: pause.map(|state| state.inner().clone()),
-        previous,
-    }
-}
-
-fn replace_live_database(app: &AppHandle, src: &Path) -> Result<()> {
-    let dst = crate::db::db_path(app)?;
-    copy_file_to(src, &dst)?;
-
-    for suffix in ["-wal", "-shm"] {
-        let sidecar = PathBuf::from(format!("{}{suffix}", dst.display()));
-        if sidecar.exists() {
-            fs::remove_file(&sidecar).with_context(|| format!("failed to remove {sidecar:?}"))?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn refresh_apps_registry(app: &AppHandle) {
-    let Some(registry) = app.try_state::<crate::clipboard::AppsRegistry>() else {
-        return;
-    };
-
-    if let Err(err) = registry.load_from_db().await {
-        log::warn!("refresh apps registry after backup overwrite failed: {err}");
-    }
 }
 
 fn read_json_file(path: &Path) -> Result<serde_json::Value> {
@@ -586,38 +528,6 @@ fn copy_file_to(src: &Path, dst: &Path) -> Result<()> {
     fs::copy(src, dst).with_context(|| format!("failed to copy {src:?} to {dst:?}"))?;
 
     Ok(())
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<u64> {
-    if !src.exists() {
-        return Ok(0);
-    }
-
-    let mut copied = 0;
-    for entry in WalkDir::new(src)
-        .into_iter()
-        .filter_map(std::result::Result::ok)
-    {
-        let path = entry.path();
-        let relative = path
-            .strip_prefix(src)
-            .with_context(|| format!("failed to strip {src:?} from {path:?}"))?;
-        if relative.as_os_str().is_empty() {
-            continue;
-        }
-
-        let target = dst.join(relative);
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&target)
-                .with_context(|| format!("failed to create directory {target:?}"))?;
-            continue;
-        }
-
-        copy_file_to(path, &target)?;
-        copied += 1;
-    }
-
-    Ok(copied)
 }
 
 fn copy_dir_missing(src: &Path, dst: &Path) -> Result<u64> {
@@ -648,15 +558,6 @@ fn copy_dir_missing(src: &Path, dst: &Path) -> Result<u64> {
     }
 
     Ok(copied)
-}
-
-fn replace_dir(src: &Path, dst: &Path) -> Result<()> {
-    if dst.exists() {
-        fs::remove_dir_all(dst).with_context(|| format!("failed to remove {dst:?}"))?;
-    }
-    copy_dir_all(src, dst)?;
-
-    Ok(())
 }
 
 fn emit_clipboard_imported(app: &AppHandle) {

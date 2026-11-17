@@ -45,6 +45,10 @@ async fn run_once(app: &AppHandle) {
         return;
     }
 
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .exclusive_owned()
+        .await;
     let pool = app.state::<crate::db::DatabaseState>().pool().await;
     match cleanup_history(&pool, cutoff, max).await {
         Ok(outcome) if outcome.removed == 0 => {}

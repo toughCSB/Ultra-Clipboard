@@ -11,6 +11,7 @@ window placement, or OS-specific side effects.
 | [Architecture](./architecture.md) | Adding Rust modules, changing startup, moving ownership between layers |
 | [Commands and Events](./commands-and-events.md) | Adding or changing Tauri commands, emits, command wrappers, or errors |
 | [Clipboard Pipeline](./clipboard-pipeline.md) | Clipboard capture, content typing, writeback, source apps, preview/list payloads |
+| [Screenshot Lifecycle](./screenshot-lifecycle.md) | Capture session identity, overlay cancellation, editor handoff, main-thread window effects |
 | [Database and Storage](./database-and-storage.md) | SQLite schema, repositories, FTS search, backups, data directory changes |
 | [Settings, Windowing, and Platform](./settings-window-platform.md) | Settings model, shortcuts, tray, autostart, window lifecycle, macOS/Windows code |
 
@@ -25,7 +26,7 @@ window placement, or OS-specific side effects.
 | `src-tauri/src/window/` | Window labels, geometry, lifecycle, preview positioning, platform show/hide |
 | `src-tauri/src/shortcut/`, `keyboard/`, `mouse/`, `keystroke/` | OS shortcuts, Windows navigation hooks, paste simulation |
 | `src-tauri/src/tray/`, `menu/`, `autostart/` | Native tray/menu/autostart integration |
-| `src-tauri/src/backup/`, `commands/storage.rs`, `core/paths.rs` | Backup containers, hot data directory switching, persistent path roots |
+| `src-tauri/src/backup/`, `storage/`, `core/paths.rs` | Backup containers, recoverable data replacement, resource lifetime coordination, persistent path roots |
 
 ## Default Rule
 

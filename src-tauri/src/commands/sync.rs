@@ -39,6 +39,9 @@ pub async fn test_sync_peer_secret(app: AppHandle, peer_id: String) -> Result<()
 }
 
 async fn set_or_replace(app: &AppHandle, peer_id: &str, secret: &str) -> Result<()> {
+    let access = app.state::<crate::storage::StorageAccess>();
+    let _operation = access.operation().await;
+    let _resource_access = access.read_owned().await;
     let reference = peer_reference(peer_id)?;
     app.state::<SyncRuntime>()
         .set_peer_secret(&reference, secret)?;

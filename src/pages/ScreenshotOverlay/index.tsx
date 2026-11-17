@@ -1,3 +1,4 @@
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEventListener, useMemoizedFn, useMount, useUnmount } from "ahooks";
 import type { FC, PointerEvent as ReactPointerEvent } from "react";
@@ -12,7 +13,6 @@ import {
   type ScreenshotOverlayState,
 } from "@/commands";
 import { TAURI_EVENT } from "@/constants/events";
-import { useTauriListen } from "@/hooks/useTauriListen";
 import { cn } from "@/utils/cn";
 import { isMac } from "@/utils/is";
 import { log } from "@/utils/log";
@@ -41,8 +41,10 @@ const ScreenshotOverlay: FC = () => {
   const label = getCurrentWebviewWindow().label;
   const frameCanvasRef = useRef<HTMLCanvasElement>(null);
   const marksCanvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<ImageData | null>(null);
+  const frameRef = useRef<ImageBitmap | null>(null);
   const loadGenerationRef = useRef(0);
+  const mountedRef = useRef(true);
+  const unlistenRef = useRef<UnlistenFn | null>(null);
   const pointerRef = useRef<PixelPoint | null>(null);
   const dragOriginRef = useRef<PixelPoint | null>(null);
   const selectionRef = useRef<PixelRect | null>(null);
@@ -59,6 +61,7 @@ const ScreenshotOverlay: FC = () => {
 
   const reset = () => {
     loadGenerationRef.current += 1;
+    frameRef.current?.close();
     frameRef.current = null;
     sessionIdRef.current = null;
     pendingCommitRef.current = null;
@@ -84,9 +87,11 @@ const ScreenshotOverlay: FC = () => {
     const generation = loadGenerationRef.current + 1;
     loadGenerationRef.current = generation;
     const startedAt = performance.now();
+    let requestedState: ScreenshotOverlayState | null = null;
 
     try {
       const state = await getScreenshotOverlayState(label);
+      requestedState = state;
       const stateMs = performance.now() - startedAt;
       if (generation !== loadGenerationRef.current) return;
       if (!state) {
@@ -95,21 +100,37 @@ const ScreenshotOverlay: FC = () => {
       }
 
       if (state.ready) {
+        const transferStartedAt = performance.now();
         const buffer = await getScreenshotOverlayFrame(label, state.sessionId);
+        if (generation !== loadGenerationRef.current) return;
+        const ipcMs = performance.now() - transferStartedAt;
+        const decodeStartedAt = performance.now();
+        const bitmap = await createImageBitmap(
+          new Blob([buffer], { type: "image/png" }),
+        );
         if (generation !== loadGenerationRef.current) {
+          bitmap.close();
           return;
         }
+        if (bitmap.width !== state.width || bitmap.height !== state.height) {
+          bitmap.close();
+          throw new Error(
+            "screenshot overlay PNG dimensions do not match the monitor",
+          );
+        }
 
-        frameRef.current = new ImageData(
-          new Uint8ClampedArray(buffer),
-          state.width,
-          state.height,
-        );
+        frameRef.current?.close();
+        frameRef.current = bitmap;
         log.info("screenshot overlay frame ready", {
-          frameMs: Math.round(performance.now() - startedAt - stateMs),
+          decodeMs: Math.round(performance.now() - decodeStartedAt),
+          encodedBytes: buffer.byteLength,
+          ipcMs: Math.round(ipcMs),
           label,
           stateMs: Math.round(stateMs),
         });
+      } else {
+        frameRef.current?.close();
+        frameRef.current = null;
       }
 
       // The pixels of an overlay shown early arrive as a second load of the
@@ -133,37 +154,66 @@ const ScreenshotOverlay: FC = () => {
       }
     } catch (error) {
       log.error("load screenshot overlay failed", error);
+      if (generation === loadGenerationRef.current && requestedState?.ready) {
+        try {
+          await cancelScreenshotCapture(requestedState.sessionId);
+        } catch (cancelError) {
+          log.error(
+            "cancel invalid screenshot overlay frame failed",
+            cancelError,
+          );
+        }
+      }
     }
   };
 
-  useMount(() => {
-    void loadSession();
+  useMount(async () => {
+    try {
+      const unlisten = await listen<OverlaySessionPayload>(
+        TAURI_EVENT.SCREENSHOT_OVERLAY_SESSION,
+        (event) => {
+          if (!mountedRef.current || event.payload.label !== label) return;
+          if (event.payload.sessionId === null) {
+            reset();
+            return;
+          }
+
+          void loadSession();
+        },
+      );
+      if (!mountedRef.current) {
+        unlisten();
+        return;
+      }
+      unlistenRef.current = unlisten;
+      await loadSession();
+    } catch (error) {
+      log.error("subscribe screenshot overlay failed", error);
+    }
   });
 
   useUnmount(() => {
+    mountedRef.current = false;
+    loadGenerationRef.current += 1;
+    unlistenRef.current?.();
     cancelAnimationFrame(drawFrameRef.current);
+    frameRef.current?.close();
     frameRef.current = null;
   });
-
-  useTauriListen<OverlaySessionPayload>(
-    TAURI_EVENT.SCREENSHOT_OVERLAY_SESSION,
-    (event) => {
-      if (event.payload.label !== label) return;
-
-      if (event.payload.sessionId === null) {
-        reset();
-        return;
-      }
-
-      void loadSession();
-    },
-  );
 
   const revealWhenPainted = useMemoizedFn(async (sessionId: number) => {
     try {
       await notifyScreenshotOverlayReady(label, sessionId);
     } catch (error) {
       log.error("reveal screenshot overlay failed", error);
+    }
+  });
+
+  const cancelAfterPaintFailure = useMemoizedFn(async (sessionId: number) => {
+    try {
+      await cancelScreenshotCapture(sessionId);
+    } catch (error) {
+      log.error("cancel screenshot overlay after paint failure failed", error);
     }
   });
 
@@ -214,8 +264,24 @@ const ScreenshotOverlay: FC = () => {
       marks.height = session.height;
     }
     if (frame) {
-      canvas.getContext("2d")?.putImageData(frame, 0, 0);
-      frameRef.current = null;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        frame.close();
+        frameRef.current = null;
+        log.error("screenshot overlay canvas context is unavailable");
+        void cancelAfterPaintFailure(session.sessionId);
+        return;
+      }
+      try {
+        context.drawImage(frame, 0, 0);
+      } catch (error) {
+        log.error("paint screenshot overlay PNG failed", error);
+        void cancelAfterPaintFailure(session.sessionId);
+        return;
+      } finally {
+        frame.close();
+        frameRef.current = null;
+      }
     }
     drawMarks();
     log.info("screenshot overlay painted", {
@@ -225,7 +291,7 @@ const ScreenshotOverlay: FC = () => {
 
     // Animation frames can pause while the overlay is hidden, so reveal right after drawing.
     void revealWhenPainted(session.sessionId);
-  }, [drawMarks, revealWhenPainted, session, label]);
+  }, [cancelAfterPaintFailure, drawMarks, revealWhenPainted, session, label]);
 
   useEffect(() => {
     if (!hintVisible) return;

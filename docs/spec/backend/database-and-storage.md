@@ -98,12 +98,56 @@ names remain owned by the modules that write them, such as `settings.json`,
 
 ## Storage Switching and Backups
 
-`commands/storage.rs` can move the data root while the app is running. It pauses
-the clipboard watcher, copies known content directories, replaces the database
-pool through `DatabaseState::close_and_replace`, rebases the resource stores,
-then rebases settings last through `settings::change` (which reconfigures sync
-against the new pool and emits `settings://updated`), and emits a clipboard
-import refresh.
+`storage/change_location.rs` moves the data root while the app is running.
+`storage/overwrite.rs` replaces live data from a validated backup. Both use
+`storage::change` to pause the watcher, stop sync, acquire exclusive storage
+access, replace the database pool with recovery, apply required store/settings
+changes, release exclusive access, and reconfigure sync. Settings writes defer
+their sync effect until that exclusive access is released. The operation mutex
+covers preparation through committed cleanup, so two live changes cannot use a
+stale root. No backup or move command opens an independent pool.
+
+Relocation copies a closed database into a sibling staging directory, journals
+which destination paths it touches, and restores only those paths on failure.
+The bootstrap `storage.json` is never swapped. Post-commit cleanup removes only
+the migrated `db`, `resources`, `config`, `state`, and storage identity paths;
+unrecognized files remain in the old root. Backup overwrite checks the
+incoming SQLite database and settings before changing live data, then retains
+the previous database and resources until required finalization succeeds. A
+failed install or finalization attempts to reopen the previous database. If
+reopening fails, recovery files are retained and the returned error includes
+their path. Cleanup failure after a committed relocation is logged rather than
+reported as a failed move. Multi-file storage changes are not an atomic
+filesystem transaction; tests exercise the rollback paths with temporary data.
+
+## Managed Resource Lifetime
+
+`StorageAccess` coordinates resource files with their SQLite references.
+Clipboard capture, screenshot output, sync receive, legacy import, app icon
+materialization, and file icon enrichment hold a read permit from before file
+creation until the corresponding database write completes. Backup merge holds
+one read permit while copying missing resources before merging rows; a copy
+failure cannot leave newly merged rows pointing to absent files. The list preview's
+background thumbnail generation acquires its own permit after the list returns.
+
+Cache cleanup takes an exclusive permit **before** reading the current pool,
+resource root, and referenced filenames, then keeps it through the last file
+deletion. The cached running-app icon names are also live roots because the
+running-app preview can store an icon without creating a database row. History
+deletion and retention cleanup hold an exclusive permit from row removal through
+image file removal, preventing a simultaneous same-digest insert from losing
+its file. Acquire permits before `DatabaseState::pool()` and path resolution.
+Never acquire a second read permit while holding the first: Tokio's writer-
+preferring lock can block the nested read when an exclusive operation is queued.
+Normal settings writes acquire the storage operation mutex before a read permit
+so sync reconfiguration cannot overlap a live root change. Data replacement
+uses its dedicated storage-swap settings path while holding exclusive access.
+Cache cleanup can briefly delay new clipboard captures while it scans files.
+Copy, paste, and drag-out hold a read permit while resolving managed image
+paths. An image save releases its permit while the user chooses a destination,
+then re-reads the selected item and source path under a new permit before
+copying. On macOS, file drag-out retains the permit until the native drag-end
+callback, since starting the session returns before the user drops the file.
 
 `backup/mod.rs` exports `.ecopastebak` packages in two modes:
 

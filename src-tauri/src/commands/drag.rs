@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use sqlx::SqlitePool;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::clipboard::{icon_png, FileIconStore, ImageStore};
 use crate::core::{AppError, Result};
@@ -34,6 +34,10 @@ pub async fn start_drag_clipboard_item(
     file_icon_store: State<'_, FileIconStore>,
     id: String,
 ) -> Result<()> {
+    let resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
@@ -50,7 +54,7 @@ pub async fn start_drag_clipboard_item(
     {
         let window = window.clone();
         app.run_on_main_thread(move || {
-            if let Err(err) = dispatch_drag(&window, payload, preview) {
+            if let Err(err) = dispatch_drag(&window, payload, preview, resource_access) {
                 log::error!("start drag (macos) failed: {err}");
             }
         })
@@ -61,7 +65,7 @@ pub async fn start_drag_clipboard_item(
     {
         let (tx, rx) = std::sync::mpsc::channel();
         app.run_on_main_thread(move || {
-            let _ = tx.send(dispatch_drag(&window, payload, preview));
+            let _ = tx.send(dispatch_drag(&window, payload, preview, resource_access));
         })
         .map_err(|err| AppError::Clipboard(format!("dispatch to main thread failed: {err}")))?;
 
@@ -76,10 +80,14 @@ fn dispatch_drag(
     window: &tauri::WebviewWindow,
     payload: DragPayload,
     preview: Option<Vec<u8>>,
+    resource_access: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     match payload {
-        DragPayload::Files(paths) => drag_out::start_drag_files(window, paths, preview),
+        DragPayload::Files(paths) => {
+            drag_out::start_drag_files_with_lifetime(window, paths, preview, resource_access)
+        }
         DragPayload::Text { plain, html, rtf } => {
+            let _resource_access = resource_access;
             drag_out::start_drag_text(window, plain, html, rtf, preview)
         }
     }

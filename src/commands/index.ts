@@ -880,7 +880,11 @@ export const writeToClipboard = async (id: string, plain: boolean) => {
     plain,
   });
 
-  getMessageApi().success(i18n.t("commands:messages.copied"));
+  getMessageApi().success({
+    content: i18n.t("commands:messages.copied"),
+    duration: 3,
+    key: "clipboard-copy-success",
+  });
 };
 
 export const pasteClipboardItem = (id: string, plain: boolean) => {
@@ -1282,15 +1286,44 @@ export interface ScreenshotImageInfo {
 export type ScreenshotExportAction =
   | "copy"
   | "save"
+  | "saveAs"
   | "pin"
   | "prepareDrag"
-  | "ocr";
+  | "ocr"
+  | "selectText"
+  | "translate";
+
+export interface ScreenshotTextRegion {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  lineIndex: number;
+}
+
+export interface ScreenshotTranslationBlock {
+  id: string;
+  sourceText: string;
+  translatedText: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ScreenshotTranslationStatus {
+  configured: boolean;
+  model: string;
+  source: "environment" | "stored" | null;
+}
 
 export interface ScreenshotExportInput {
   action: ScreenshotExportAction;
   area: ScreenshotPixelRect;
   label: string;
   pixels: Uint8Array;
+  requestId?: number;
 }
 
 export interface ScreenshotExportResult {
@@ -1298,6 +1331,8 @@ export interface ScreenshotExportResult {
   historyRecorded: boolean;
   /** Recognized text for `ocr`; it is already on the clipboard when not empty. */
   text: string | null;
+  textRegions: ScreenshotTextRegion[] | null;
+  translationBlocks: ScreenshotTranslationBlock[] | null;
 }
 
 const SCREENSHOT_EXPORT_LABEL_KEYS: Record<ScreenshotExportAction, string> = {
@@ -1306,6 +1341,9 @@ const SCREENSHOT_EXPORT_LABEL_KEYS: Record<ScreenshotExportAction, string> = {
   pin: "commands:labels.pinScreenshot",
   prepareDrag: "commands:labels.drag",
   save: "commands:labels.saveImage",
+  saveAs: "commands:labels.saveImage",
+  selectText: "commands:labels.recognizeText",
+  translate: "commands:labels.translateScreenshot",
 };
 
 export const startScreenshotCapture = (mode: ScreenshotCaptureMode) => {
@@ -1396,7 +1434,13 @@ export const closeScreenshotWindow = (label: string) => {
 };
 
 export const exportScreenshot = (input: ScreenshotExportInput) => {
-  const { action, area, label, pixels } = input;
+  const { action, area, label, pixels, requestId } = input;
+  if (
+    action === "translate" &&
+    (requestId === void 0 || !Number.isSafeInteger(requestId) || requestId <= 0)
+  ) {
+    throw new Error("screenshot translation request ID is invalid");
+  }
 
   return callRaw<ScreenshotExportResult>(
     TAURI_COMMAND.EXPORT_SCREENSHOT,
@@ -1409,7 +1453,43 @@ export const exportScreenshot = (input: ScreenshotExportInput) => {
       "x-screenshot-offset-x": String(area.x),
       "x-screenshot-offset-y": String(area.y),
       "x-screenshot-width": String(area.width),
+      ...(action === "translate"
+        ? { "x-screenshot-request-id": String(requestId) }
+        : {}),
     },
+  );
+};
+
+export const cancelScreenshotTranslation = (
+  label: string,
+  requestId: number,
+) => {
+  return call<void>(
+    TAURI_COMMAND.CANCEL_SCREENSHOT_TRANSLATION,
+    "commands:labels.translateScreenshot",
+    { label, requestId },
+  );
+};
+
+export const getScreenshotTranslationStatus = () => {
+  return call<ScreenshotTranslationStatus>(
+    TAURI_COMMAND.GET_SCREENSHOT_TRANSLATION_STATUS,
+    "commands:labels.loadScreenshotTranslationStatus",
+  );
+};
+
+export const setScreenshotTranslationKey = (key: string) => {
+  return call<void>(
+    TAURI_COMMAND.SET_SCREENSHOT_TRANSLATION_KEY,
+    "commands:labels.setScreenshotTranslationKey",
+    { key },
+  );
+};
+
+export const removeScreenshotTranslationKey = () => {
+  return call<void>(
+    TAURI_COMMAND.REMOVE_SCREENSHOT_TRANSLATION_KEY,
+    "commands:labels.removeScreenshotTranslationKey",
   );
 };
 
@@ -1426,6 +1506,14 @@ export const copyScreenshotColor = (color: string) => {
     TAURI_COMMAND.COPY_SCREENSHOT_COLOR,
     "commands:labels.copyColor",
     { color },
+  );
+};
+
+export const copyScreenshotText = (label: string, text: string) => {
+  return call<void>(
+    TAURI_COMMAND.COPY_SCREENSHOT_TEXT,
+    "commands:labels.copy",
+    { label, text },
   );
 };
 

@@ -430,7 +430,7 @@
       },
       "paste": {
         "autoPaste": {
-          "description": "히스토리 기록을 왼쪽 마우스 버튼으로 클릭했을 때 할 일을 고릅니다.",
+          "description": "한 번 클릭하면 항상 클립보드에 복사합니다. 두 번 클릭했을 때의 추가 동작을 고릅니다.",
           "options": {
             "disabled": "사용 안 함",
             "doubleClickCopy": "더블클릭으로 복사",
@@ -438,7 +438,7 @@
             "singleClickCopy": "클릭으로 복사",
             "singleClickPaste": "클릭으로 붙여넣기"
           },
-          "title": "왼쪽 마우스 버튼"
+          "title": "더블클릭 동작"
         },
         "fileMode": {
           "description": "파일 기록을 붙여넣을 때 파일 자체 대신 경로를 기본으로 붙여넣습니다.",

@@ -89,6 +89,7 @@ async fn two_localhost_runtimes_exchange_without_resend_or_clipboard_write() {
             image_store: ImageStore::for_test(root_b.path().join("images")),
             sensitive: Sensitive::default(),
             sink: Arc::new(ChannelSink(sink_b_tx)),
+            storage_access: crate::storage::StorageAccess::default(),
         })
         .await
         .unwrap();
@@ -99,6 +100,7 @@ async fn two_localhost_runtimes_exchange_without_resend_or_clipboard_write() {
             image_store: ImageStore::for_test(root_a.path().join("images")),
             sensitive: Sensitive::default(),
             sink: Arc::new(ChannelSink(sink_a_tx)),
+            storage_access: crate::storage::StorageAccess::default(),
         })
         .await
         .unwrap();

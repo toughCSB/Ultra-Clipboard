@@ -146,6 +146,7 @@ mod tests {
             ImageStore::for_test(dir.path().join("images")),
             Sensitive::default(),
             Arc::new(SilentSink),
+            crate::storage::StorageAccess::default(),
         );
         let peer_id = uuid::Uuid::new_v4().to_string();
         let key = PeerKey::derive("test secret with enough entropy");

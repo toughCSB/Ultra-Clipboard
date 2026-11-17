@@ -1,20 +1,13 @@
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::core::Result;
 use crate::db::DatabaseState;
-use crate::settings::change::{self, OnEffectFailure, SettingsWrite};
-
-const STORAGE_CONTENT_DIRS: [&str; 4] = ["db", "resources", "config", "state"];
-const CUSTOM_STORAGE_CONTAINER_DIR: &str = "UltraClipboardData";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,33 +86,16 @@ pub async fn clean_resource_cache(
     app: AppHandle,
     db: tauri::State<'_, DatabaseState>,
 ) -> Result<CleanCacheResult> {
-    let pool = db.pool().await;
-    let resources_dir = crate::core::paths::resources_dir(&app)?;
-    let image_files = referenced_image_files(&pool).await?;
-    let app_icon_files = referenced_app_icon_files(&pool).await?;
-    let file_icon_files = referenced_file_icon_files(&pool).await?;
-
-    let mut removed = CleanCacheStats::default();
-    clean_sharded_files(
-        &resources_dir.join("clipboard-images").join("origin"),
-        &image_files,
-        &mut removed,
-    )?;
-    clean_sharded_files(
-        &resources_dir.join("clipboard-images").join("thumbnails"),
-        &image_files,
-        &mut removed,
-    )?;
-    clean_flat_files(
-        &resources_dir.join("app-icons"),
-        &app_icon_files,
-        &mut removed,
-    )?;
-    clean_flat_files(
-        &resources_dir.join("file-icons"),
-        &file_icon_files,
-        &mut removed,
-    )?;
+    let access = app.state::<crate::storage::StorageAccess>();
+    let removed = crate::storage::resources::clean_resource_files(&access, &db, || {
+        let resources_dir = crate::core::paths::resources_dir(&app)?;
+        let cached_icons = app
+            .try_state::<crate::clipboard::AppsRegistry>()
+            .map(|registry| registry.cached_icon_files())
+            .unwrap_or_default();
+        Ok((resources_dir, cached_icons))
+    })
+    .await?;
 
     Ok(CleanCacheResult {
         removed_files: removed.files,
@@ -158,277 +134,12 @@ async fn switch_storage_location(
     db: &DatabaseState,
     target: PathBuf,
 ) -> Result<ChangeStorageLocationResult> {
-    let current = crate::core::paths::app_data_dir(&app)?;
-    if current == target {
-        return Ok(ChangeStorageLocationResult {
-            location: crate::core::paths::storage_location(&app)?,
-            storage_usage: get_storage_usage(app).await?,
-        });
-    }
-
-    reject_nested_storage_move(&current, &target)?;
-    if target != crate::core::paths::default_data_dir(&app)? {
-        crate::core::paths::validate_storage_target(&target)?;
-    }
-
-    let _pause_guard = pause_watcher(&app);
-    let switch_error = Arc::new(Mutex::new(None::<String>));
-    let switch_error_for_task = switch_error.clone();
-    let app_for_db = app.clone();
-    let current_for_db = current.clone();
-    let target_for_db = target.clone();
-
-    db.close_and_replace(|| async move {
-        let switch_result = (|| -> Result<()> {
-            copy_storage_data(&current_for_db, &target_for_db)?;
-            crate::core::paths::set_app_data_dir(&app_for_db, target_for_db.clone())?;
-            Ok(())
-        })();
-
-        if let Err(err) = switch_result {
-            *switch_error_for_task
-                .lock()
-                .expect("storage switch error poisoned") = Some(err.to_string());
-            crate::core::paths::set_app_data_dir(&app_for_db, current_for_db.clone())?;
-            return crate::db::init(&app_for_db).await;
-        }
-
-        match crate::db::init(&app_for_db).await {
-            Ok(pool) => Ok(pool),
-            Err(err) => {
-                *switch_error_for_task
-                    .lock()
-                    .expect("storage switch error poisoned") = Some(err.to_string());
-                crate::core::paths::set_app_data_dir(&app_for_db, current_for_db.clone())?;
-                crate::db::init(&app_for_db).await
-            }
-        }
-    })
-    .await?;
-
-    if let Some(message) = switch_error
-        .lock()
-        .expect("storage switch error poisoned")
-        .take()
-    {
-        return Err(anyhow::anyhow!(message).into());
-    }
-
-    rebase_storage_states(&app).await?;
-    remove_old_storage_data(&app, &current)?;
-    emit_clipboard_imported(&app);
-
+    crate::storage::change_location::change_location(&app, db, target).await?;
     Ok(ChangeStorageLocationResult {
         location: crate::core::paths::storage_location(&app)?,
         storage_usage: get_storage_usage(app).await?,
     })
 }
-
-fn reject_nested_storage_move(current: &Path, target: &Path) -> Result<()> {
-    if target.starts_with(current) || current.starts_with(target) {
-        return Err(
-            anyhow::anyhow!("기존 데이터 폴더와 새 데이터 폴더는 서로 포함할 수 없습니다").into(),
-        );
-    }
-
-    Ok(())
-}
-
-fn copy_storage_data(src: &Path, dst: &Path) -> Result<()> {
-    fs::create_dir_all(dst).with_context(|| format!("failed to create storage dir {dst:?}"))?;
-    for name in STORAGE_CONTENT_DIRS {
-        replace_path(&src.join(name), &dst.join(name))?;
-    }
-    crate::core::paths::write_storage_identity(dst)?;
-    Ok(())
-}
-
-fn remove_old_storage_data(app: &AppHandle, old: &Path) -> Result<()> {
-    let default = crate::core::paths::default_data_dir(app)?;
-    if old == default {
-        remove_bootstrap_storage_payload(old)?;
-        return Ok(());
-    }
-
-    remove_custom_storage_root(old)?;
-
-    Ok(())
-}
-
-fn remove_custom_storage_root(old: &Path) -> Result<()> {
-    if old.exists() {
-        fs::remove_dir_all(old)
-            .with_context(|| format!("failed to remove old data dir {old:?}"))?;
-    }
-
-    let Some(container) = old.parent() else {
-        return Ok(());
-    };
-    if container.file_name().and_then(|name| name.to_str()) != Some(CUSTOM_STORAGE_CONTAINER_DIR) {
-        return Ok(());
-    }
-
-    match fs::remove_dir(container) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
-        Err(err) => {
-            Err(anyhow::anyhow!("failed to remove old data container {container:?}: {err}").into())
-        }
-    }
-}
-
-fn remove_bootstrap_storage_payload(dir: &Path) -> Result<()> {
-    if !dir.exists() {
-        return Ok(());
-    }
-
-    for entry in
-        fs::read_dir(dir).with_context(|| format!("failed to read old data dir {dir:?}"))?
-    {
-        let entry = entry.with_context(|| format!("failed to read entry under {dir:?}"))?;
-        if entry.file_name() == "storage.json" {
-            continue;
-        }
-
-        remove_path(&entry.path())?;
-    }
-
-    Ok(())
-}
-
-fn replace_path(src: &Path, dst: &Path) -> Result<()> {
-    if dst.exists() {
-        remove_path(dst)?;
-    }
-
-    if !src.exists() {
-        return Ok(());
-    }
-
-    if src.is_dir() {
-        copy_dir_all(src, dst)?;
-        return Ok(());
-    }
-
-    if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create parent dir {parent:?}"))?;
-    }
-    fs::copy(src, dst).with_context(|| format!("failed to copy {src:?} to {dst:?}"))?;
-    Ok(())
-}
-
-fn remove_path(path: &Path) -> Result<()> {
-    if path.is_dir() {
-        fs::remove_dir_all(path).with_context(|| format!("failed to remove {path:?}"))?;
-        return Ok(());
-    }
-
-    fs::remove_file(path).with_context(|| format!("failed to remove {path:?}"))?;
-    Ok(())
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
-    fs::create_dir_all(dst).with_context(|| format!("failed to create dir {dst:?}"))?;
-    for entry in fs::read_dir(src).with_context(|| format!("failed to read dir {src:?}"))? {
-        let entry = entry.with_context(|| format!("failed to read entry under {src:?}"))?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        let metadata = entry
-            .metadata()
-            .with_context(|| format!("failed to read metadata at {src_path:?}"))?;
-
-        if metadata.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
-            continue;
-        }
-
-        fs::copy(&src_path, &dst_path)
-            .with_context(|| format!("failed to copy {src_path:?} to {dst_path:?}"))?;
-    }
-    Ok(())
-}
-
-async fn rebase_storage_states(app: &AppHandle) -> Result<()> {
-    app.state::<crate::window::WindowStateStore>().rebase(app)?;
-    app.state::<crate::clipboard::ImageStore>().rebase(app)?;
-    app.state::<crate::clipboard::AppIconStore>().rebase(app)?;
-    app.state::<crate::clipboard::FileIconStore>().rebase(app)?;
-
-    if let Some(registry) = app.try_state::<crate::clipboard::AppsRegistry>() {
-        registry.load_from_db().await?;
-    }
-
-    // Settings go last: the sync effect reads the rebased image store and pool.
-    change::commit(app, SettingsWrite::Rebase, OnEffectFailure::LogOnly).await?;
-
-    Ok(())
-}
-
-fn emit_clipboard_imported(app: &AppHandle) {
-    crate::clipboard::emit_clipboard_updated(
-        app,
-        crate::clipboard::ClipboardUpdated::Imported { imported: true },
-    );
-}
-
-fn pause_watcher(app: &AppHandle) -> WatcherPauseRestore {
-    let pause = app.try_state::<crate::clipboard::WatcherPause>();
-    let previous = pause.as_ref().is_some_and(|state| state.is_paused());
-    if let Some(state) = pause.as_ref() {
-        state.set_paused(true);
-    }
-
-    WatcherPauseRestore {
-        pause: pause.map(|state| state.inner().clone()),
-        previous,
-    }
-}
-
-struct WatcherPauseRestore {
-    pause: Option<crate::clipboard::WatcherPause>,
-    previous: bool,
-}
-
-impl Drop for WatcherPauseRestore {
-    fn drop(&mut self) {
-        if let Some(pause) = &self.pause {
-            pause.set_paused(self.previous);
-        }
-    }
-}
-
-async fn referenced_image_files(pool: &SqlitePool) -> Result<HashSet<String>> {
-    let rows =
-        sqlx::query_scalar::<_, String>("SELECT content FROM clipboard_items WHERE kind = 'image'")
-            .fetch_all(pool)
-            .await
-            .context("failed to query referenced image files")?;
-
-    Ok(rows.into_iter().collect())
-}
-
-async fn referenced_app_icon_files(pool: &SqlitePool) -> Result<HashSet<String>> {
-    let rows = sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT icon_file FROM clipboard_apps WHERE icon_file IS NOT NULL",
-    )
-    .fetch_all(pool)
-    .await
-    .context("failed to query referenced app icon files")?;
-
-    Ok(rows.into_iter().collect())
-}
-
-async fn referenced_file_icon_files(pool: &SqlitePool) -> Result<HashSet<String>> {
-    let rows = sqlx::query_scalar::<_, String>("SELECT DISTINCT icon_file FROM file_type_icons")
-        .fetch_all(pool)
-        .await
-        .context("failed to query referenced file icon files")?;
-
-    Ok(rows.into_iter().collect())
-}
-
 fn database_bytes(app: &AppHandle) -> Result<u64> {
     let db_path = crate::db::db_path(app)?;
     let mut total = file_size(&db_path)?;
@@ -438,76 +149,6 @@ fn database_bytes(app: &AppHandle) -> Result<u64> {
     }
 
     Ok(total)
-}
-
-#[derive(Default)]
-struct CleanCacheStats {
-    files: u64,
-    bytes: u64,
-}
-
-fn clean_flat_files(
-    root: &Path,
-    referenced_files: &HashSet<String>,
-    removed: &mut CleanCacheStats,
-) -> Result<()> {
-    if !root.exists() {
-        return Ok(());
-    }
-
-    for entry in
-        fs::read_dir(root).with_context(|| format!("failed to read directory at {root:?}"))?
-    {
-        let entry = entry.with_context(|| format!("failed to read entry under {root:?}"))?;
-        let path = entry.path();
-        let metadata = entry
-            .metadata()
-            .with_context(|| format!("failed to read metadata at {path:?}"))?;
-
-        if metadata.is_dir() {
-            clean_flat_files(&path, referenced_files, removed)?;
-            remove_dir_if_empty(&path);
-            continue;
-        }
-
-        remove_unreferenced_file(&path, metadata.len(), referenced_files, removed)?;
-    }
-
-    remove_dir_if_empty(root);
-
-    Ok(())
-}
-
-fn clean_sharded_files(
-    root: &Path,
-    referenced_files: &HashSet<String>,
-    removed: &mut CleanCacheStats,
-) -> Result<()> {
-    clean_flat_files(root, referenced_files, removed)
-}
-
-fn remove_unreferenced_file(
-    path: &Path,
-    file_bytes: u64,
-    referenced_files: &HashSet<String>,
-    removed: &mut CleanCacheStats,
-) -> Result<()> {
-    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-        return Ok(());
-    };
-    if referenced_files.contains(file_name) {
-        return Ok(());
-    }
-
-    fs::remove_file(path).with_context(|| format!("failed to remove cache file {path:?}"))?;
-    removed.files += 1;
-    removed.bytes += file_bytes;
-
-    Ok(())
-}
-
-fn remove_dir_if_empty(path: &Path) {
-    let _ = fs::remove_dir(path);
 }
 
 fn settings_bytes(app: &AppHandle) -> Result<u64> {
@@ -555,6 +196,9 @@ fn dir_size(path: &Path) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::change_location::{
+        remove_bootstrap_storage_payload, remove_custom_storage_root,
+    };
 
     struct TempDir(PathBuf);
 
@@ -578,42 +222,6 @@ mod tests {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).ok();
         }
-    }
-
-    #[test]
-    fn clean_flat_files_removes_only_unreferenced_files() {
-        let temp = TempDir::new();
-        let root = temp.path().join("app-icons");
-        fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("keep.png"), b"keep").unwrap();
-        fs::write(root.join("drop.png"), b"drop-this").unwrap();
-
-        let referenced = HashSet::from(["keep.png".to_string()]);
-        let mut removed = CleanCacheStats::default();
-
-        clean_flat_files(&root, &referenced, &mut removed).unwrap();
-
-        assert!(root.join("keep.png").exists());
-        assert!(!root.join("drop.png").exists());
-        assert_eq!(removed.files, 1);
-        assert_eq!(removed.bytes, 9);
-    }
-
-    #[test]
-    fn clean_sharded_files_removes_empty_shard_directories() {
-        let temp = TempDir::new();
-        let root = temp.path().join("clipboard-images").join("origin");
-        let shard = root.join("ab");
-        fs::create_dir_all(&shard).unwrap();
-        fs::write(shard.join("abandoned.png"), b"x").unwrap();
-
-        let mut removed = CleanCacheStats::default();
-
-        clean_sharded_files(&root, &HashSet::new(), &mut removed).unwrap();
-
-        assert_eq!(removed.files, 1);
-        assert!(!shard.exists());
-        assert!(!root.exists());
     }
 
     #[test]

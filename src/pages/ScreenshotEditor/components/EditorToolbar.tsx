@@ -1,5 +1,5 @@
 import { useMemoizedFn } from "ahooks";
-import { Button, Dropdown } from "antd";
+import { Button } from "antd";
 import type {
   FC,
   MouseEvent as ReactMouseEvent,
@@ -46,6 +46,7 @@ interface EditorToolbarProps {
   onDiscardAndClose: () => void;
   onDragPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onDragPointerEnter: () => void;
+  onDragPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onMaximize: () => void;
   onMinimize: () => void;
   onMoveWindow: () => void;
@@ -54,6 +55,11 @@ interface EditorToolbarProps {
   /** Present only where the platform can recognize text. */
   onRecognizeText?: () => void;
   onSave: () => void;
+  onSaveAs: () => void;
+  onSelectText: () => void;
+  textSelectionActive: boolean;
+  onTranslate: () => void;
+  translationActive: boolean;
   /** `openOptions` (a double-click) also opens the tool's options panel. */
   onToolChange: (tool: EditorTool, openOptions?: boolean) => void;
   onZoomToggle: () => void;
@@ -62,13 +68,12 @@ interface EditorToolbarProps {
 export const MOD_KEY = isMac ? "⌘" : "Ctrl+";
 const DRAG_THRESHOLD_CSS = 3;
 const REORDER_THRESHOLD_CSS = 4;
-const PASTE_IMAGE_KEY = "paste-image";
-const RECOGNIZE_TEXT_KEY = "recognize-text";
 
 interface ReorderState {
   id: EditorTool;
   pointerId: number;
   startX: number;
+  startY: number;
   moved: boolean;
 }
 
@@ -79,7 +84,7 @@ const toolTitle = (t: (key: string) => string, id: EditorTool) => {
   return t(`editor.tools.${id}`);
 };
 
-/** One-row toolbar that also acts as the window title bar, like the Shottr editor. */
+/** Window title bar with a full tool row that wraps below the actions when needed. */
 const EditorToolbar: FC<EditorToolbarProps> = (props) => {
   const { t } = useTranslation("screenshot");
   const {
@@ -97,6 +102,7 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
     onDiscardAndClose,
     onDragPointerDown,
     onDragPointerEnter,
+    onDragPointerMove,
     onMaximize,
     onMinimize,
     onMoveWindow,
@@ -104,6 +110,11 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
     onPin,
     onRecognizeText,
     onSave,
+    onSaveAs,
+    onSelectText,
+    textSelectionActive,
+    onTranslate,
+    translationActive,
     onToolChange,
     onZoomToggle,
   } = props;
@@ -189,7 +200,12 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
     if (!dragging || event.pointerId !== dragging.pointerId) return;
 
     if (!dragging.moved) {
-      if (Math.abs(event.clientX - dragging.startX) < REORDER_THRESHOLD_CSS) {
+      if (
+        Math.hypot(
+          event.clientX - dragging.startX,
+          event.clientY - dragging.startY,
+        ) < REORDER_THRESHOLD_CSS
+      ) {
         return;
       }
       dragging.moved = true;
@@ -239,6 +255,7 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
       moved: false,
       pointerId: event.pointerId,
       startX: event.clientX,
+      startY: event.clientY,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -263,7 +280,7 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
       className={cn(
         // The editor is always dark (see App.tsx), so the container tone reads
         // as an elevated bar over the darker canvas regardless of what's captured.
-        "flex h-13 shrink-0 select-none items-center gap-1 border-ant-border-secondary border-b bg-ant-container pr-1 pl-2 shadow-[0_1px_4px_rgba(0,0,0,0.35)]",
+        "flex min-h-13 shrink-0 select-none flex-wrap items-center gap-1 border-ant-border-secondary border-b bg-ant-container pr-1 pl-2 shadow-[0_1px_4px_rgba(0,0,0,0.35)]",
         { "pl-20": isMac },
       )}
       onDoubleClick={handleTitleDoubleClick}
@@ -280,14 +297,18 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
         shortcut={`${MOD_KEY}C`}
         title={t("editor.copy")}
       />
-      <ToolbarButton
+      <Button
+        aria-label={t("editor.save")}
+        className="h-12 shrink-0 gap-2 rounded-2 px-5 font-bold text-base"
         disabled={busy}
-        icon="i-lucide:save"
+        icon={<span aria-hidden="true" className="i-lucide:save text-xl" />}
         loading={busyAction === "save"}
         onClick={onSave}
-        shortcut={`${MOD_KEY}S`}
-        title={t("editor.save")}
-      />
+        title={`${t("editor.save")} (${MOD_KEY}S)`}
+        type="primary"
+      >
+        {t("editor.save")}
+      </Button>
 
       <span className="mx-1 h-5 w-px shrink-0 bg-ant-border-secondary" />
 
@@ -306,90 +327,87 @@ const EditorToolbar: FC<EditorToolbarProps> = (props) => {
         icon="i-lucide:grip-vertical"
         onPointerDown={onDragPointerDown}
         onPointerEnter={onDragPointerEnter}
-        title={t("editor.drag")}
+        onPointerMove={onDragPointerMove}
+        title={t("editor.dragHint")}
       />
 
       <span className="mx-2 h-5 w-px shrink-0 bg-ant-border-secondary" />
 
-      <div
-        className="flex h-full min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        title={t("editor.reorderHint")}
-      >
-        {toolOrder.map((id) => {
-          const definition = toolDefinition(id);
+      <div className="order-last flex w-full flex-wrap items-center justify-center gap-1 border-ant-border-secondary border-t py-1.5">
+        <div
+          className="flex flex-wrap items-center justify-center gap-1"
+          title={t("editor.reorderHint")}
+        >
+          {toolOrder.map((id) => {
+            const definition = toolDefinition(id);
 
-          return (
-            <div
-              className={cn("shrink-0", {
-                "opacity-40": draggingId === id,
-              })}
-              data-tool-id={id}
-              key={id}
-              ref={(el) => {
-                if (el) toolRefs.current[id] = el;
-              }}
-            >
-              <ToolbarButton
-                active={tool === id}
-                icon={definition.icon}
-                iconColor={definition.color}
-                onDoubleClick={() => onToolChange(id, true)}
-                onPointerDown={(event) => handleToolPointerDown(id, event)}
-                onPointerMove={handleToolPointerMove}
-                onPointerUp={(event) => handleToolPointerUp(id, event)}
-                shortcut={definition.key}
-                title={toolTitle(t, id)}
-              />
-            </div>
-          );
-        })}
+            return (
+              <div
+                className={cn("shrink-0", {
+                  "opacity-40": draggingId === id,
+                })}
+                data-tool-id={id}
+                key={id}
+                ref={(el) => {
+                  if (el) toolRefs.current[id] = el;
+                }}
+              >
+                <ToolbarButton
+                  active={tool === id}
+                  icon={definition.icon}
+                  iconColor={definition.color}
+                  onDoubleClick={() => onToolChange(id, true)}
+                  onPointerDown={(event) => handleToolPointerDown(id, event)}
+                  onPointerMove={handleToolPointerMove}
+                  onPointerUp={(event) => handleToolPointerUp(id, event)}
+                  shortcut={definition.key}
+                  title={toolTitle(t, id)}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <span className="mx-1 h-5 w-px shrink-0 bg-ant-border-secondary" />
+        <ToolbarButton
+          disabled={busy}
+          icon="i-lucide:folder-output"
+          loading={busyAction === "saveAs"}
+          onClick={onSaveAs}
+          title={t("editor.saveAs")}
+        />
+        <ToolbarButton
+          icon="i-lucide:clipboard-paste"
+          onClick={onPasteImage}
+          shortcut={`${MOD_KEY}V`}
+          title={t("editor.pasteImage")}
+        />
+        {onRecognizeText && (
+          <ToolbarButton
+            icon="i-lucide:scan-text"
+            onClick={onRecognizeText}
+            shortcut={`${MOD_KEY}Shift+O`}
+            title={t("editor.recognizeText")}
+          />
+        )}
+        <ToolbarButton
+          active={textSelectionActive}
+          disabled={busy && busyAction !== "selectText"}
+          icon="i-lucide:text-select"
+          loading={busyAction === "selectText"}
+          onClick={onSelectText}
+          title={t("editor.textSelect.button")}
+        />
+        <ToolbarButton
+          active={translationActive}
+          disabled={busy && busyAction !== "translate"}
+          icon="i-lucide:languages"
+          loading={busyAction === "translate"}
+          onClick={onTranslate}
+          title={t("editor.translation.button")}
+        />
       </div>
 
-      <Dropdown
-        menu={{
-          items: [
-            {
-              extra: `${MOD_KEY}V`,
-              icon: <span className="i-lucide:clipboard-paste text-base" />,
-              key: PASTE_IMAGE_KEY,
-              label: t("editor.pasteImage"),
-            },
-            ...(onRecognizeText
-              ? [
-                  {
-                    extra: `${MOD_KEY}Shift+O`,
-                    icon: <span className="i-lucide:scan-text text-base" />,
-                    key: RECOGNIZE_TEXT_KEY,
-                    label: t("editor.recognizeText"),
-                  },
-                ]
-              : []),
-          ],
-          onClick: ({ key }) => {
-            if (key === PASTE_IMAGE_KEY) {
-              onPasteImage();
-              return;
-            }
-
-            if (key === RECOGNIZE_TEXT_KEY) {
-              onRecognizeText?.();
-            }
-          },
-        }}
-        placement="bottomLeft"
-        trigger={["click"]}
-      >
-        <Button
-          aria-label={t("editor.more")}
-          className="h-9 shrink-0 gap-0.5 rounded-2 px-1.5"
-          type="text"
-        >
-          <span className="i-lucide:ellipsis text-lg" />
-          <span className="i-lucide:chevron-down text-xs" />
-        </Button>
-      </Dropdown>
-
-      <div className="h-full min-w-6 flex-1" data-title-area="true" />
+      <div className="h-9 min-w-6 flex-1" data-title-area="true" />
 
       {color && (
         <ToolbarInfo

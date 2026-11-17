@@ -76,20 +76,19 @@ describe("shape style", () => {
     assert.equal(next.width, 96);
   });
 
-  it("keeps each highlight's color and intensity editable", () => {
+  it("keeps each straight highlight's color, intensity, and width editable", () => {
     const shape: HighlighterShape = {
       color: "#FFE600",
-      height: 12,
+      from: { x: 2, y: 3 },
       id: "h",
       kind: "highlighter",
       opacity: 75,
-      width: 60,
-      x: 2,
-      y: 3,
+      strokeWidth: 20,
+      to: { x: 62, y: 15 },
     };
     const next = applyStyleToShape(
       shape,
-      { highlightColor: "#FF9BD2", highlightOpacity: 90 },
+      { highlightColor: "#FF9BD2", highlightOpacity: 90, highlightWidth: 15 },
       2,
       IMAGE,
       measure,
@@ -97,10 +96,16 @@ describe("shape style", () => {
 
     assert.equal(next.color, "#FF9BD2");
     assert.equal(next.opacity, 90);
-    assert.equal(next.width, shape.width);
+    assert.equal(next.strokeWidth, 30);
+    assert.deepEqual(next.from, shape.from);
+    assert.deepEqual(next.to, shape.to);
     assert.equal(
       styleFromShape(DEFAULT_TOOL_STYLE, next, 2).highlightOpacity,
       90,
+    );
+    assert.equal(
+      styleFromShape(DEFAULT_TOOL_STYLE, next, 2).highlightWidth,
+      15,
     );
     assert.equal(shape.opacity, 75);
   });

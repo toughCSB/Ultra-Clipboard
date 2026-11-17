@@ -16,6 +16,7 @@ mod mouse;
 mod screenshot;
 mod settings;
 mod shortcut;
+mod storage;
 mod sync;
 mod tray;
 mod update;
@@ -176,8 +177,13 @@ pub fn run() {
             commands::notify_screenshot_window_ready,
             commands::close_screenshot_window,
             commands::export_screenshot,
+            commands::get_screenshot_translation_status,
+            commands::set_screenshot_translation_key,
+            commands::remove_screenshot_translation_key,
+            commands::cancel_screenshot_translation,
             commands::start_screenshot_drag,
             commands::copy_screenshot_color,
+            commands::copy_screenshot_text,
             commands::read_screenshot_clipboard_image,
             commands::set_screenshot_pin_scale,
             commands::show_screenshot_pin_menu,
@@ -230,6 +236,7 @@ pub fn run() {
                     err
                 })?;
                 handle_db.manage(db::DatabaseState::new(pool));
+                handle_db.manage(storage::StorageAccess::default());
                 clipboard::init(&handle_db)?;
                 if let Err(err) = sync::init(&handle_db).await {
                     log::warn!(

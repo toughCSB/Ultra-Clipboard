@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -64,6 +64,16 @@ impl AppsRegistry {
             .expect("apps registry cache poisoned")
             .remove(id);
     }
+
+    /// Running-app previews can own icons before an app row exists in SQLite.
+    pub fn cached_icon_files(&self) -> HashSet<String> {
+        self.cache
+            .read()
+            .expect("apps registry cache poisoned")
+            .values()
+            .filter_map(|app| app.icon_file.clone())
+            .collect()
+    }
 }
 
 pub async fn refresh_running_apps(registry: AppsRegistry) -> Result<Vec<ClipboardApp>> {
@@ -71,6 +81,11 @@ pub async fn refresh_running_apps(registry: AppsRegistry) -> Result<Vec<Clipboar
         .await
         .map_err(|err| AppError::Other(anyhow!("running app refresh task join failed: {err}")))?;
 
+    let _resource_access = registry
+        .app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     Ok(materialize_metas(&registry, metas))
 }
 
@@ -154,6 +169,11 @@ async fn upsert_metas(
     registry: &AppsRegistry,
     metas: Vec<ScannedAppMeta>,
 ) -> Result<Vec<ClipboardApp>> {
+    let _resource_access = registry
+        .app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let apps = materialize_metas(registry, metas);
     let pool = registry.pool().await;
 

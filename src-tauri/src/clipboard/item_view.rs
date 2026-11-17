@@ -80,6 +80,7 @@ pub struct ItemView<'a> {
     pub pool: &'a SqlitePool,
     pub images: &'a ImageStore,
     pub file_icons: &'a FileIconStore,
+    pub storage_access: crate::storage::StorageAccess,
 }
 
 impl ItemView<'_> {
@@ -177,7 +178,9 @@ impl ItemView<'_> {
 
         if !thumb_exists {
             let store = self.images.clone();
+            let access = self.storage_access.clone();
             tauri::async_runtime::spawn_blocking(move || {
+                let _resource_access = tauri::async_runtime::block_on(access.read_owned());
                 if let Err(err) = store.ensure_thumbnail(&file_name) {
                     log::warn!("ensure image thumbnail failed for {:?}: {err}", file_name);
                 }
@@ -518,6 +521,7 @@ mod tests {
             pool: &pool,
             images: &images,
             file_icons: &file_icons,
+            storage_access: crate::storage::StorageAccess::default(),
         };
         let missing = dir.path().join("gone");
         let dir_path = missing.join("folder").to_string_lossy().into_owned();

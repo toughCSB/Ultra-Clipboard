@@ -6,11 +6,39 @@ import {
   closesPreview,
   commandFromClickSetting,
   commandFromMenuAction,
+  commandFromPrimaryClick,
   commandFromQuickAction,
   type ItemCommand,
 } from "./itemCommands";
 
 describe("itemCommands", () => {
+  it("copies on every primary click and preserves legacy paste on double click", () => {
+    for (const setting of [
+      "disabled",
+      "singleClickPaste",
+      "singleClickCopy",
+      "doubleClickPaste",
+      "doubleClickCopy",
+    ] as const) {
+      assert.deepEqual(commandFromPrimaryClick(setting, "single"), {
+        plain: false,
+        type: "copy",
+      });
+    }
+    assert.equal(commandFromPrimaryClick("disabled", "double"), null);
+    assert.deepEqual(commandFromPrimaryClick("singleClickPaste", "double"), {
+      plain: false,
+      type: "paste",
+    });
+    assert.deepEqual(commandFromPrimaryClick("doubleClickPaste", "double"), {
+      plain: false,
+      type: "paste",
+    });
+    assert.deepEqual(commandFromPrimaryClick("singleClickCopy", "double"), {
+      plain: false,
+      type: "copy",
+    });
+  });
   it("maps every context-menu action", () => {
     const expected: Record<ClipboardAction, ItemCommand | null> = {
       copy: { plain: false, type: "copy" },

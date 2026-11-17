@@ -430,7 +430,7 @@
       },
       "paste": {
         "autoPaste": {
-          "description": "Choose what happens when clicking a history record with the left mouse button.",
+          "description": "A single click always copies to the clipboard. Choose the additional double-click action.",
           "options": {
             "disabled": "Disabled",
             "doubleClickCopy": "Double-click to copy",
@@ -438,7 +438,7 @@
             "singleClickCopy": "Single-click to copy",
             "singleClickPaste": "Single-click to paste"
           },
-          "title": "Left Mouse Button"
+          "title": "Double-click Action"
         },
         "fileMode": {
           "description": "When pasting file records, paste file paths by default instead of the files themselves.",

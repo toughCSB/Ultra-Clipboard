@@ -42,6 +42,7 @@ export const styleFromShape = (
         ...base,
         highlightColor: shape.color,
         highlightOpacity: shape.opacity,
+        highlightWidth: shape.strokeWidth / scale,
       };
     case "blur":
       return {
@@ -127,6 +128,10 @@ export const applyStyleToShape = (
         ...shape,
         color: patch.highlightColor ?? shape.color,
         opacity: patch.highlightOpacity ?? shape.opacity,
+        strokeWidth:
+          patch.highlightWidth === undefined
+            ? shape.strokeWidth
+            : patch.highlightWidth * scale,
       };
     case "blur": {
       const mode = patch.blurMode ?? shape.mode;

@@ -4,13 +4,16 @@
 
 mod backend;
 mod editor;
+mod frame_transport;
 mod geometry;
 mod ocr;
 mod output;
 mod overlay;
 mod pin;
 mod state;
+mod translation;
 
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,6 +22,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Request;
 use tauri::{AppHandle, Manager, Window};
+use tokio::sync::oneshot;
 
 use crate::core::{AppError, Result};
 
@@ -26,6 +30,7 @@ pub use editor::ImageInfo;
 pub use geometry::PixelRect;
 pub use output::ExportResult;
 pub use overlay::OverlayState;
+pub use translation::TranslationStatus;
 
 use state::{CaptureSession, CapturedImage, MonitorFrame, MonitorGeometry, ScreenshotState};
 
@@ -41,6 +46,7 @@ const TRAY_CAPTURE_DELAY: Duration = Duration::from_millis(200);
 
 /// Lets startup finish before the overlay WebViews are built in the background.
 const OVERLAY_PREWARM_DELAY: Duration = Duration::from_secs(3);
+const OVERLAY_PRESENT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Time to open a menu or hover state before a delayed capture freezes the screen.
 const DELAYED_CAPTURE_DELAY: Duration = Duration::from_secs(3);
@@ -59,6 +65,7 @@ pub enum CaptureMode {
 
 pub fn init(app: &AppHandle) {
     app.manage(ScreenshotState::default());
+    app.manage(translation::TranslationFlights::default());
     prewarm_overlays(app);
 }
 
@@ -117,12 +124,31 @@ pub fn intercept_close_request(window: &Window) -> bool {
     }
 
     if label.starts_with(OVERLAY_WINDOW_LABEL_PREFIX) {
-        cancel_capture(app, None);
+        let Some(session_id) = app
+            .state::<ScreenshotState>()
+            .with_session(|session| session.id)
+        else {
+            let main_app = app.clone();
+            if let Err(err) = app.run_on_main_thread(move || overlay::hide_all(&main_app)) {
+                log::error!("hide inactive screenshot overlay failed: {err}");
+            }
+            return true;
+        };
+        let main_app = app.clone();
+        if let Err(err) =
+            app.run_on_main_thread(move || cancel_capture(&main_app, Some(session_id)))
+        {
+            log::error!("dispatch screenshot overlay close failed: {err}");
+        }
         return true;
     }
 
     if label.starts_with(PIN_WINDOW_LABEL_PREFIX) {
-        close_window(app, label);
+        let main_app = app.clone();
+        let label = label.to_owned();
+        if let Err(err) = app.run_on_main_thread(move || close_window(&main_app, &label)) {
+            log::error!("dispatch screenshot pin close failed: {err}");
+        }
         return true;
     }
 
@@ -135,6 +161,23 @@ pub fn start_capture(app: &AppHandle, mode: CaptureMode) {
 
 pub fn start_capture_from_tray(app: &AppHandle, mode: CaptureMode) {
     dispatch_capture(app, mode, capture_delay(mode, Some(TRAY_CAPTURE_DELAY)));
+}
+
+/// Runs screenshot window effects in the same order as capture and timeout callbacks.
+pub async fn on_main_thread<T: Send + 'static>(
+    app: &AppHandle,
+    effect: impl FnOnce(AppHandle) -> T + Send + 'static,
+) -> Result<T> {
+    let (sender, receiver) = oneshot::channel();
+    let main_app = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(effect(main_app));
+    })
+    .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
+
+    receiver
+        .await
+        .map_err(|err| AppError::Other(anyhow::anyhow!(err)))
 }
 
 fn dispatch_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
@@ -160,20 +203,43 @@ pub fn overlay_state(app: &AppHandle, label: &str) -> Option<OverlayState> {
         .flatten()
 }
 
-pub fn overlay_frame(app: &AppHandle, label: &str, session_id: u64) -> Result<Vec<u8>> {
-    let frame = app
+pub async fn overlay_frame(app: &AppHandle, label: &str, session_id: u64) -> Result<Vec<u8>> {
+    let (rgba, width, height) = app
         .state::<ScreenshotState>()
         .with_session(|session| {
             if session.id != session_id {
                 return None;
             }
 
-            session.frame(label).and_then(|frame| frame.rgba.clone())
+            session.frame(label).and_then(|frame| {
+                frame.rgba.clone().map(|rgba| {
+                    (
+                        rgba,
+                        frame.monitor.bounds.width,
+                        frame.monitor.bounds.height,
+                    )
+                })
+            })
         })
         .flatten()
         .ok_or_else(|| AppError::Other(anyhow::anyhow!("capture session has ended")))?;
 
-    Ok(frame.as_ref().clone())
+    let png = tauri::async_runtime::spawn_blocking(move || {
+        frame_transport::encode_overlay_png(rgba.as_slice(), width, height)
+    })
+    .await
+    .map_err(|err| AppError::Other(anyhow::anyhow!("overlay PNG task failed: {err}")))??;
+    let current = app
+        .state::<ScreenshotState>()
+        .with_session(|session| session.id == session_id)
+        .unwrap_or(false);
+    if !current {
+        return Err(AppError::Other(anyhow::anyhow!(
+            "capture session has ended"
+        )));
+    }
+
+    Ok(png)
 }
 
 pub fn reveal_overlay(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
@@ -236,27 +302,46 @@ pub fn commit_selection(
                 origin_y: bounds.y.saturating_add(selection.y),
                 rgba,
                 captured_at: session.captured_at,
+                source_title: session.source_title.clone(),
             },
             frame.monitor,
-            true,
+            Some(session_id),
         )
     })();
 
     if result.is_err() {
         overlay::hide_all(app);
-        state.finish_capture();
+        state.finish_capture(session_id);
     }
 
     result
 }
 
 pub fn cancel_capture(app: &AppHandle, session_id: Option<u64>) {
-    let session = app.state::<ScreenshotState>().take_session(session_id);
-    overlay::hide_all(app);
+    let state = app.state::<ScreenshotState>();
+    cancel_active_session(
+        &state,
+        session_id,
+        || overlay::hide_all(app),
+        |previous| {
+            backend::restore_foreground(previous);
+        },
+    );
+}
 
-    if let Some(session) = session {
-        backend::restore_foreground(session.previous_foreground);
-    }
+fn cancel_active_session(
+    state: &ScreenshotState,
+    session_id: Option<u64>,
+    hide: impl FnOnce(),
+    restore_foreground: impl FnOnce(Option<isize>),
+) -> bool {
+    let Some(session) = state.take_session(session_id) else {
+        return false;
+    };
+    hide();
+    restore_foreground(session.previous_foreground);
+    state.finish_capture(session.id);
+    true
 }
 
 pub fn image_info(app: &AppHandle, label: &str) -> Result<ImageInfo> {
@@ -279,6 +364,8 @@ pub fn reveal_window(app: &AppHandle, label: &str) -> Result<()> {
 
 /// Releases a screenshot window's pixels and temporary drag file, then destroys it.
 pub fn close_window(app: &AppHandle, label: &str) {
+    app.state::<translation::TranslationFlights>()
+        .cancel_label(label);
     let state = app.state::<ScreenshotState>();
     if let Some(drag_file) = state.remove_window(label) {
         if let Some(directory) = drag_file.path.parent() {
@@ -288,9 +375,9 @@ pub fn close_window(app: &AppHandle, label: &str) {
         }
     }
 
-    if state.complete_editor_handoff(label) {
+    state.complete_editor_handoff(label, || {
         overlay::hide_all(app);
-    }
+    });
 
     if let Some(window) = app.get_webview_window(label) {
         if let Err(err) = window.destroy() {
@@ -317,12 +404,39 @@ pub async fn export(app: &AppHandle, request: output::ExportRequest) -> Result<E
     result
 }
 
+pub async fn translation_status() -> Result<TranslationStatus> {
+    translation::status().await
+}
+
+pub async fn set_translation_key(key: String) -> Result<()> {
+    translation::set_key(key).await
+}
+
+pub async fn remove_translation_key() -> Result<()> {
+    translation::remove_key().await
+}
+
+pub fn cancel_translation(app: &AppHandle, label: &str, request_id: u64) {
+    app.state::<translation::TranslationFlights>()
+        .cancel(label, request_id);
+}
+
 pub async fn start_drag(app: &AppHandle, label: &str) -> Result<()> {
     output::start_drag(app, label).await
 }
 
 pub async fn copy_color(color: &str) -> Result<()> {
     output::copy_color(color).await
+}
+
+pub async fn copy_text(app: &AppHandle, label: &str, text: &str) -> Result<()> {
+    if app.state::<ScreenshotState>().image(label).is_none() {
+        return Err(AppError::Other(anyhow::anyhow!(
+            "screenshot window is closed"
+        )));
+    }
+
+    output::copy_text(text).await
 }
 
 pub async fn read_clipboard_image() -> Result<Vec<u8>> {
@@ -355,33 +469,27 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
     }
 
     let state = app.state::<ScreenshotState>();
-    if !state.try_begin_capture() {
+    let Some(capture_id) = state.try_begin_capture() else {
         log::debug!("screenshot capture already in progress");
         return;
-    }
+    };
 
     let monitors = match monitor_geometries(app) {
         Ok(monitors) if !monitors.is_empty() => monitors,
         Ok(_) => {
             log::error!("screenshot capture found no monitors");
-            state.finish_capture();
+            state.finish_capture(capture_id);
             return;
         }
         Err(err) => {
             log::error!("screenshot capture could not read monitors: {err}");
-            state.finish_capture();
+            state.finish_capture(capture_id);
             return;
         }
     };
-    let cursor = app.cursor_position().ok();
     let previous_foreground = backend::foreground_window();
-    let cursor_index = cursor
-        .and_then(|cursor| {
-            monitors
-                .iter()
-                .position(|monitor| monitor.bounds.contains_point(cursor.x, cursor.y))
-        })
-        .unwrap_or(0);
+    let source_title = backend::foreground_title(previous_foreground);
+    let cursor_index = backend::cursor_monitor(app, &monitors).unwrap_or(0);
     let direct = direct_target(&state, mode, &monitors, cursor_index);
     // Selection overlays shown before the capture appear at once, like the
     // system screenshot tool; the pixels arrive while the user starts selecting.
@@ -395,6 +503,13 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
                 thread::sleep(delay);
             }
 
+            #[cfg(target_os = "macos")]
+            if let Err(err) = backend::ensure_capture_permission() {
+                log::error!("screenshot permission is unavailable: {err}");
+                fail_capture(&capture_app, capture_id, None, &err);
+                return;
+            }
+
             let target = CaptureTarget {
                 mode,
                 monitors,
@@ -402,28 +517,39 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
                 direct,
                 previous_foreground,
                 captured_at: Local::now(),
+                source_title,
             };
-            let early_session = early.then(|| show_early_session(&capture_app, &target));
+            let early_session = if early {
+                match show_early_session(&capture_app, &target, capture_id) {
+                    Ok(session_id) => Some(session_id),
+                    Err(err) => {
+                        log::error!("present early screenshot overlays failed: {err}");
+                        fail_capture(&capture_app, capture_id, Some(capture_id), &err);
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
             let result = match early_session {
                 Some(session_id) => capture_into_session(&capture_app, &target, session_id),
-                None => capture(&capture_app, target),
+                None => capture(&capture_app, target, capture_id),
             };
             if let Err(err) = result {
                 log::error!("screenshot capture failed: {err}");
-                fail_capture(&capture_app, early_session, &err);
+                fail_capture(&capture_app, capture_id, early_session, &err);
             }
         });
 
     if let Err(err) = spawned {
         log::error!("spawn screenshot capture thread failed: {err}");
-        state.finish_capture();
+        state.finish_capture(capture_id);
     }
 }
 
 /// Stores a session without pixels and shows its overlays over the live screen.
-fn show_early_session(app: &AppHandle, target: &CaptureTarget) -> u64 {
+fn show_early_session(app: &AppHandle, target: &CaptureTarget, session_id: u64) -> Result<u64> {
     let state = app.state::<ScreenshotState>();
-    let session_id = state.next_id();
     state.set_session(CaptureSession {
         id: session_id,
         mode: overlay_mode(target.mode),
@@ -432,14 +558,32 @@ fn show_early_session(app: &AppHandle, target: &CaptureTarget) -> u64 {
         cursor_label: overlay::label_for(target.cursor_index),
         previous_foreground: target.previous_foreground,
         captured_at: target.captured_at,
+        source_title: target.source_title.clone(),
     });
 
+    let (sender, receiver) = mpsc::sync_channel(1);
     let main_app = app.clone();
-    if let Err(err) = app.run_on_main_thread(move || present_early(&main_app, session_id)) {
-        log::error!("dispatch early screenshot overlays failed: {err}");
+    app.run_on_main_thread(move || {
+        let _ = sender.send(present_early(&main_app, session_id));
+    })
+    .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
+    receiver
+        .recv_timeout(OVERLAY_PRESENT_TIMEOUT)
+        .map_err(|_| {
+            AppError::Other(anyhow::anyhow!("screenshot overlay presentation timed out"))
+        })??;
+
+    if app
+        .state::<ScreenshotState>()
+        .with_session(|session| session.id == session_id)
+        != Some(true)
+    {
+        return Err(AppError::Other(anyhow::anyhow!(
+            "screenshot capture was cancelled"
+        )));
     }
 
-    session_id
+    Ok(session_id)
 }
 
 struct CaptureTarget {
@@ -450,6 +594,7 @@ struct CaptureTarget {
     direct: Option<(MonitorGeometry, PixelRect)>,
     previous_foreground: Option<isize>,
     captured_at: chrono::DateTime<Local>,
+    source_title: Option<String>,
 }
 
 fn direct_target(
@@ -494,32 +639,41 @@ fn monitor_frames(monitors: &[MonitorGeometry], pixels: Option<Vec<Vec<u8>>>) ->
         .collect()
 }
 
-fn present_early(app: &AppHandle, session_id: u64) {
+fn present_early(app: &AppHandle, session_id: u64) -> Result<()> {
     let started = Instant::now();
-    if let Err(err) = overlay::present(app, session_id, overlay::Reveal::Now) {
-        log::error!("present early screenshot overlays failed: {err}");
-        cancel_capture(app, Some(session_id));
-        return;
-    }
+    overlay::present(app, session_id, overlay::Reveal::Now)?;
 
     log::info!(
         "screenshot overlays shown before capture in {}ms",
         started.elapsed().as_millis()
     );
+    Ok(())
 }
 
 /// Ends a failed capture and, for a missing permission, opens its preference.
-fn fail_capture(app: &AppHandle, early_session: Option<u64>, err: &AppError) {
+fn fail_capture(app: &AppHandle, capture_id: u64, early_session: Option<u64>, err: &AppError) {
     let permission_missing = backend::is_permission_error(err);
     let main_app = app.clone();
 
     if let Err(dispatch_err) = app.run_on_main_thread(move || {
-        if let Some(session_id) = early_session {
-            cancel_capture(&main_app, Some(session_id));
-        }
-        main_app.state::<ScreenshotState>().finish_capture();
+        let state = main_app.state::<ScreenshotState>();
+        let cancelled = early_session.is_some_and(|session_id| {
+            cancel_active_session(
+                &state,
+                Some(session_id),
+                || overlay::hide_all(&main_app),
+                |previous| {
+                    backend::restore_foreground(previous);
+                },
+            )
+        });
+        let was_current = if early_session.is_some() {
+            cancelled
+        } else {
+            state.finish_capture(capture_id)
+        };
 
-        if permission_missing {
+        if permission_missing && was_current {
             if let Err(open_err) = crate::window::open_preference_with_highlight(
                 &main_app,
                 "permissions.screenRecording".to_owned(),
@@ -529,7 +683,14 @@ fn fail_capture(app: &AppHandle, early_session: Option<u64>, err: &AppError) {
         }
     }) {
         log::error!("dispatch failed screenshot cleanup failed: {dispatch_err}");
-        app.state::<ScreenshotState>().finish_capture();
+        let state = app.state::<ScreenshotState>();
+        if let Some(session_id) = early_session {
+            if state.take_session(Some(session_id)).is_some() {
+                state.finish_capture(capture_id);
+            }
+        } else {
+            state.finish_capture(capture_id);
+        }
     }
 }
 
@@ -545,7 +706,12 @@ fn capture_into_session(app: &AppHandle, target: &CaptureTarget, session_id: u64
     let pixels = backend.capture_rects(&rects)?;
 
     let state = app.state::<ScreenshotState>();
-    if !state.fill_session(session_id, pixels, backend.list_windows()) {
+    if !state.fill_session(
+        session_id,
+        pixels,
+        backend.list_windows(),
+        backend.origin_title(target.previous_foreground),
+    ) {
         log::debug!("screenshot session {session_id} ended before its pixels arrived");
         return Ok(());
     }
@@ -561,7 +727,7 @@ fn capture_into_session(app: &AppHandle, target: &CaptureTarget, session_id: u64
         .map_err(|err| AppError::Other(anyhow::anyhow!(err)))
 }
 
-fn capture(app: &AppHandle, target: CaptureTarget) -> Result<()> {
+fn capture(app: &AppHandle, target: CaptureTarget, capture_id: u64) -> Result<()> {
     let started = Instant::now();
     let CaptureTarget {
         mode,
@@ -570,6 +736,7 @@ fn capture(app: &AppHandle, target: CaptureTarget) -> Result<()> {
         direct,
         previous_foreground,
         captured_at,
+        source_title,
     } = target;
     let backend = backend::CaptureContext::new(&monitors)?;
 
@@ -590,13 +757,19 @@ fn capture(app: &AppHandle, target: CaptureTarget) -> Result<()> {
             origin_y: area.y,
             rgba,
             captured_at,
+            source_title: backend.origin_title(previous_foreground).or(source_title),
         };
         let main_app = app.clone();
 
         return app
             .run_on_main_thread(move || {
-                main_app.state::<ScreenshotState>().finish_capture();
-                if let Err(err) = editor::open(&main_app, image, monitor, false) {
+                if !main_app
+                    .state::<ScreenshotState>()
+                    .finish_capture(capture_id)
+                {
+                    return;
+                }
+                if let Err(err) = editor::open(&main_app, image, monitor, None) {
                     log::error!("open screenshot editor failed: {err}");
                 }
             })
@@ -610,9 +783,9 @@ fn capture(app: &AppHandle, target: CaptureTarget) -> Result<()> {
     let pixels = backend.capture_rects(&rects)?;
 
     let state = app.state::<ScreenshotState>();
-    let session_id = state.next_id();
+    let session_id = capture_id;
     let mode = overlay_mode(mode);
-    state.set_session(CaptureSession {
+    if !state.set_session(CaptureSession {
         id: session_id,
         mode,
         frames: monitor_frames(&monitors, Some(pixels)),
@@ -620,7 +793,10 @@ fn capture(app: &AppHandle, target: CaptureTarget) -> Result<()> {
         cursor_label: overlay::label_for(cursor_index),
         previous_foreground,
         captured_at,
-    });
+        source_title: backend.origin_title(previous_foreground).or(source_title),
+    }) {
+        return Ok(());
+    }
     log::info!(
         "screenshot {mode:?} froze {} monitor(s) in {}ms",
         monitors.len(),
@@ -659,6 +835,28 @@ fn monitor_geometries(_app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
     backend::monitor_geometries()
 }
 
+/// Reads monitors from any thread; macOS reads displays on the main thread.
+#[cfg(target_os = "macos")]
+fn monitors_from_any_thread(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    if objc2::MainThreadMarker::new().is_some() {
+        return backend::monitor_geometries();
+    }
+
+    let (sender, receiver) = mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let _ = sender.send(backend::monitor_geometries());
+    })
+    .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
+    receiver
+        .recv_timeout(OVERLAY_PRESENT_TIMEOUT)
+        .map_err(|_| AppError::Other(anyhow::anyhow!("reading monitors timed out")))?
+}
+
+#[cfg(target_os = "windows")]
+fn monitors_from_any_thread(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    monitor_geometries(app)
+}
+
 #[cfg(target_os = "windows")]
 fn monitor_geometries(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
     let monitors = app
@@ -688,6 +886,8 @@ fn monitor_geometries(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use super::*;
 
     fn monitor(x: i32, y: i32, width: u32, height: u32) -> MonitorGeometry {
@@ -696,6 +896,62 @@ mod tests {
             work_area: PixelRect::new(x, y, width, height),
             scale_factor: 1.25,
         }
+    }
+
+    #[test]
+    fn stale_cancel_does_not_hide_or_restore_current_capture() {
+        let state = ScreenshotState::default();
+        let old_id = state.try_begin_capture().unwrap();
+        let old_monitor = monitor(0, 0, 2, 1);
+        assert!(state.set_session(CaptureSession {
+            id: old_id,
+            mode: CaptureMode::Area,
+            frames: monitor_frames(&[old_monitor], None),
+            windows: Vec::new(),
+            cursor_label: overlay::label_for(0),
+            previous_foreground: Some(42),
+            captured_at: Local::now(),
+            source_title: None,
+        }));
+        assert!(cancel_active_session(&state, Some(old_id), || {}, |_| {}));
+
+        let new_id = state.try_begin_capture().unwrap();
+        assert!(state.set_session(CaptureSession {
+            id: new_id,
+            mode: CaptureMode::Area,
+            frames: monitor_frames(&[old_monitor], None),
+            windows: Vec::new(),
+            cursor_label: overlay::label_for(0),
+            previous_foreground: Some(84),
+            captured_at: Local::now(),
+            source_title: None,
+        }));
+        let hidden = Cell::new(0);
+        let restored = Cell::new(None);
+
+        assert!(!cancel_active_session(
+            &state,
+            Some(old_id),
+            || hidden.set(1),
+            |previous| {
+                restored.set(previous);
+            }
+        ));
+        assert!(!state.finish_capture(old_id));
+        assert_eq!(hidden.get(), 0);
+        assert_eq!(restored.get(), None);
+        assert_eq!(state.with_session(|session| session.id), Some(new_id));
+
+        assert!(cancel_active_session(
+            &state,
+            Some(new_id),
+            || hidden.set(1),
+            |previous| {
+                restored.set(previous);
+            }
+        ));
+        assert_eq!(hidden.get(), 1);
+        assert_eq!(restored.get(), Some(84));
     }
 
     #[test]

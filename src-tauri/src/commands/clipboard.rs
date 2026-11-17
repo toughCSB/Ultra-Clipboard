@@ -52,6 +52,10 @@ pub async fn save_clipboard_image_to_file(
     store: State<'_, ImageStore>,
     id: String,
 ) -> Result<Option<String>> {
+    let resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     let item = find_item_by_id(&pool, &id)
         .await?
@@ -69,6 +73,7 @@ pub async fn save_clipboard_image_to_file(
     if !source.is_file() {
         return Err(AppError::Clipboard("image file does not exist".to_owned()));
     }
+    drop(resource_access);
 
     let _auto_hide_guard = ClipboardAutoHideSuspendGuard::new();
     let mut dialog = app
@@ -98,7 +103,29 @@ pub async fn save_clipboard_image_to_file(
     let target = target_path
         .into_path()
         .map_err(|err| AppError::Clipboard(format!("save path is invalid: {err}")))?;
-    let source_for_copy = source.clone();
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
+    let pool = db.pool().await;
+    let current = find_item_by_id(&pool, &id)
+        .await?
+        .ok_or_else(|| AppError::Clipboard(format!("clipboard item not found: {id}")))?;
+    if current.kind != ClipboardKind::Image {
+        return Err(AppError::Clipboard(
+            "selected item is not an image".to_owned(),
+        ));
+    }
+    if current.content != item.content {
+        return Err(AppError::Clipboard(
+            "selected image changed while choosing a save location".to_owned(),
+        ));
+    }
+    validate_image_file_name(&current.content)?;
+    let source_for_copy = store.origin_path(&current.content);
+    if !source_for_copy.is_file() {
+        return Err(AppError::Clipboard("image file does not exist".to_owned()));
+    }
     let target_for_copy = target.clone();
 
     tauri::async_runtime::spawn_blocking(move || std::fs::copy(source_for_copy, target_for_copy))
@@ -121,6 +148,10 @@ pub async fn get_clipboard_preview_payload(
     file_icon_store: State<'_, FileIconStore>,
     item_id: String,
 ) -> Result<Option<ClipboardPreviewPayload>> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     let Some(item) = find_item_by_id(&pool, &item_id).await? else {
         return Ok(None);
@@ -136,6 +167,7 @@ pub async fn get_clipboard_preview_payload(
         pool: &pool,
         images: &image_store,
         file_icons: &file_icon_store,
+        storage_access: app.state::<crate::storage::StorageAccess>().inner().clone(),
     };
     let payload = view.preview(item, redact_sensitive).await?;
     Ok(Some(payload))
@@ -159,6 +191,10 @@ pub async fn write_to_clipboard(
     id: String,
     plain: bool,
 ) -> Result<()> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     paste::copy_item(&app, &pool, &store, &guard, &id, plain).await
 }
@@ -172,6 +208,10 @@ pub async fn paste_clipboard_item(
     id: String,
     plain: bool,
 ) -> Result<()> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     paste::paste_item(&app, &pool, &store, &guard, &id, plain).await
 }
@@ -185,6 +225,10 @@ pub async fn list_clipboard_items(
     file_icon_store: State<'_, FileIconStore>,
     query: Option<ClipboardItemQuery>,
 ) -> Result<ClipboardItemPage> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .read_owned()
+        .await;
     let pool = db.pool().await;
     let q = query.unwrap_or_default();
     let (mut items, total) = crate::db::items::query_items_page(&pool, &q).await?;
@@ -193,6 +237,7 @@ pub async fn list_clipboard_items(
         pool: &pool,
         images: &image_store,
         file_icons: &file_icon_store,
+        storage_access: app.state::<crate::storage::StorageAccess>().inner().clone(),
     };
     view.decorate_list(
         &app_icon_store,
@@ -486,6 +531,10 @@ pub async fn delete_clipboard_item(
     id: String,
     in_favorite_view: bool,
 ) -> Result<()> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .exclusive_owned()
+        .await;
     let pool = db.pool().await;
     if let Some(item) = find_item_by_id(&pool, &id).await? {
         let content = app.state::<SettingsStore>().snapshot().clipboard.content;
@@ -512,6 +561,10 @@ pub async fn clear_clipboard_items(
     delete_favorites: bool,
     delete_pinned: bool,
 ) -> Result<u64> {
+    let _resource_access = app
+        .state::<crate::storage::StorageAccess>()
+        .exclusive_owned()
+        .await;
     let pool = db.pool().await;
     let outcome = clear_items(&pool, delete_favorites, delete_pinned).await?;
 

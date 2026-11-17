@@ -5,8 +5,11 @@
 //! for text and rich text. Every entry point runs on the owning window thread.
 
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
+use std::sync::Mutex;
 
 use tauri::WebviewWindow;
+use tokio::sync::OwnedRwLockReadGuard;
 
 use crate::core::{AppError, Result};
 
@@ -19,17 +22,37 @@ pub mod windows;
 #[cfg(target_os = "windows")]
 mod windows_ghost;
 
-/// Starts a file drag. `preview_png` is preferred; when absent, the first path
-/// is used for platform fallback preview generation.
-pub fn start_drag_files(
+/// Keeps a managed image file available until the native drag finishes.
+pub fn start_drag_files_with_lifetime(
     window: &WebviewWindow,
     paths: Vec<PathBuf>,
     preview_png: Option<Vec<u8>>,
+    lifetime: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
-    start_drag_files_with_ghost(window, paths, preview_png, true)
+    if paths.is_empty() {
+        return Err(AppError::Clipboard("drag-out: empty path list".to_string()));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let completion = Mutex::new(Some(lifetime));
+        macos::start_drag_files(window, paths, preview_png, move |result| {
+            completion
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
+            log::debug!("drag-out finished: {result:?}");
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _lifetime = lifetime;
+        windows::start_drag_files_with_ghost(window, paths, preview_png, true)
+    }
 }
 
-/// Same as [`start_drag_files`], but on Windows `with_ghost` controls whether
+/// Starts a file drag. On Windows `with_ghost` controls whether
 /// the window's WebView2 drop target is wrapped for the OLE ghost preview.
 /// That wrapping reinterprets an internal WebView2 window property as a raw
 /// COM pointer, so callers unsure of a window's WebView2 setup (freshly

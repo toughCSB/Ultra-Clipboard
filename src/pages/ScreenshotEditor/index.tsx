@@ -5,15 +5,23 @@ import type { FC, PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  cancelScreenshotTranslation,
   closeScreenshotWindow,
   copyScreenshotColor,
+  copyScreenshotText,
   exportScreenshot,
   getScreenshotImage,
   getScreenshotImageInfo,
+  getScreenshotTranslationStatus,
   notifyScreenshotWindowReady,
   readScreenshotClipboardImage,
+  removeScreenshotTranslationKey,
   type ScreenshotExportAction,
   type ScreenshotImageInfo,
+  type ScreenshotTextRegion,
+  type ScreenshotTranslationBlock,
+  type ScreenshotTranslationStatus,
+  setScreenshotTranslationKey,
   startScreenshotDrag,
 } from "@/commands";
 import { TAURI_EVENT } from "@/constants/events";
@@ -29,8 +37,13 @@ import {
 } from "@/utils/pixelRect";
 import EditorCanvas, { type ViewSize } from "./components/EditorCanvas";
 import EditorToolbar, { type ToolAnchorRect } from "./components/EditorToolbar";
+import ImageTextSelection, {
+  selectedImageText,
+} from "./components/ImageTextSelection";
 import TextEditor, { type TextEditState } from "./components/TextEditor";
 import ToolOptions, { type OptionsSubject } from "./components/ToolOptions";
+import TranslationControls from "./components/TranslationControls";
+import TranslationKeyModal from "./components/TranslationKeyModal";
 import {
   type TextEditRequest,
   useCanvasInteraction,
@@ -47,6 +60,7 @@ import {
   replaceShape,
   setBackdrop,
 } from "./model/document";
+import { createDragGesture } from "./model/dragGesture";
 import {
   commitHistory,
   createHistory,
@@ -57,6 +71,7 @@ import {
 import { type PixelSpans, readPixelHex } from "./model/pixels";
 import { applyStyleToShape, styleFromShape } from "./model/shapeStyle";
 import { createShapeId, moveShape, type TextShape } from "./model/shapes";
+import { validTextRegions } from "./model/textSelection";
 import {
   type EditorTool,
   loadToolStyle,
@@ -75,6 +90,10 @@ import {
 } from "./model/viewport";
 import { renderScenePixels } from "./render/renderPixels";
 import { measureTextBox, TEXT_LINE_HEIGHT, textPadding } from "./render/text";
+import {
+  createTranslationLayer,
+  type TranslationLayer,
+} from "./render/translation";
 
 interface LoadedImage {
   bitmap: ImageBitmap;
@@ -90,9 +109,31 @@ interface DragPreparation {
   document: EditorDocument;
   ready: Promise<boolean>;
   selection: PixelRect | null;
+  translation: TranslationLayer | null;
 }
 
-type WindowExportAction = Exclude<ScreenshotExportAction, "prepareDrag">;
+interface TextSelectionMode {
+  area: PixelRect;
+  document: EditorDocument;
+  loading: boolean;
+  regions: ScreenshotTextRegion[];
+}
+
+interface TranslationMode {
+  area: PixelRect;
+  blocks: ScreenshotTranslationBlock[];
+  document: EditorDocument;
+  failed: boolean;
+  layer: TranslationLayer | null;
+  loading: boolean;
+  selection: PixelRect | null;
+  showOriginal: boolean;
+}
+
+type WindowExportAction = Exclude<
+  ScreenshotExportAction,
+  "prepareDrag" | "selectText" | "translate"
+>;
 
 const FIT_MARGIN_CSS = 24;
 const VISIBLE_CONTENT_CSS = 64;
@@ -125,19 +166,93 @@ const ScreenshotEditor: FC = () => {
   const [maximized, setMaximized] = useState(false);
   const [toolAnchor, setToolAnchor] = useState<ToolAnchorRect | null>(null);
   const [toolOptionsOpen, setToolOptionsOpen] = useState(false);
+  const [textSelectionMode, setTextSelectionMode] =
+    useState<TextSelectionMode | null>(null);
+  const [selectedImageTextValue, setSelectedImageTextValue] = useState("");
+  const [translationMode, setTranslationMode] =
+    useState<TranslationMode | null>(null);
+  const [translationKeyModalOpen, setTranslationKeyModalOpen] = useState(false);
+  const [translationKeyConfigured, setTranslationKeyConfigured] =
+    useState(false);
+  const [translationKeyModel, setTranslationKeyModel] = useState<string | null>(
+    null,
+  );
+  const [translationKeySource, setTranslationKeySource] =
+    useState<ScreenshotTranslationStatus["source"]>(null);
+  const [translationKeyBusy, setTranslationKeyBusy] = useState(false);
   const bitmapRef = useRef<ImageBitmap | null>(null);
   const exportedDocumentRef = useRef<EditorDocument | null>(null);
   const dragPreparationRef = useRef<DragPreparation | null>(null);
+  const dragPreparationIdRef = useRef(0);
+  const dragGestureRef = useRef(createDragGesture());
+  const dragDocumentRef = useRef<EditorDocument | null>(null);
+  const dragSelectionRef = useRef<PixelRect | null>(null);
+  const dragTranslationRef = useRef<TranslationLayer | null>(null);
+  const previousDragContextRef = useRef<{
+    document: EditorDocument | null;
+    selection: PixelRect | null;
+  }>({ document: null, selection: null });
   const textEditRef = useRef<TextEditState | null>(null);
   const closingRef = useRef(false);
+  const textRequestGenerationRef = useRef(0);
+  const textSelectionModeRef = useRef<TextSelectionMode | null>(null);
+  const textOverlayRef = useRef<HTMLDivElement>(null);
+  const selectedImageTextRef = useRef("");
+  const pendingTextStartRef = useRef(false);
+  const translationModeRef = useRef<TranslationMode | null>(null);
+  const translationGenerationRef = useRef(0);
+  const activeTranslationRequestRef = useRef<number | null>(null);
+  const translationCancelRef = useRef<Promise<void> | null>(null);
+  const lastTranslationRequestIdRef = useRef(0);
+  const pendingTranslationRef = useRef<{
+    document: EditorDocument;
+    selection: PixelRect | null;
+  } | null>(null);
   const loadStartedAtRef = useRef(performance.now());
   const present = history?.present ?? null;
+  const presentRef = useRef(present);
+  presentRef.current = present;
   const shown = draft ?? present;
+  const activeTranslation =
+    translationMode?.showOriginal === false ? translationMode.layer : null;
+  dragTranslationRef.current = activeTranslation;
+  dragDocumentRef.current = present;
+  dragSelectionRef.current = selection;
   const scale = Math.max(1, image?.info.scaleFactor ?? 1);
   const checker = [token.colorBgLayout, token.colorFillSecondary] as const;
   const bounds = shown ? documentBounds(shown) : null;
 
   textEditRef.current = textEdit;
+
+  const cancelActiveTranslationRequest = useMemoizedFn(() => {
+    const requestId = activeTranslationRequestRef.current;
+    if (requestId === null) return translationCancelRef.current;
+
+    activeTranslationRequestRef.current = null;
+    const cancelled = (async () => {
+      try {
+        await cancelScreenshotTranslation(label, requestId);
+      } catch (error) {
+        log.warn("cancel screenshot translation failed", error);
+      }
+    })();
+    translationCancelRef.current = cancelled;
+
+    return cancelled;
+  });
+
+  const nextTranslationRequestId = () => {
+    const next = Math.max(
+      Date.now() * 1000,
+      lastTranslationRequestIdRef.current + 1,
+    );
+    if (!Number.isSafeInteger(next)) {
+      throw new Error("translation request id is not a safe integer");
+    }
+    lastTranslationRequestIdRef.current = next;
+
+    return next;
+  };
 
   useMount(async () => {
     try {
@@ -174,8 +289,20 @@ const ScreenshotEditor: FC = () => {
   });
 
   useUnmount(() => {
+    textRequestGenerationRef.current += 1;
+    translationGenerationRef.current += 1;
+    void cancelActiveTranslationRequest();
+    dragGestureRef.current.cancel();
     bitmapRef.current?.close();
   });
+
+  useEffect(() => {
+    const previous = previousDragContextRef.current;
+    if (previous.document !== present || previous.selection !== selection) {
+      dragGestureRef.current.cancel();
+      previousDragContextRef.current = { document: present, selection };
+    }
+  }, [present, selection]);
 
   const boundsKey = bounds
     ? `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`
@@ -196,7 +323,52 @@ const ScreenshotEditor: FC = () => {
     );
   }, [boundsKey, fitMode, viewSize]);
 
+  const leaveTextSelection = useMemoizedFn(() => {
+    if (
+      !textSelectionModeRef.current &&
+      !pendingTextStartRef.current &&
+      busyAction !== "selectText"
+    ) {
+      return;
+    }
+
+    textRequestGenerationRef.current += 1;
+    pendingTextStartRef.current = false;
+    textSelectionModeRef.current = null;
+    selectedImageTextRef.current = "";
+    window.getSelection()?.removeAllRanges();
+    setSelectedImageTextValue("");
+    setTextSelectionMode(null);
+    setBusyAction((current) => {
+      return current === "selectText" ? null : current;
+    });
+  });
+
+  const leaveTranslation = useMemoizedFn(() => {
+    if (
+      !translationModeRef.current &&
+      !pendingTranslationRef.current &&
+      busyAction !== "translate"
+    ) {
+      return;
+    }
+
+    translationGenerationRef.current += 1;
+    void cancelActiveTranslationRequest();
+    pendingTranslationRef.current = null;
+    translationModeRef.current = null;
+    dragTranslationRef.current = null;
+    dragPreparationRef.current = null;
+    dragPreparationIdRef.current += 1;
+    setTranslationMode(null);
+    setBusyAction((current) => {
+      return current === "translate" ? null : current;
+    });
+  });
+
   const commit = (next: EditorDocument) => {
+    leaveTextSelection();
+    leaveTranslation();
     setDraft(null);
     setHistory((current) => {
       return current ? commitHistory(current, next) : current;
@@ -205,6 +377,8 @@ const ScreenshotEditor: FC = () => {
 
   /** Commits a change derived from the latest document, so queued edits never drop each other. */
   const update = (change: (document: EditorDocument) => EditorDocument) => {
+    leaveTextSelection();
+    leaveTranslation();
     setDraft(null);
     setHistory((current) => {
       return current
@@ -348,23 +522,434 @@ const ScreenshotEditor: FC = () => {
   const renderAndExport = async (action: ScreenshotExportAction) => {
     if (!image || !present) return null;
 
+    const document = present;
     const area = selection ?? documentBounds(present);
+    const mode = translationModeRef.current;
+    const translation =
+      mode?.document === present && !mode.showOriginal ? mode.layer : null;
     const pixels = renderScenePixels(
-      { bitmap: image.bitmap, document: present },
+      {
+        bitmap: image.bitmap,
+        document: present,
+        translation: translation ?? void 0,
+      },
       area,
     );
 
-    return exportScreenshot({ action, area, label, pixels });
+    const result = await exportScreenshot({ action, area, label, pixels });
+
+    return { document, result, translated: translation !== null };
   };
 
-  const runExport = async (action: WindowExportAction) => {
-    if (busyAction || !present) return;
+  const startTextSelection = useMemoizedFn(async (document: EditorDocument) => {
+    if (!image || closingRef.current) return;
+
+    const generation = textRequestGenerationRef.current + 1;
+    textRequestGenerationRef.current = generation;
+    const area = documentBounds(document);
+    const mode: TextSelectionMode = {
+      area,
+      document,
+      loading: true,
+      regions: [],
+    };
+    textSelectionModeRef.current = mode;
+    setTextSelectionMode(mode);
+    setBusyAction("selectText");
+
+    try {
+      const pixels = renderScenePixels(
+        { bitmap: image.bitmap, document },
+        area,
+      );
+      const result = await exportScreenshot({
+        action: "selectText",
+        area,
+        label,
+        pixels,
+      });
+      if (
+        generation !== textRequestGenerationRef.current ||
+        closingRef.current ||
+        presentRef.current !== document
+      ) {
+        return;
+      }
+
+      const next: TextSelectionMode = {
+        ...mode,
+        loading: false,
+        regions: validTextRegions(result.textRegions, area),
+      };
+      textSelectionModeRef.current = next;
+      setTextSelectionMode(next);
+    } catch (error) {
+      if (generation === textRequestGenerationRef.current) {
+        leaveTextSelection();
+      }
+      log.error("select screenshot image text failed", error);
+    } finally {
+      if (generation === textRequestGenerationRef.current) {
+        setBusyAction(null);
+      }
+    }
+  });
+
+  const handleSelectText = () => {
+    if (textSelectionModeRef.current || busyAction === "selectText") {
+      leaveTextSelection();
+      return;
+    }
+    if (!image || !present || busyAction) return;
+
+    leaveTranslation();
+    setSelection(null);
+    setSelectedId(null);
+    setToolOptionsOpen(false);
+    if (textEditRef.current) {
+      commitTextEdit();
+      pendingTextStartRef.current = true;
+      return;
+    }
+
+    void startTextSelection(present);
+  };
+
+  useEffect(() => {
+    if (!pendingTextStartRef.current || textEdit !== null || !present) return;
+
+    pendingTextStartRef.current = false;
+    void startTextSelection(present);
+  }, [present, startTextSelection, textEdit]);
+
+  useEffect(() => {
+    if (textSelectionMode && textSelectionMode.document !== present) {
+      leaveTextSelection();
+    }
+  }, [leaveTextSelection, present, textSelectionMode]);
+
+  useEffect(() => {
+    if (
+      translationMode &&
+      (translationMode.document !== present ||
+        translationMode.selection !== selection)
+    ) {
+      leaveTranslation();
+    }
+  }, [leaveTranslation, present, selection, translationMode]);
+
+  const updateSelectedImageText = useMemoizedFn((text: string) => {
+    selectedImageTextRef.current = text;
+    setSelectedImageTextValue(text);
+  });
+
+  const copySelectedImageText = async () => {
+    const mode = textSelectionModeRef.current;
+    if (!mode || mode.loading) return false;
+
+    const text =
+      selectedImageText(mode.regions, textOverlayRef.current) ||
+      selectedImageTextRef.current;
+    if (!text.trim()) {
+      getMessageApi().info(t("editor.textSelect.hint"));
+      return false;
+    }
+
+    try {
+      await copyScreenshotText(label, text);
+      getMessageApi().success(t("commands:messages.copied"));
+      return true;
+    } catch (error) {
+      log.error("copy selected screenshot text failed", error);
+      return false;
+    }
+  };
+
+  const startTranslation = useMemoizedFn(
+    async (document: EditorDocument, selectedArea: PixelRect | null) => {
+      if (!image || closingRef.current) return;
+
+      const generation = translationGenerationRef.current + 1;
+      translationGenerationRef.current = generation;
+      pendingTranslationRef.current = null;
+      const area = selectedArea ?? documentBounds(document);
+      const loadingMode: TranslationMode = {
+        area,
+        blocks: [],
+        document,
+        failed: false,
+        layer: null,
+        loading: true,
+        selection: selectedArea,
+        showOriginal: false,
+      };
+      translationModeRef.current = loadingMode;
+      setTranslationMode(loadingMode);
+      setBusyAction("translate");
+
+      try {
+        if (translationCancelRef.current) {
+          await translationCancelRef.current;
+        }
+        if (
+          generation !== translationGenerationRef.current ||
+          closingRef.current ||
+          presentRef.current !== document ||
+          dragSelectionRef.current !== selectedArea
+        ) {
+          return;
+        }
+
+        const pixels = renderScenePixels(
+          { bitmap: image.bitmap, document },
+          area,
+        );
+        const requestId = nextTranslationRequestId();
+        activeTranslationRequestRef.current = requestId;
+        const result = await exportScreenshot({
+          action: "translate",
+          area,
+          label,
+          pixels,
+          requestId,
+        });
+        if (activeTranslationRequestRef.current === requestId) {
+          activeTranslationRequestRef.current = null;
+        }
+        if (
+          generation !== translationGenerationRef.current ||
+          closingRef.current ||
+          presentRef.current !== document ||
+          dragSelectionRef.current !== selectedArea
+        ) {
+          return;
+        }
+
+        const blocks = result.translationBlocks ?? [];
+        const layer = createTranslationLayer(area, blocks, pixels);
+        const readyMode: TranslationMode = {
+          ...loadingMode,
+          blocks,
+          layer,
+          loading: false,
+        };
+        translationModeRef.current = readyMode;
+        dragTranslationRef.current = layer;
+        dragPreparationRef.current = null;
+        dragPreparationIdRef.current += 1;
+        setTranslationMode(readyMode);
+      } catch (error) {
+        if (generation !== translationGenerationRef.current) return;
+        void cancelActiveTranslationRequest();
+        const failedMode: TranslationMode = {
+          ...loadingMode,
+          failed: true,
+          loading: false,
+        };
+        translationModeRef.current = failedMode;
+        setTranslationMode(failedMode);
+        log.error("translate screenshot failed", error);
+      } finally {
+        if (generation === translationGenerationRef.current) {
+          setBusyAction(null);
+        }
+      }
+    },
+  );
+
+  const applyTranslationKeyStatus = (status: ScreenshotTranslationStatus) => {
+    setTranslationKeyConfigured(status.configured);
+    setTranslationKeyModel(status.model);
+    setTranslationKeySource(status.source);
+  };
+
+  const handleTranslate = async () => {
+    if (translationModeRef.current || busyAction === "translate") {
+      leaveTranslation();
+      return;
+    }
+    if (!image || !present || busyAction) return;
+
+    leaveTextSelection();
+    const document = present;
+    const selectedArea = selection;
+    const generation = translationGenerationRef.current + 1;
+    translationGenerationRef.current = generation;
+    pendingTranslationRef.current = { document, selection: selectedArea };
+    const checkingMode: TranslationMode = {
+      area: selectedArea ?? documentBounds(document),
+      blocks: [],
+      document,
+      failed: false,
+      layer: null,
+      loading: true,
+      selection: selectedArea,
+      showOriginal: false,
+    };
+    translationModeRef.current = checkingMode;
+    setTranslationMode(checkingMode);
+    setBusyAction("translate");
+
+    try {
+      const status = await getScreenshotTranslationStatus();
+      if (
+        generation !== translationGenerationRef.current ||
+        closingRef.current ||
+        presentRef.current !== document ||
+        dragSelectionRef.current !== selectedArea
+      ) {
+        return;
+      }
+
+      applyTranslationKeyStatus(status);
+      if (!status.configured) {
+        setTranslationKeyModalOpen(true);
+        return;
+      }
+
+      void startTranslation(document, selectedArea);
+    } catch (error) {
+      if (generation === translationGenerationRef.current) {
+        pendingTranslationRef.current = null;
+        const failedMode: TranslationMode = {
+          ...checkingMode,
+          failed: true,
+          loading: false,
+        };
+        translationModeRef.current = failedMode;
+        setTranslationMode(failedMode);
+      }
+      log.error("read screenshot translation status failed", error);
+    } finally {
+      if (generation === translationGenerationRef.current) {
+        setBusyAction(null);
+      }
+    }
+  };
+
+  const handleSaveTranslationKey = async (key: string) => {
+    if (translationKeyBusy || translationKeySource === "environment") return;
+    setTranslationKeyBusy(true);
+    let saved = false;
+
+    try {
+      await setScreenshotTranslationKey(key);
+      saved = true;
+      const status = await getScreenshotTranslationStatus();
+      applyTranslationKeyStatus(status);
+      if (!status.configured) return;
+      setTranslationKeyModalOpen(false);
+      const pending = pendingTranslationRef.current;
+      if (
+        pending &&
+        !closingRef.current &&
+        presentRef.current === pending.document &&
+        dragSelectionRef.current === pending.selection
+      ) {
+        void startTranslation(pending.document, pending.selection);
+      }
+    } catch (error) {
+      log.error(
+        saved
+          ? "refresh screenshot translation key status after save failed"
+          : "save screenshot translation key failed",
+        error,
+      );
+    } finally {
+      setTranslationKeyBusy(false);
+    }
+  };
+
+  const handleRemoveTranslationKey = async () => {
+    if (translationKeyBusy || translationKeySource === "environment") return;
+    setTranslationKeyBusy(true);
+    let removed = false;
+
+    try {
+      await removeScreenshotTranslationKey();
+      removed = true;
+      const status = await getScreenshotTranslationStatus();
+      applyTranslationKeyStatus(status);
+      setTranslationKeyModalOpen(false);
+      leaveTranslation();
+    } catch (error) {
+      log.error(
+        removed
+          ? "refresh screenshot translation key status after removal failed"
+          : "remove screenshot translation key failed",
+        error,
+      );
+    } finally {
+      setTranslationKeyBusy(false);
+    }
+  };
+
+  const cancelTranslationKeyModal = () => {
+    if (pendingTranslationRef.current) leaveTranslation();
+    setTranslationKeyModalOpen(false);
+    setBusyAction((current) => {
+      return current === "translate" ? null : current;
+    });
+  };
+
+  const openTranslationKeyModal = async () => {
+    try {
+      const status = await getScreenshotTranslationStatus();
+      if (closingRef.current) return;
+
+      applyTranslationKeyStatus(status);
+      setTranslationKeyModalOpen(true);
+    } catch (error) {
+      log.error("read screenshot translation key status failed", error);
+    }
+  };
+
+  const toggleTranslationOriginal = () => {
+    const current = translationModeRef.current;
+    if (!current || current.loading) return;
+
+    const next = { ...current, showOriginal: !current.showOriginal };
+    translationModeRef.current = next;
+    dragTranslationRef.current = next.showOriginal ? null : next.layer;
+    dragPreparationRef.current = null;
+    dragPreparationIdRef.current += 1;
+    setTranslationMode(next);
+  };
+
+  const retryTranslation = () => {
+    const current = translationModeRef.current;
+    if (!current?.failed || busyAction) return;
+
+    void startTranslation(current.document, current.selection);
+  };
+
+  const copyTranslationText = async () => {
+    const mode = translationModeRef.current;
+    if (!mode || mode.loading) return;
+
+    const text = mode.blocks
+      .map((block) => block.translatedText)
+      .filter((line) => line.trim().length > 0)
+      .join("\n");
+    if (!text) return;
+
+    try {
+      await copyScreenshotText(label, text);
+      getMessageApi().success(t("editor.translation.copied"));
+    } catch (error) {
+      log.error("copy screenshot translation failed", error);
+    }
+  };
+
+  const runExport = async (action: WindowExportAction): Promise<boolean> => {
+    if (busyAction || !present) return false;
 
     setBusyAction(action);
 
     try {
-      const result = await renderAndExport(action);
-      if (!result) return;
+      const exported = await renderAndExport(action);
+      if (!exported) return false;
+      const { document, result, translated } = exported;
 
       if (action === "ocr") {
         const text = result.text ?? "";
@@ -375,22 +960,35 @@ const ScreenshotEditor: FC = () => {
         } else {
           getMessageApi().warning(t("editor.ocrEmpty"));
         }
-        return;
+        return Boolean(text);
       }
 
-      exportedDocumentRef.current = present;
+      if ((action === "save" || action === "saveAs") && !result.savedPath) {
+        return false;
+      }
+
+      if (!translated && presentRef.current === document) {
+        exportedDocumentRef.current = document;
+      }
 
       if (action === "copy") {
         getMessageApi().success(t("commands:messages.copied"));
       }
 
-      if (action === "save" && result.savedPath) {
+      if ((action === "save" || action === "saveAs") && result.savedPath) {
         getMessageApi().success(
-          t("editor.saved", { name: fileNameOf(result.savedPath) }),
+          t("editor.saved", {
+            name:
+              action === "save"
+                ? result.savedPath
+                : fileNameOf(result.savedPath),
+          }),
         );
       }
+      return true;
     } catch (error) {
       log.error(`screenshot ${action} failed`, error);
+      return false;
     } finally {
       setBusyAction(null);
     }
@@ -400,22 +998,50 @@ const ScreenshotEditor: FC = () => {
     if (!present) return null;
 
     const current = dragPreparationRef.current;
-    if (current?.document === present && current.selection === selection) {
+    const translation = dragTranslationRef.current;
+    if (
+      current?.document === present &&
+      current.selection === selection &&
+      current.translation === translation
+    ) {
       return current.ready;
     }
 
-    const ready = (async () => {
+    const previousReady = current?.ready;
+    const preparationId = ++dragPreparationIdRef.current;
+    const ready: Promise<boolean> = (async () => {
+      if (previousReady) await previousReady;
+      if (
+        dragDocumentRef.current !== present ||
+        dragSelectionRef.current !== selection ||
+        dragTranslationRef.current !== translation
+      ) {
+        return false;
+      }
       try {
-        return (await renderAndExport("prepareDrag")) !== null;
+        const prepared = (await renderAndExport("prepareDrag")) !== null;
+        return (
+          prepared &&
+          dragDocumentRef.current === present &&
+          dragSelectionRef.current === selection &&
+          dragTranslationRef.current === translation
+        );
       } catch (error) {
         log.error("prepare screenshot drag failed", error);
-        dragPreparationRef.current = null;
+        if (dragPreparationIdRef.current === preparationId) {
+          dragPreparationRef.current = null;
+        }
 
         return false;
       }
     })();
 
-    dragPreparationRef.current = { document: present, ready, selection };
+    dragPreparationRef.current = {
+      document: present,
+      ready,
+      selection,
+      translation,
+    };
 
     return ready;
   };
@@ -424,21 +1050,68 @@ const ScreenshotEditor: FC = () => {
     void prepareDrag();
   };
 
-  const handleDragPointerDown = async (
-    event: ReactPointerEvent<HTMLElement>,
-  ) => {
+  const handleDragPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
 
     event.preventDefault();
-    const ready = await prepareDrag();
-    if (!ready) return;
+    dragGestureRef.current.down(event.pointerId, event.clientX, event.clientY);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
+  const handleDragPointerMove = async (
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    const pointer = {
+      buttons: event.buttons,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    const handle = event.currentTarget;
+    const gestureDocument = present;
+    const gestureSelection = selection;
+    const gestureTranslation = dragTranslationRef.current;
     try {
-      await startScreenshotDrag(label);
-      exportedDocumentRef.current = present;
+      await dragGestureRef.current.move(
+        pointer,
+        async () => {
+          const prepared = await prepareDrag();
+          return (
+            Boolean(prepared) &&
+            dragDocumentRef.current === gestureDocument &&
+            dragSelectionRef.current === gestureSelection &&
+            dragTranslationRef.current === gestureTranslation
+          );
+        },
+        async () => {
+          if (
+            dragDocumentRef.current !== gestureDocument ||
+            dragSelectionRef.current !== gestureSelection ||
+            dragTranslationRef.current !== gestureTranslation
+          ) {
+            return;
+          }
+          if (handle.hasPointerCapture(pointer.pointerId)) {
+            handle.releasePointerCapture(pointer.pointerId);
+          }
+          await startScreenshotDrag(label);
+        },
+      );
     } catch (error) {
       log.error("start screenshot drag failed", error);
     }
+  };
+
+  const cancelDragGesture = () => {
+    dragGestureRef.current.cancel();
+  };
+
+  const handleBrowserBackPointerDown = (event: PointerEvent) => {
+    if (event.button === 3) cancelDragGesture();
+  };
+
+  const handleBrowserBackMouseDown = (event: MouseEvent) => {
+    if (event.button === 3) cancelDragGesture();
   };
 
   const copyHoverColor = async () => {
@@ -514,6 +1187,8 @@ const ScreenshotEditor: FC = () => {
   /** A single click just picks the tool, ready to draw with its last-used
    * settings; `openOptions` (a double-click) also opens its options panel. */
   const changeTool = (next: EditorTool, openOptions = false) => {
+    leaveTextSelection();
+    leaveTranslation();
     commitTextEdit();
     setTool(next);
     setSelectedId(null);
@@ -557,6 +1232,8 @@ const ScreenshotEditor: FC = () => {
   };
 
   const undo = () => {
+    leaveTextSelection();
+    leaveTranslation();
     setSelection(null);
     setSelectedId(null);
     setDraft(null);
@@ -566,6 +1243,8 @@ const ScreenshotEditor: FC = () => {
   };
 
   const redo = () => {
+    leaveTextSelection();
+    leaveTranslation();
     setSelection(null);
     setSelectedId(null);
     setDraft(null);
@@ -657,8 +1336,19 @@ const ScreenshotEditor: FC = () => {
 
   const closeWindow = async () => {
     closingRef.current = true;
+    leaveTextSelection();
+    leaveTranslation();
+    setTranslationKeyModalOpen(false);
 
     try {
+      if (translationCancelRef.current) {
+        await Promise.race([
+          translationCancelRef.current,
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 1000);
+          }),
+        ]);
+      }
       await closeScreenshotWindow(label);
     } catch (error) {
       closingRef.current = false;
@@ -669,6 +1359,9 @@ const ScreenshotEditor: FC = () => {
   const requestClose = () => {
     if (closingRef.current) return;
 
+    leaveTextSelection();
+    leaveTranslation();
+    setTranslationKeyModalOpen(false);
     commitTextEdit();
 
     if (!present || exportedDocumentRef.current === present) {
@@ -807,6 +1500,100 @@ const ScreenshotEditor: FC = () => {
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (
+      dragGestureRef.current.active() &&
+      (event.key === "Escape" ||
+        event.key === "Backspace" ||
+        event.key === "BrowserBack" ||
+        (event.altKey && event.key === "ArrowLeft"))
+    ) {
+      event.preventDefault();
+      cancelDragGesture();
+      return;
+    }
+    if (translationKeyModalOpen) return;
+    if (
+      translationModeRef.current &&
+      event.target instanceof HTMLElement &&
+      event.target.closest('[role="dialog"]')
+    ) {
+      return;
+    }
+    if (translationModeRef.current) {
+      if (
+        event.key === "Escape" ||
+        event.key === "Backspace" ||
+        event.key === "BrowserBack" ||
+        (event.altKey && event.key === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        leaveTranslation();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
+        event.preventDefault();
+        void runExport("copy");
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyS") {
+        event.preventDefault();
+        void runExport("save");
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyW") {
+        event.preventDefault();
+        requestClose();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "Enter") {
+        event.preventDefault();
+        void handleCopyAndClose();
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        present &&
+        [
+          "Digit0",
+          "Digit1",
+          "Equal",
+          "Minus",
+          "Numpad0",
+          "Numpad1",
+          "NumpadAdd",
+          "NumpadSubtract",
+        ].includes(event.code)
+      ) {
+        handleModifiedKey(event, present.crop);
+      }
+      return;
+    }
+    if (textSelectionModeRef.current || pendingTextStartRef.current) {
+      if (
+        event.key === "Escape" ||
+        event.key === "Backspace" ||
+        event.key === "BrowserBack" ||
+        (event.altKey && event.key === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        leaveTextSelection();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
+        event.preventDefault();
+        void copySelectedImageText();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyW") {
+        event.preventDefault();
+        requestClose();
+      } else if ((event.ctrlKey || event.metaKey) && event.code === "KeyS") {
+        event.preventDefault();
+        void runExport("save");
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        present &&
+        [
+          "Digit0",
+          "Digit1",
+          "Equal",
+          "Minus",
+          "Numpad0",
+          "Numpad1",
+          "NumpadAdd",
+          "NumpadSubtract",
+        ].includes(event.code)
+      ) {
+        handleModifiedKey(event, present.crop);
+      }
+      return;
+    }
     if (!present || textEditRef.current) return;
 
     const target = event.target;
@@ -895,13 +1682,26 @@ const ScreenshotEditor: FC = () => {
   };
 
   const handleWindowBlur = () => {
+    cancelDragGesture();
     setPanHeld(false);
     setZoomHeld(false);
+  };
+
+  const preventUnsupportedDrop = (event: DragEvent) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
   };
 
   useEventListener("keydown", handleKeyDown);
   useEventListener("keyup", handleKeyUp);
   useEventListener("blur", handleWindowBlur);
+  useEventListener("pointerup", cancelDragGesture);
+  useEventListener("pointercancel", cancelDragGesture);
+  useEventListener("popstate", cancelDragGesture);
+  useEventListener("pointerdown", handleBrowserBackPointerDown);
+  useEventListener("mousedown", handleBrowserBackMouseDown);
+  useEventListener("dragover", preventUnsupportedDrop);
+  useEventListener("drop", preventUnsupportedDrop);
 
   if (!image || !present || !shown) {
     return <div className="h-screen bg-ant-layout" />;
@@ -928,12 +1728,22 @@ const ScreenshotEditor: FC = () => {
       : style;
 
   const handleCopy = () => {
+    if (textSelectionModeRef.current) {
+      void copySelectedImageText();
+      return;
+    }
+
     void runExport("copy");
   };
 
   const handleCopyAndClose = async () => {
-    await runExport("copy");
-    if (exportedDocumentRef.current === present) {
+    if (textSelectionModeRef.current) {
+      if (await copySelectedImageText()) await closeWindow();
+      return;
+    }
+
+    const copied = await runExport("copy");
+    if (copied && presentRef.current === present) {
       await closeWindow();
     }
   };
@@ -946,6 +1756,10 @@ const ScreenshotEditor: FC = () => {
     void runExport("save");
   };
 
+  const handleSaveAs = () => {
+    void runExport("saveAs");
+  };
+
   const handlePin = () => {
     void runExport("pin");
   };
@@ -955,6 +1769,7 @@ const ScreenshotEditor: FC = () => {
   };
 
   const handleRecognizeText = () => {
+    leaveTextSelection();
     void runExport("ocr");
   };
 
@@ -973,6 +1788,7 @@ const ScreenshotEditor: FC = () => {
         onDiscardAndClose={handleDiscardAndClose}
         onDragPointerDown={handleDragPointerDown}
         onDragPointerEnter={handleDragPointerEnter}
+        onDragPointerMove={handleDragPointerMove}
         onMaximize={toggleMaximizeWindow}
         onMinimize={minimizeWindow}
         onMoveWindow={moveWindow}
@@ -980,9 +1796,14 @@ const ScreenshotEditor: FC = () => {
         onPin={handlePin}
         onRecognizeText={handleRecognizeText}
         onSave={handleSave}
+        onSaveAs={handleSaveAs}
+        onSelectText={handleSelectText}
         onToolChange={changeTool}
+        onTranslate={handleTranslate}
         onZoomToggle={toggleZoom}
+        textSelectionActive={textSelectionMode !== null}
         tool={tool}
+        translationActive={translationMode !== null}
         zoom={viewport?.zoom ?? 1}
       />
 
@@ -999,13 +1820,42 @@ const ScreenshotEditor: FC = () => {
           bitmap: image.bitmap,
           document: shown,
           hiddenShapeId: textEdit?.id ?? null,
+          translation: activeTranslation ?? void 0,
         }}
         selectedShape={selectedShape}
         selection={selection}
         viewport={viewport}
         zoomHeld={zoomHeld}
       >
-        {subject && (
+        {textSelectionMode && viewport && viewSize && (
+          <ImageTextSelection
+            area={textSelectionMode.area}
+            loading={textSelectionMode.loading}
+            onCopy={copySelectedImageText}
+            onLeave={leaveTextSelection}
+            onSelectedText={updateSelectedImageText}
+            ratio={viewSize.ratio}
+            regions={textSelectionMode.regions}
+            rootRef={textOverlayRef}
+            selectedText={selectedImageTextValue}
+            viewport={viewport}
+          />
+        )}
+        {translationMode && (
+          <TranslationControls
+            blocks={translationMode.blocks}
+            failed={translationMode.failed}
+            loading={translationMode.loading}
+            onCopyText={copyTranslationText}
+            onLeave={leaveTranslation}
+            onManageKey={openTranslationKeyModal}
+            onRetry={retryTranslation}
+            onToggleOriginal={toggleTranslationOriginal}
+            overflowCount={translationMode.layer?.overflowCount ?? 0}
+            showOriginal={translationMode.showOriginal}
+          />
+        )}
+        {!textSelectionMode && !translationMode && subject && (
           <ToolOptions
             anchor={toolAnchor}
             backdrop={shown.backdrop}
@@ -1039,6 +1889,16 @@ const ScreenshotEditor: FC = () => {
           />
         )}
       </EditorCanvas>
+      <TranslationKeyModal
+        busy={translationKeyBusy}
+        configured={translationKeyConfigured}
+        model={translationKeyModel}
+        onCancel={cancelTranslationKeyModal}
+        onRemove={handleRemoveTranslationKey}
+        onSave={handleSaveTranslationKey}
+        open={translationKeyModalOpen}
+        source={translationKeySource}
+      />
     </div>
   );
 };

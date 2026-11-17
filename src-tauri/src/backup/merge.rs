@@ -15,7 +15,7 @@ pub(super) struct MergeOutcome {
     pub(super) skipped_items: u64,
 }
 
-pub(super) async fn open_backup_db(path: &Path) -> Result<SqlitePool> {
+pub(crate) async fn open_backup_db(path: &Path) -> Result<SqlitePool> {
     let options = SqliteConnectOptions::new()
         .filename(path)
         .read_only(true)

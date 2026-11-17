@@ -227,8 +227,13 @@ export const useCanvasInteraction = (
       return;
     }
 
-    // The pen never starts a shape gesture, not even on the selected shape's handles.
-    if (tool !== "pen" && beginShapeGesture(point, info)) return;
+    // Freehand tools never grab an existing shape when starting a stroke.
+    if (
+      tool !== "pen" &&
+      tool !== "highlighter" &&
+      beginShapeGesture(point, info)
+    )
+      return;
 
     const shape = createShape(tool, point, style, scale, document.shapes);
     if (!shape) return;
@@ -236,7 +241,9 @@ export const useCanvasInteraction = (
     optionsRef.current.onSelectShape(null);
     optionsRef.current.onMeasure(null);
     gestureRef.current = { kind: "create", origin: point, shape };
-    if (shape.kind === "pen") setDraft(addShape(document, shape));
+    if (shape.kind === "pen" || shape.kind === "highlighter") {
+      setDraft(addShape(document, shape));
+    }
   };
 
   const pointerMove = (point: PixelPoint, info: PointerInfo) => {
@@ -364,7 +371,7 @@ export const useCanvasInteraction = (
         if (!finished) return;
 
         optionsRef.current.commit(addShape(document, finished));
-        if (finished.kind !== "pen") {
+        if (finished.kind !== "pen" && finished.kind !== "highlighter") {
           optionsRef.current.onSelectShape(finished.id);
         }
         return;

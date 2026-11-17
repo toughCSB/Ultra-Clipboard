@@ -10,13 +10,17 @@ import {
   refreshShape,
   type SourceImage,
 } from "./creation";
-import type {
-  BlurShape,
-  CounterShape,
-  MagnifierShape,
-  PenShape,
-  RectShape,
-  Shape,
+import { addShape, createDocument } from "./document";
+import { commitHistory, createHistory, undoHistory } from "./history";
+import {
+  type BlurShape,
+  type CounterShape,
+  hitShape,
+  type MagnifierShape,
+  type PenShape,
+  type RectShape,
+  type Shape,
+  shapeBounds,
 } from "./shapes";
 import { DEFAULT_TOOL_STYLE } from "./tools";
 
@@ -208,6 +212,46 @@ describe("creation", () => {
 
     assert.equal(near, pen);
     assert.equal(far.kind === "pen" && far.points.length, 2);
+  });
+
+  it("records one straight marker drag as one undoable stroke", () => {
+    const origin = { x: 20, y: 30 };
+    const style = { ...DEFAULT_TOOL_STYLE, highlightWidth: 18 };
+    const start = createShape("highlighter", origin, style, 2, []);
+    assert.ok(start?.kind === "highlighter");
+
+    const first = dragCreatedShape(start, origin, { x: 80, y: 35 }, INFO);
+    const second = dragCreatedShape(first, origin, { x: 90, y: 100 }, INFO);
+    const final = finalizeCreatedShape(second, INFO, IMAGE, AREA, 2);
+    assert.ok(final?.kind === "highlighter");
+    assert.deepEqual(final.from, origin);
+    assert.deepEqual(final.to, { x: 90, y: 100 });
+    assert.deepEqual(first.kind === "highlighter" && first.to, {
+      x: 80,
+      y: 35,
+    });
+    assert.equal(final.strokeWidth, 36);
+    assert.equal(hitShape(final, { x: 84, y: 94 }, 1), true);
+    assert.equal(hitShape(final, { x: 45, y: 95 }, 1), false);
+    assert.ok(shapeBounds(final).height > 100);
+    const constrained = dragCreatedShape(
+      start,
+      origin,
+      { x: 90, y: 45 },
+      { ...INFO, shiftKey: true },
+    );
+    assert.equal(
+      constrained.kind === "highlighter" && constrained.to.y,
+      origin.y,
+    );
+
+    const initial = createDocument(AREA);
+    const next = commitHistory(
+      createHistory(initial),
+      addShape(initial, final),
+    );
+    assert.equal(next.present.shapes.length, 1);
+    assert.equal(undoHistory(next).present.shapes.length, 0);
   });
 
   it("places a clicked magnifier lens to the right of its source", () => {

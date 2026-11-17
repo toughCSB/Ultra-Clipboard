@@ -11,9 +11,7 @@ import type { PreferenceSetting, PreferenceTab } from "../types/preferences";
 
 const CLICK_ACTION_OPTIONS = [
   { value: "disabled" },
-  { value: "singleClickPaste" },
   { value: "doubleClickPaste" },
-  { value: "singleClickCopy" },
   { value: "doubleClickCopy" },
 ];
 const MIDDLE_CLICK_ACTION_OPTIONS = [
@@ -262,7 +260,10 @@ export const preferenceTabs: PreferenceTab[] = [
             keywords: ["paste", "click", "auto"],
             path: ["clipboard", "content", "autoPaste"],
             value: (settings) => {
-              return settings.clipboard.content.autoPaste;
+              const action = settings.clipboard.content.autoPaste;
+              if (action === "singleClickPaste") return "doubleClickPaste";
+              if (action === "singleClickCopy") return "doubleClickCopy";
+              return action;
             },
           },
           {
