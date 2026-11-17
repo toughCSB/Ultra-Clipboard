@@ -49,8 +49,12 @@ macOS lays displays out in points, and a 1x display next to a 2x display would
 overlap if each origin used its own scale. Capture pixels therefore keep each
 display's scale inside the display, but place every display origin at two
 pixels per point. Code that crosses into macOS points goes through the backend:
-`cursor_monitor` finds the display under the pointer from Core Graphics points,
-and `window_frame` places overlays, editors, and pins with logical positions.
+`monitors` lists displays from any thread, `cursor_monitor` finds the display
+under the pointer from Core Graphics points, `window_frame` places overlays,
+editors, and pins with logical positions, `center_window` centres an editor,
+and `resize_around_anchor` rescales a pin in logical units so its anchor stays
+fixed on a display of any scale. Both OS adapters expose the same set; callers
+outside `screenshot/backend/` do not multiply or divide by a scale factor.
 Tauri's physical positions are not used on macOS, because Tauri converts them
 with the main display's scale or with the scale of the display a window sits on.
 

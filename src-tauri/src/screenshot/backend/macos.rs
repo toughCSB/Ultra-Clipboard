@@ -19,14 +19,16 @@ use objc2_screen_capture_kit::{
     SCContentFilter, SCDisplay, SCRunningApplication, SCScreenshotManager, SCShareableContent,
     SCStreamConfiguration, SCWindow,
 };
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Position, Size};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Position, Size, WebviewWindow};
 
+use super::{anchored_frame, Frame};
 use crate::core::{AppError, Result};
 use crate::screenshot::geometry::{bgra_to_rgba_opaque, PixelRect};
 use crate::screenshot::state::MonitorGeometry;
 use crate::screenshot::OVERLAY_WINDOW_TITLE;
 
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(8);
+const MONITOR_READ_TIMEOUT: Duration = Duration::from_secs(10);
 /// macOS lays displays out in points. Pixels inside a display follow its own
 /// scale, but display origins always use two pixels per point, so 1x and 2x
 /// displays side by side never overlap in capture pixel space.
@@ -54,7 +56,24 @@ pub fn ensure_capture_permission() -> Result<()> {
     Ok(())
 }
 
-pub fn monitor_geometries() -> Result<Vec<MonitorGeometry>> {
+/// Reads the displays in capture pixels. Any thread may call this; AppKit is
+/// asked on the main thread.
+pub fn monitors(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    if MainThreadMarker::new().is_some() {
+        return read_monitors();
+    }
+
+    let (sender, receiver) = mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let _ = sender.send(read_monitors());
+    })
+    .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
+    receiver
+        .recv_timeout(MONITOR_READ_TIMEOUT)
+        .map_err(|_| AppError::Other(anyhow::anyhow!("reading monitors timed out")))?
+}
+
+fn read_monitors() -> Result<Vec<MonitorGeometry>> {
     let mtm = MainThreadMarker::new()
         .ok_or_else(|| anyhow::anyhow!("macOS monitor enumeration requires the main thread"))?;
     let screens = NSScreen::screens(mtm);
@@ -179,6 +198,58 @@ pub fn window_frame(monitor: &MonitorGeometry, rect: PixelRect) -> (Position, Si
     )
 }
 
+/// Resizes a window to `width` x `height` capture pixels of its current
+/// display while the point at `anchor_x`/`anchor_y` (0..1 of the current
+/// window) stays fixed on screen. Logical units keep the anchor exact on
+/// displays of any scale.
+pub fn resize_around_anchor(
+    window: &WebviewWindow,
+    width: u32,
+    height: u32,
+    anchor_x: f64,
+    anchor_y: f64,
+) -> Result<()> {
+    let scale = window.scale_factor().map_err(|err| anyhow::anyhow!(err))?;
+    let position = window
+        .outer_position()
+        .map_err(|err| anyhow::anyhow!(err))?
+        .to_logical::<f64>(scale);
+    let size = window
+        .inner_size()
+        .map_err(|err| anyhow::anyhow!(err))?
+        .to_logical::<f64>(scale);
+    let next = anchored_logical(
+        Frame {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+        },
+        (width, height),
+        scale,
+        (anchor_x, anchor_y),
+    );
+
+    window
+        .set_size(LogicalSize::new(next.width, next.height))
+        .map_err(|err| anyhow::anyhow!(err))?;
+    window
+        .set_position(LogicalPosition::new(next.x, next.y))
+        .map_err(|err| anyhow::anyhow!(err))?;
+
+    Ok(())
+}
+
+fn anchored_logical(current: Frame, pixels: (u32, u32), scale: f64, anchor: (f64, f64)) -> Frame {
+    anchored_frame(
+        current,
+        f64::from(pixels.0) / scale,
+        f64::from(pixels.1) / scale,
+        anchor.0,
+        anchor.1,
+    )
+}
+
 fn scale_u32(value: f64, scale_factor: f64) -> Result<u32> {
     let scaled = value * scale_factor;
     if !scaled.is_finite() || scaled < 0.0 || scaled > f64::from(u32::MAX) {
@@ -203,13 +274,6 @@ struct Exclusion {
 
 impl CaptureContext {
     pub fn new(monitors: &[MonitorGeometry]) -> Result<Self> {
-        let permission_started = Instant::now();
-        ensure_capture_permission()?;
-        log::info!(
-            "macOS screenshot permission confirmed in {}ms",
-            permission_started.elapsed().as_millis()
-        );
-
         autoreleasepool(|_| {
             let snapshot_started = Instant::now();
             let snapshot = shareable_snapshot()?;
@@ -682,6 +746,7 @@ fn window_rect_in_monitor(
 
 #[cfg(test)]
 mod tests {
+    use super::super::{centered_position, monitor_at_pixel, monitor_for_rect};
     use super::*;
 
     fn monitor(x: i32, y: i32, width: u32, height: u32, scale: f64) -> MonitorGeometry {
@@ -788,6 +853,50 @@ mod tests {
         assert_eq!(size, LogicalSize::new(3840.0, 2160.0).into());
         assert_eq!(inner_position, LogicalPosition::new(1900.0, 50.0).into());
         assert_eq!(inner_size, LogicalSize::new(200.0, 100.0).into());
+    }
+
+    #[test]
+    fn centers_windows_in_points_on_the_display_they_target() {
+        let monitors = mixed_layout();
+
+        assert_eq!(
+            centered_position(&monitors[2], (960.0, 560.0)),
+            LogicalPosition::new(5000.0 + (3840.0 - 960.0) / 2.0, (2160.0 - 560.0) / 2.0).into()
+        );
+        assert_eq!(
+            centered_position(&monitors[1], (960.0, 560.0)),
+            LogicalPosition::new(1800.0 + (3200.0 - 960.0) / 2.0, (1800.0 - 560.0) / 2.0).into()
+        );
+    }
+
+    #[test]
+    fn looks_up_capture_pixels_across_scales() {
+        let monitors = mixed_layout();
+
+        assert_eq!(monitor_at_pixel(&monitors, 10000.0, 5.0), Some(2));
+        assert_eq!(monitor_at_pixel(&monitors, 9999.0, 5.0), Some(1));
+        assert_eq!(
+            monitor_for_rect(&monitors, PixelRect::new(9800, 0, 300, 100))
+                .map(|(monitor, shown)| (monitor.bounds, shown)),
+            Some((monitors[1].bounds, PixelRect::new(9800, 0, 200, 100)))
+        );
+    }
+
+    #[test]
+    fn resizing_keeps_the_anchor_in_points_on_a_2x_display() {
+        let current = Frame {
+            x: 100.0,
+            y: 50.0,
+            width: 200.0,
+            height: 100.0,
+        };
+        let next = anchored_logical(current, (800, 400), 2.0, (0.5, 0.5));
+
+        assert_eq!((next.width, next.height), (400.0, 200.0));
+        assert_eq!(
+            (next.x + next.width / 2.0, next.y + next.height / 2.0),
+            (200.0, 100.0)
+        );
     }
 
     #[test]

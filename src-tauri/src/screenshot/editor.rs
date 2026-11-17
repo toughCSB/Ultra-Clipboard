@@ -5,9 +5,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-use super::geometry::PixelRect;
+use super::backend;
 use super::state::{CapturedImage, MonitorGeometry, ScreenshotState};
 use super::EDITOR_WINDOW_LABEL_PREFIX;
 use crate::core::events;
@@ -95,7 +95,7 @@ pub fn open(
         }
     };
 
-    if let Err(err) = center_on_monitor(&window, &monitor) {
+    if let Err(err) = backend::center_window(&window, &monitor) {
         log::warn!("center screenshot editor {label} failed: {err}");
     }
     log::info!(
@@ -198,9 +198,9 @@ pub fn request_close(app: &AppHandle, label: &str) {
 }
 
 fn window_size(image: &CapturedImage, monitor: &MonitorGeometry) -> (f64, f64) {
-    let scale = monitor.scale_factor.max(1.0);
-    let max_width = f64::from(monitor.work_area.width) / scale * WORK_AREA_RATIO;
-    let max_height = f64::from(monitor.work_area.height) / scale * WORK_AREA_RATIO;
+    let (area_width, area_height) = backend::work_area_logical_size(monitor);
+    let max_width = area_width * WORK_AREA_RATIO;
+    let max_height = area_height * WORK_AREA_RATIO;
     let image_width = f64::from(image.width) / image.scale_factor.max(1.0);
     let image_height = f64::from(image.height) / image.scale_factor.max(1.0);
 
@@ -209,29 +209,6 @@ fn window_size(image: &CapturedImage, monitor: &MonitorGeometry) -> (f64, f64) {
         .clamp(MIN_HEIGHT.min(max_height), max_height);
 
     (width.round(), height.round())
-}
-
-fn center_on_monitor(window: &WebviewWindow, monitor: &MonitorGeometry) -> Result<()> {
-    // The window may sit on a display with another scale; measure it in that
-    // display's units, then in the target monitor's pixels.
-    let size = window
-        .outer_size()
-        .map_err(|err| anyhow::anyhow!(err))?
-        .to_logical::<f64>(window.scale_factor().map_err(|err| anyhow::anyhow!(err))?)
-        .to_physical::<u32>(monitor.scale_factor);
-    let area = monitor.work_area;
-    let x = i64::from(area.x) + (i64::from(area.width) - i64::from(size.width)).max(0) / 2;
-    let y = i64::from(area.y) + (i64::from(area.height) - i64::from(size.height)).max(0) / 2;
-    let (position, _) = super::backend::window_frame(
-        monitor,
-        PixelRect::new(x as i32, y as i32, size.width, size.height),
-    );
-
-    window
-        .set_position(position)
-        .map_err(|err| anyhow::anyhow!(err))?;
-
-    Ok(())
 }
 
 fn schedule_ready_fallback(app: &AppHandle, label: String) {

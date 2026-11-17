@@ -20,8 +20,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IsWindowVisible, SetForegroundWindow, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
 };
 
-use tauri::{AppHandle, PhysicalPosition, PhysicalSize, Position, Size};
+use tauri::{AppHandle, PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow};
 
+use super::{anchored_frame, monitor_at_pixel, Frame};
 use crate::core::Result;
 use crate::screenshot::geometry::{bgra_to_rgba_opaque, PixelRect};
 use crate::screenshot::state::MonitorGeometry;
@@ -38,13 +39,43 @@ pub fn is_supported() -> bool {
     true
 }
 
+/// Reads the monitors in virtual desktop pixels. Any thread may call this.
+pub fn monitors(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    let monitors = app
+        .available_monitors()
+        .map_err(|err| anyhow::anyhow!(err))?;
+
+    Ok(monitors
+        .iter()
+        .map(|monitor| {
+            let position = monitor.position();
+            let size = monitor.size();
+            let work_area = monitor.work_area();
+
+            MonitorGeometry {
+                bounds: PixelRect::new(position.x, position.y, size.width, size.height),
+                work_area: PixelRect::new(
+                    work_area.position.x,
+                    work_area.position.y,
+                    work_area.size.width,
+                    work_area.size.height,
+                ),
+                scale_factor: monitor.scale_factor(),
+            }
+        })
+        .collect())
+}
+
+/// Windows needs no capture permission.
+pub fn ensure_capture_permission() -> Result<()> {
+    Ok(())
+}
+
 /// The monitor under the mouse pointer.
 pub fn cursor_monitor(app: &AppHandle, monitors: &[MonitorGeometry]) -> Option<usize> {
     let cursor = app.cursor_position().ok()?;
 
-    monitors
-        .iter()
-        .position(|monitor| monitor.bounds.contains_point(cursor.x, cursor.y))
+    monitor_at_pixel(monitors, cursor.x, cursor.y)
 }
 
 /// Where a window covering `rect` goes; capture pixels are screen pixels here.
@@ -53,6 +84,60 @@ pub fn window_frame(_monitor: &MonitorGeometry, rect: PixelRect) -> (Position, S
         PhysicalPosition::new(rect.x, rect.y).into(),
         PhysicalSize::new(rect.width, rect.height).into(),
     )
+}
+
+/// Resizes a window to `width` x `height` pixels while the point at
+/// `anchor_x`/`anchor_y` (0..1 of the current window) stays fixed on screen.
+pub fn resize_around_anchor(
+    window: &WebviewWindow,
+    width: u32,
+    height: u32,
+    anchor_x: f64,
+    anchor_y: f64,
+) -> Result<()> {
+    let position = window
+        .outer_position()
+        .map_err(|err| anyhow::anyhow!(err))?;
+    let size = window.inner_size().map_err(|err| anyhow::anyhow!(err))?;
+    let next = anchored_physical(
+        PixelRect::new(position.x, position.y, size.width, size.height),
+        width,
+        height,
+        anchor_x,
+        anchor_y,
+    );
+
+    window
+        .set_size(PhysicalSize::new(next.width, next.height))
+        .map_err(|err| anyhow::anyhow!(err))?;
+    window
+        .set_position(PhysicalPosition::new(next.x, next.y))
+        .map_err(|err| anyhow::anyhow!(err))?;
+
+    Ok(())
+}
+
+fn anchored_physical(
+    current: PixelRect,
+    width: u32,
+    height: u32,
+    anchor_x: f64,
+    anchor_y: f64,
+) -> PixelRect {
+    let next = anchored_frame(
+        Frame {
+            x: f64::from(current.x),
+            y: f64::from(current.y),
+            width: f64::from(current.width),
+            height: f64::from(current.height),
+        },
+        f64::from(width),
+        f64::from(height),
+        anchor_x,
+        anchor_y,
+    );
+
+    PixelRect::new(next.x.round() as i32, next.y.round() as i32, width, height)
 }
 
 pub struct CaptureContext;
@@ -114,7 +199,7 @@ pub fn is_permission_error(_error: &crate::core::AppError) -> bool {
 }
 
 /// Copies the composed desktop inside `rect` as opaque RGBA.
-pub fn capture_rect(rect: PixelRect) -> Result<Vec<u8>> {
+fn capture_rect(rect: PixelRect) -> Result<Vec<u8>> {
     let byte_len = rect
         .byte_len()
         .filter(|len| *len > 0)
@@ -185,7 +270,7 @@ pub fn capture_rect(rect: PixelRect) -> Result<Vec<u8>> {
 }
 
 /// Lists visible top-level windows of other processes, front to back.
-pub fn list_windows() -> Vec<PixelRect> {
+fn list_windows() -> Vec<PixelRect> {
     let mut context = WindowEnumContext {
         // SAFETY: GetCurrentProcessId has no preconditions.
         own_process_id: unsafe { GetCurrentProcessId() },
@@ -321,4 +406,53 @@ unsafe fn is_shell_background(hwnd: HWND) -> bool {
     let class_name = String::from_utf16_lossy(&buffer[..len as usize]);
 
     SHELL_BACKGROUND_CLASSES.contains(&class_name.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::centered_position;
+    use super::*;
+
+    fn monitor(x: i32, scale: f64) -> MonitorGeometry {
+        let bounds = PixelRect::new(x, 0, 1920, 1080);
+
+        MonitorGeometry {
+            bounds,
+            work_area: bounds,
+            scale_factor: scale,
+        }
+    }
+
+    #[test]
+    fn window_frame_is_in_screen_pixels_on_any_monitor() {
+        let (position, size) =
+            window_frame(&monitor(1920, 2.0), PixelRect::new(2000, 50, 300, 200));
+
+        assert_eq!(
+            position,
+            Position::Physical(PhysicalPosition::new(2000, 50))
+        );
+        assert_eq!(size, Size::Physical(PhysicalSize::new(300, 200)));
+    }
+
+    #[test]
+    fn centered_window_sits_in_the_work_area() {
+        let monitors = [monitor(0, 1.0), monitor(1920, 1.5)];
+        let position = centered_position(&monitors[1], (960.0, 560.0));
+
+        assert_eq!(
+            position,
+            Position::Physical(PhysicalPosition::new(
+                1920 + (1920 - 1440) / 2,
+                (1080 - 840) / 2
+            ))
+        );
+    }
+
+    #[test]
+    fn anchored_resize_keeps_the_anchor_in_screen_pixels() {
+        let next = anchored_physical(PixelRect::new(100, 100, 400, 200), 800, 400, 0.5, 0.5);
+
+        assert_eq!(next, PixelRect::new(-100, 0, 800, 400));
+    }
 }

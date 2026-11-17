@@ -83,7 +83,7 @@ fn prewarm_overlays(app: &AppHandle) {
             thread::sleep(OVERLAY_PREWARM_DELAY);
 
             let main_app = app.clone();
-            if let Err(err) = app.run_on_main_thread(move || match monitor_geometries(&main_app) {
+            if let Err(err) = app.run_on_main_thread(move || match backend::monitors(&main_app) {
                 Ok(monitors) => overlay::prewarm(&main_app, monitors.len()),
                 Err(err) => {
                     log::warn!("prewarm screenshot overlays could not read monitors: {err}")
@@ -474,7 +474,7 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
         return;
     };
 
-    let monitors = match monitor_geometries(app) {
+    let monitors = match backend::monitors(app) {
         Ok(monitors) if !monitors.is_empty() => monitors,
         Ok(_) => {
             log::error!("screenshot capture found no monitors");
@@ -503,7 +503,6 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
                 thread::sleep(delay);
             }
 
-            #[cfg(target_os = "macos")]
             if let Err(err) = backend::ensure_capture_permission() {
                 log::error!("screenshot permission is unavailable: {err}");
                 fail_capture(&capture_app, capture_id, None, &err);
@@ -610,7 +609,7 @@ fn direct_target(
         }
         CaptureMode::Repeat => state
             .last_area()
-            .and_then(|area| repeat_target(monitors, area)),
+            .and_then(|area| backend::monitor_for_rect(monitors, area)),
         _ => None,
     }
 }
@@ -813,77 +812,6 @@ fn capture(app: &AppHandle, target: CaptureTarget, capture_id: u64) -> Result<()
     .map_err(|err| AppError::Other(anyhow::anyhow!(err)))
 }
 
-/// Finds the monitor that shows most of a previously captured area and the
-/// part of the area still on it. Returns `None` when the area left every monitor.
-fn repeat_target(
-    monitors: &[MonitorGeometry],
-    area: PixelRect,
-) -> Option<(MonitorGeometry, PixelRect)> {
-    monitors
-        .iter()
-        .filter_map(|monitor| {
-            monitor
-                .bounds
-                .intersect(&area)
-                .map(|visible| (*monitor, visible))
-        })
-        .max_by_key(|(_, visible)| u64::from(visible.width) * u64::from(visible.height))
-}
-
-#[cfg(target_os = "macos")]
-fn monitor_geometries(_app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
-    backend::monitor_geometries()
-}
-
-/// Reads monitors from any thread; macOS reads displays on the main thread.
-#[cfg(target_os = "macos")]
-fn monitors_from_any_thread(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
-    if objc2::MainThreadMarker::new().is_some() {
-        return backend::monitor_geometries();
-    }
-
-    let (sender, receiver) = mpsc::sync_channel(1);
-    app.run_on_main_thread(move || {
-        let _ = sender.send(backend::monitor_geometries());
-    })
-    .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
-    receiver
-        .recv_timeout(OVERLAY_PRESENT_TIMEOUT)
-        .map_err(|_| AppError::Other(anyhow::anyhow!("reading monitors timed out")))?
-}
-
-#[cfg(target_os = "windows")]
-fn monitors_from_any_thread(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
-    monitor_geometries(app)
-}
-
-#[cfg(target_os = "windows")]
-fn monitor_geometries(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
-    let monitors = app
-        .available_monitors()
-        .map_err(|err| anyhow::anyhow!(err))?;
-
-    Ok(monitors
-        .iter()
-        .map(|monitor| {
-            let position = monitor.position();
-            let size = monitor.size();
-            let work_area = monitor.work_area();
-
-            MonitorGeometry {
-                bounds: PixelRect::new(position.x, position.y, size.width, size.height),
-                work_area: PixelRect::new(
-                    work_area.position.x,
-                    work_area.position.y,
-                    work_area.size.width,
-                    work_area.size.height,
-                ),
-                scale_factor: monitor.scale_factor(),
-            }
-        })
-        .collect())
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
@@ -952,22 +880,6 @@ mod tests {
         ));
         assert_eq!(hidden.get(), 1);
         assert_eq!(restored.get(), Some(84));
-    }
-
-    #[test]
-    fn repeat_uses_monitor_showing_most_of_the_area() {
-        let monitors = [monitor(0, 0, 2160, 3840), monitor(2160, 0, 1920, 1080)];
-        let (target, area) = repeat_target(&monitors, PixelRect::new(2000, 100, 400, 200)).unwrap();
-
-        assert_eq!(target.bounds, monitors[1].bounds);
-        assert_eq!(area, PixelRect::new(2160, 100, 240, 200));
-    }
-
-    #[test]
-    fn repeat_falls_back_when_area_left_every_monitor() {
-        let monitors = [monitor(0, 0, 1920, 1080)];
-
-        assert!(repeat_target(&monitors, PixelRect::new(5000, 5000, 10, 10)).is_none());
     }
 
     #[test]
