@@ -34,12 +34,25 @@ owning and releasing its GDI contexts on that thread. Results preserve monitor
 order. This reduces serial waiting without promising one atomic desktop frame.
 
 On macOS, the capture worker waits at most 10 seconds for the main thread to
-show the overlays before asking ScreenCaptureKit for on-screen content. The
-active session ID is checked again after the wait. This keeps the overlay
-exclusion snapshot tied to visible windows. The prewarmed overlay WebViews use
+show the overlays before asking ScreenCaptureKit for shareable content. The
+active session ID is checked again after the wait. The request includes
+off-screen windows, because overlays shown a moment earlier may not count as
+on screen yet; without them this app drops out of the list and the overlays,
+already shaded, would be captured. The prewarmed overlay WebViews use
 Tauri's disabled background throttling policy on macOS so a long-hidden page
 is not suspended or unloaded before the next capture. Other windows retain
 their normal policy. This trades idle WebView memory for repeat-capture latency.
+
+### macOS Capture Coordinates
+
+macOS lays displays out in points, and a 1x display next to a 2x display would
+overlap if each origin used its own scale. Capture pixels therefore keep each
+display's scale inside the display, but place every display origin at two
+pixels per point. Code that crosses into macOS points goes through the backend:
+`cursor_monitor` finds the display under the pointer from Core Graphics points,
+and `window_frame` places overlays, editors, and pins with logical positions.
+Tauri's physical positions are not used on macOS, because Tauri converts them
+with the main display's scale or with the scale of the display a window sits on.
 
 The screenshot editor Save action writes the rendered PNG directly to Pictures,
 falling back to Downloads. Its name uses the source window title when available,

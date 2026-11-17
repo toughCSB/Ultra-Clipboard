@@ -5,10 +5,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+use super::geometry::PixelRect;
 use super::state::{CapturedImage, MonitorGeometry, ScreenshotState};
 use super::EDITOR_WINDOW_LABEL_PREFIX;
 use crate::core::events;
@@ -213,13 +212,23 @@ fn window_size(image: &CapturedImage, monitor: &MonitorGeometry) -> (f64, f64) {
 }
 
 fn center_on_monitor(window: &WebviewWindow, monitor: &MonitorGeometry) -> Result<()> {
-    let size = window.outer_size().map_err(|err| anyhow::anyhow!(err))?;
+    // The window may sit on a display with another scale; measure it in that
+    // display's units, then in the target monitor's pixels.
+    let size = window
+        .outer_size()
+        .map_err(|err| anyhow::anyhow!(err))?
+        .to_logical::<f64>(window.scale_factor().map_err(|err| anyhow::anyhow!(err))?)
+        .to_physical::<u32>(monitor.scale_factor);
     let area = monitor.work_area;
     let x = i64::from(area.x) + (i64::from(area.width) - i64::from(size.width)).max(0) / 2;
     let y = i64::from(area.y) + (i64::from(area.height) - i64::from(size.height)).max(0) / 2;
+    let (position, _) = super::backend::window_frame(
+        monitor,
+        PixelRect::new(x as i32, y as i32, size.width, size.height),
+    );
 
     window
-        .set_position(PhysicalPosition::new(x as i32, y as i32))
+        .set_position(position)
         .map_err(|err| anyhow::anyhow!(err))?;
 
     Ok(())

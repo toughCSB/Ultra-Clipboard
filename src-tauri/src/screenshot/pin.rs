@@ -6,7 +6,10 @@ use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::window::Color;
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewUrl,
+    WebviewWindowBuilder,
+};
 
 use super::geometry::PixelRect;
 use super::state::{CapturedImage, ScreenshotState};
@@ -27,7 +30,7 @@ const READY_FALLBACK: Duration = Duration::from_millis(2000);
 pub fn open(app: &AppHandle, image: CapturedImage) -> Result<()> {
     let state = app.state::<ScreenshotState>();
     let label = format!("{PIN_WINDOW_LABEL_PREFIX}{}", state.next_id());
-    let bounds = initial_bounds(app, &image);
+    let (position, size) = initial_frame(app, &image);
     state.insert_image(&label, image);
 
     let window = WebviewWindowBuilder::new(
@@ -58,11 +61,9 @@ pub fn open(app: &AppHandle, image: CapturedImage) -> Result<()> {
         }
     };
 
+    window.set_size(size).map_err(|err| anyhow::anyhow!(err))?;
     window
-        .set_size(PhysicalSize::new(bounds.width, bounds.height))
-        .map_err(|err| anyhow::anyhow!(err))?;
-    window
-        .set_position(PhysicalPosition::new(bounds.x, bounds.y))
+        .set_position(position)
         .map_err(|err| anyhow::anyhow!(err))?;
 
     schedule_ready_fallback(app, label);
@@ -192,24 +193,25 @@ pub fn handle_menu_event(app: &AppHandle, id: &str) -> bool {
     false
 }
 
-fn initial_bounds(app: &AppHandle, image: &CapturedImage) -> PixelRect {
-    let monitor = app
-        .monitor_from_point(f64::from(image.origin_x), f64::from(image.origin_y))
-        .ok()
-        .flatten()
-        .or_else(|| app.primary_monitor().ok().flatten());
-    let Some(monitor) = monitor else {
-        return PixelRect::new(image.origin_x, image.origin_y, image.width, image.height);
+/// Fits the pin inside the monitor the image came from, or the first one.
+fn initial_frame(app: &AppHandle, image: &CapturedImage) -> (Position, Size) {
+    let monitors = super::monitors_from_any_thread(app).unwrap_or_else(|err| {
+        log::warn!("screenshot pin could not read monitors: {err}");
+        Vec::new()
+    });
+    let origin = (f64::from(image.origin_x), f64::from(image.origin_y));
+    let Some(monitor) = monitors
+        .iter()
+        .find(|monitor| monitor.bounds.contains_point(origin.0, origin.1))
+        .or_else(|| monitors.first())
+    else {
+        return (
+            PhysicalPosition::new(image.origin_x, image.origin_y).into(),
+            PhysicalSize::new(image.width, image.height).into(),
+        );
     };
 
-    let area = PixelRect::new(
-        monitor.position().x,
-        monitor.position().y,
-        monitor.size().width,
-        monitor.size().height,
-    );
-
-    fit_inside(image, area)
+    super::backend::window_frame(monitor, fit_inside(image, monitor.bounds))
 }
 
 fn fit_inside(image: &CapturedImage, area: PixelRect) -> PixelRect {

@@ -465,16 +465,9 @@ fn begin_capture(app: &AppHandle, mode: CaptureMode, delay: Option<Duration>) {
             return;
         }
     };
-    let cursor = app.cursor_position().ok();
     let previous_foreground = backend::foreground_window();
     let source_title = backend::foreground_title(previous_foreground);
-    let cursor_index = cursor
-        .and_then(|cursor| {
-            monitors
-                .iter()
-                .position(|monitor| monitor.bounds.contains_point(cursor.x, cursor.y))
-        })
-        .unwrap_or(0);
+    let cursor_index = backend::cursor_monitor(app, &monitors).unwrap_or(0);
     let direct = direct_target(&state, mode, &monitors, cursor_index);
     // Selection overlays shown before the capture appear at once, like the
     // system screenshot tool; the pixels arrive while the user starts selecting.
@@ -818,6 +811,28 @@ fn repeat_target(
 #[cfg(target_os = "macos")]
 fn monitor_geometries(_app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
     backend::monitor_geometries()
+}
+
+/// Reads monitors from any thread; macOS reads displays on the main thread.
+#[cfg(target_os = "macos")]
+fn monitors_from_any_thread(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    if objc2::MainThreadMarker::new().is_some() {
+        return backend::monitor_geometries();
+    }
+
+    let (sender, receiver) = mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let _ = sender.send(backend::monitor_geometries());
+    })
+    .map_err(|err| AppError::Other(anyhow::anyhow!(err)))?;
+    receiver
+        .recv_timeout(OVERLAY_PRESENT_TIMEOUT)
+        .map_err(|_| AppError::Other(anyhow::anyhow!("reading monitors timed out")))?
+}
+
+#[cfg(target_os = "windows")]
+fn monitors_from_any_thread(app: &AppHandle) -> Result<Vec<MonitorGeometry>> {
+    monitor_geometries(app)
 }
 
 #[cfg(target_os = "windows")]

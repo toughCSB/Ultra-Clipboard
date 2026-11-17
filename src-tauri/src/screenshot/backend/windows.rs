@@ -20,6 +20,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IsWindowVisible, SetForegroundWindow, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
 };
 
+use tauri::{AppHandle, PhysicalPosition, PhysicalSize, Position, Size};
+
 use crate::core::Result;
 use crate::screenshot::geometry::{bgra_to_rgba_opaque, PixelRect};
 use crate::screenshot::state::MonitorGeometry;
@@ -34,6 +36,23 @@ pub const OVERLAY_BEFORE_CAPTURE: bool = false;
 
 pub fn is_supported() -> bool {
     true
+}
+
+/// The monitor under the mouse pointer.
+pub fn cursor_monitor(app: &AppHandle, monitors: &[MonitorGeometry]) -> Option<usize> {
+    let cursor = app.cursor_position().ok()?;
+
+    monitors
+        .iter()
+        .position(|monitor| monitor.bounds.contains_point(cursor.x, cursor.y))
+}
+
+/// Where a window covering `rect` goes; capture pixels are screen pixels here.
+pub fn window_frame(_monitor: &MonitorGeometry, rect: PixelRect) -> (Position, Size) {
+    (
+        PhysicalPosition::new(rect.x, rect.y).into(),
+        PhysicalSize::new(rect.width, rect.height).into(),
+    )
 }
 
 pub struct CaptureContext;

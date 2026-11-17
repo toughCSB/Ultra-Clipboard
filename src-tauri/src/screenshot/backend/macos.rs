@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 use block2::RcBlock;
 use core_graphics::access::ScreenCaptureAccess;
 use core_graphics::display::CGDisplay;
+use core_graphics::event::CGEvent;
+use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::{AnyThread, MainThreadMarker};
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSScreen, NSWorkspace};
@@ -17,6 +19,7 @@ use objc2_screen_capture_kit::{
     SCContentFilter, SCDisplay, SCRunningApplication, SCScreenshotManager, SCShareableContent,
     SCStreamConfiguration, SCWindow,
 };
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Position, Size};
 
 use crate::core::{AppError, Result};
 use crate::screenshot::geometry::{bgra_to_rgba_opaque, PixelRect};
@@ -24,6 +27,10 @@ use crate::screenshot::state::MonitorGeometry;
 use crate::screenshot::OVERLAY_WINDOW_TITLE;
 
 const CAPTURE_TIMEOUT: Duration = Duration::from_secs(8);
+/// macOS lays displays out in points. Pixels inside a display follow its own
+/// scale, but display origins always use two pixels per point, so 1x and 2x
+/// displays side by side never overlap in capture pixel space.
+const ORIGIN_SCALE: f64 = 2.0;
 const SCREEN_PIXEL_FORMAT_BGRA: u32 = u32::from_be_bytes(*b"BGRA");
 const SCREEN_RECORDING_PERMISSION_ERROR: &str = "screen recording permission is required";
 
@@ -59,30 +66,26 @@ pub fn monitor_geometries() -> Result<Vec<MonitorGeometry>> {
             continue;
         }
 
-        let display = CGDisplay::new(display_id);
-        let scale_factor = screen.backingScaleFactor();
+        let display_bounds = CGDisplay::new(display_id).bounds();
         let screen_frame = screen.frame();
-        let display_bounds = display.bounds();
-        let bounds = PixelRect::new(
-            scale_i32(display_bounds.origin.x, scale_factor),
-            scale_i32(display_bounds.origin.y, scale_factor),
-            scale_u32(screen_frame.size.width, scale_factor)?,
-            scale_u32(screen_frame.size.height, scale_factor)?,
+        let display = CGRect::new(
+            CGPoint::new(display_bounds.origin.x, display_bounds.origin.y),
+            CGSize::new(screen_frame.size.width, screen_frame.size.height),
         );
-        let work_area =
-            screen_work_area(&screen, display_bounds.origin.x, display_bounds.origin.y)?;
+        let monitor = monitor_geometry(
+            display,
+            screen_work_area(&screen, display.origin.x, display.origin.y),
+            screen.backingScaleFactor(),
+        )?;
 
         log::info!(
-            "macOS monitor {display_id}: bounds={:?}, work_area={:?}, scale={scale_factor}",
-            bounds,
-            work_area
+            "macOS monitor {display_id}: bounds={:?}, work_area={:?}, scale={}",
+            monitor.bounds,
+            monitor.work_area,
+            monitor.scale_factor
         );
 
-        monitors.push(MonitorGeometry {
-            bounds,
-            work_area,
-            scale_factor,
-        });
+        monitors.push(monitor);
     }
 
     if monitors.is_empty() {
@@ -92,24 +95,88 @@ pub fn monitor_geometries() -> Result<Vec<MonitorGeometry>> {
     Ok(monitors)
 }
 
-fn screen_work_area(screen: &NSScreen, display_x: f64, display_y: f64) -> Result<PixelRect> {
-    let scale_factor = screen.backingScaleFactor();
+/// The visible frame in top-left global points, without the menu bar and Dock.
+fn screen_work_area(screen: &NSScreen, display_x: f64, display_y: f64) -> CGRect {
     let screen_frame = screen.frame();
     let visible_frame = screen.visibleFrame();
-    let work_x = display_x + visible_frame.origin.x - screen_frame.origin.x;
-    let work_y = display_y + (screen_frame.origin.y + screen_frame.size.height)
-        - (visible_frame.origin.y + visible_frame.size.height);
 
-    Ok(PixelRect::new(
-        scale_i32(work_x, scale_factor),
-        scale_i32(work_y, scale_factor),
-        scale_u32(visible_frame.size.width, scale_factor)?,
-        scale_u32(visible_frame.size.height, scale_factor)?,
-    ))
+    CGRect::new(
+        CGPoint::new(
+            display_x + visible_frame.origin.x - screen_frame.origin.x,
+            display_y + (screen_frame.origin.y + screen_frame.size.height)
+                - (visible_frame.origin.y + visible_frame.size.height),
+        ),
+        visible_frame.size,
+    )
 }
 
-fn scale_i32(value: f64, scale_factor: f64) -> i32 {
-    (value * scale_factor).round() as i32
+/// Maps a display and its work area, both in top-left global points, to
+/// capture pixels.
+fn monitor_geometry(display: CGRect, work: CGRect, scale_factor: f64) -> Result<MonitorGeometry> {
+    let bounds = PixelRect::new(
+        (display.origin.x * ORIGIN_SCALE).round() as i32,
+        (display.origin.y * ORIGIN_SCALE).round() as i32,
+        scale_u32(display.size.width, scale_factor)?,
+        scale_u32(display.size.height, scale_factor)?,
+    );
+    let work_area = PixelRect::new(
+        bounds.x + ((work.origin.x - display.origin.x) * scale_factor).round() as i32,
+        bounds.y + ((work.origin.y - display.origin.y) * scale_factor).round() as i32,
+        scale_u32(work.size.width, scale_factor)?,
+        scale_u32(work.size.height, scale_factor)?,
+    );
+
+    Ok(MonitorGeometry {
+        bounds,
+        work_area,
+        scale_factor,
+    })
+}
+
+/// Top-left global points of a capture pixel inside `monitor`.
+fn pixel_to_point(monitor: &MonitorGeometry, x: i32, y: i32) -> (f64, f64) {
+    let scale = monitor.scale_factor;
+
+    (
+        f64::from(monitor.bounds.x) / ORIGIN_SCALE + f64::from(x - monitor.bounds.x) / scale,
+        f64::from(monitor.bounds.y) / ORIGIN_SCALE + f64::from(y - monitor.bounds.y) / scale,
+    )
+}
+
+/// The monitor under the mouse pointer. Tauri converts the pointer with the
+/// main display's scale, which misses displays with a different scale.
+pub fn cursor_monitor(_app: &AppHandle, monitors: &[MonitorGeometry]) -> Option<usize> {
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
+    let location = CGEvent::new(source).ok()?.location();
+
+    monitor_at_point(monitors, location.x, location.y)
+}
+
+fn monitor_at_point(monitors: &[MonitorGeometry], x: f64, y: f64) -> Option<usize> {
+    monitors.iter().position(|monitor| {
+        let (left, top) = pixel_to_point(monitor, monitor.bounds.x, monitor.bounds.y);
+        let width = f64::from(monitor.bounds.width) / monitor.scale_factor;
+        let height = f64::from(monitor.bounds.height) / monitor.scale_factor;
+
+        x >= left && x < left + width && y >= top && y < top + height
+    })
+}
+
+/// Where a window covering `rect`, in capture pixels on `monitor`, goes.
+/// Positions are logical because Tauri would convert physical ones with the
+/// scale of whichever display the window sits on now.
+pub fn window_frame(monitor: &MonitorGeometry, rect: PixelRect) -> (Position, Size) {
+    let (x, y) = pixel_to_point(monitor, rect.x, rect.y);
+    let scale = monitor.scale_factor;
+
+    (
+        LogicalPosition::new(x, y).into(),
+        LogicalSize::new(
+            f64::from(rect.width) / scale,
+            f64::from(rect.height) / scale,
+        )
+        .into(),
+    )
 }
 
 fn scale_u32(value: f64, scale_factor: f64) -> Result<u32> {
@@ -326,11 +393,14 @@ fn shareable_snapshot() -> Result<ShareableSnapshot> {
         },
     );
 
+    // Off-screen windows are included: overlays shown a moment earlier may not
+    // count as on screen yet, which would drop this app from the list and
+    // leave nothing to exclude them by.
     // SAFETY: The block owns its sender and remains alive until the bounded wait ends.
     unsafe {
         SCShareableContent::getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler(
             true,
-            true,
+            false,
             &completion,
         );
     }
@@ -389,8 +459,8 @@ fn match_displays(
     let mut targets = Vec::with_capacity(monitors.len());
 
     for monitor in monitors {
-        let expected_point_x = f64::from(monitor.bounds.x) / monitor.scale_factor;
-        let expected_point_y = f64::from(monitor.bounds.y) / monitor.scale_factor;
+        let (expected_point_x, expected_point_y) =
+            pixel_to_point(monitor, monitor.bounds.x, monitor.bounds.y);
         let best = remaining
             .iter()
             .enumerate()
@@ -658,6 +728,66 @@ mod tests {
         let capture_elapsed = capture_started.elapsed();
         eprintln!("SCK snapshot={snapshot_elapsed:?} capture={capture_elapsed:?}");
         assert_eq!(pixels.len(), rect.byte_len().unwrap());
+    }
+
+    fn points(x: f64, y: f64, width: f64, height: f64) -> CGRect {
+        CGRect::new(CGPoint::new(x, y), CGSize::new(width, height))
+    }
+
+    /// Built-in 2x display, a 2x 6K display, then a 1x 4K display.
+    fn mixed_layout() -> Vec<MonitorGeometry> {
+        [
+            (points(0.0, 0.0, 1800.0, 1169.0), 2.0),
+            (points(1800.0, 0.0, 3200.0, 1800.0), 2.0),
+            (points(5000.0, 0.0, 3840.0, 2160.0), 1.0),
+        ]
+        .into_iter()
+        .map(|(display, scale)| monitor_geometry(display, display, scale).unwrap())
+        .collect()
+    }
+
+    #[test]
+    fn mixed_scale_displays_do_not_overlap_in_pixels() {
+        let monitors = mixed_layout();
+
+        assert_eq!(monitors[1].bounds, PixelRect::new(3600, 0, 6400, 3600));
+        assert_eq!(monitors[2].bounds, PixelRect::new(10000, 0, 3840, 2160));
+        assert!(monitors[1].bounds.intersect(&monitors[2].bounds).is_none());
+    }
+
+    #[test]
+    fn work_area_keeps_the_display_scale_inside_the_display() {
+        let monitor = monitor_geometry(
+            points(5000.0, 0.0, 3840.0, 2160.0),
+            points(5000.0, 31.0, 3840.0, 2129.0),
+            1.0,
+        )
+        .unwrap();
+
+        assert_eq!(monitor.work_area, PixelRect::new(10000, 31, 3840, 2129));
+    }
+
+    #[test]
+    fn finds_the_pointer_display_whatever_its_scale() {
+        let monitors = mixed_layout();
+
+        assert_eq!(monitor_at_point(&monitors, 900.0, 500.0), Some(0));
+        assert_eq!(monitor_at_point(&monitors, 4999.0, 10.0), Some(1));
+        assert_eq!(monitor_at_point(&monitors, 6000.0, 1000.0), Some(2));
+        assert_eq!(monitor_at_point(&monitors, 9000.0, 10.0), None);
+    }
+
+    #[test]
+    fn places_windows_in_points_on_their_own_display() {
+        let monitors = mixed_layout();
+        let (position, size) = window_frame(&monitors[2], monitors[2].bounds);
+        let (inner_position, inner_size) =
+            window_frame(&monitors[1], PixelRect::new(3800, 100, 400, 200));
+
+        assert_eq!(position, LogicalPosition::new(5000.0, 0.0).into());
+        assert_eq!(size, LogicalSize::new(3840.0, 2160.0).into());
+        assert_eq!(inner_position, LogicalPosition::new(1900.0, 50.0).into());
+        assert_eq!(inner_size, LogicalSize::new(200.0, 100.0).into());
     }
 
     #[test]

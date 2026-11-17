@@ -6,13 +6,11 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::window::Color;
-use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+use super::backend;
 use super::geometry::PixelRect;
-use super::state::{CaptureSession, ScreenshotState};
+use super::state::{CaptureSession, MonitorGeometry, ScreenshotState};
 use super::{CaptureMode, OVERLAY_WINDOW_LABEL_PREFIX, OVERLAY_WINDOW_TITLE};
 use crate::core::events;
 use crate::core::Result;
@@ -205,14 +203,14 @@ pub fn reveal(app: &AppHandle, label: &str, session_id: u64) -> Result<()> {
 
 fn show(app: &AppHandle, label: &str, session_id: u64, allow_focus: bool) -> Result<()> {
     let state = app.state::<ScreenshotState>();
-    let Some(Some((bounds, focus))) = state.with_session(|session| {
+    let Some(Some((monitor, focus))) = state.with_session(|session| {
         if session.id != session_id {
             return None;
         }
 
         session
             .frame(label)
-            .map(|frame| (frame.monitor.bounds, session.cursor_label == label))
+            .map(|frame| (frame.monitor, session.cursor_label == label))
     }) else {
         return Ok(());
     };
@@ -224,7 +222,7 @@ fn show(app: &AppHandle, label: &str, session_id: u64, allow_focus: bool) -> Res
         return Ok(());
     }
 
-    apply_bounds(&window, bounds)?;
+    apply_bounds(&window, &monitor)?;
     window
         .set_always_on_top(true)
         .map_err(|err| anyhow::anyhow!(err))?;
@@ -305,13 +303,13 @@ fn ensure_window(app: &AppHandle, label: &str) -> Result<WebviewWindow> {
         .map_err(|err| anyhow::anyhow!("build screenshot overlay window: {err}").into())
 }
 
-fn apply_bounds(window: &WebviewWindow, bounds: PixelRect) -> Result<()> {
+fn apply_bounds(window: &WebviewWindow, monitor: &MonitorGeometry) -> Result<()> {
+    let (position, size) = backend::window_frame(monitor, monitor.bounds);
+
     window
-        .set_position(PhysicalPosition::new(bounds.x, bounds.y))
+        .set_position(position)
         .map_err(|err| anyhow::anyhow!(err))?;
-    window
-        .set_size(PhysicalSize::new(bounds.width, bounds.height))
-        .map_err(|err| anyhow::anyhow!(err))?;
+    window.set_size(size).map_err(|err| anyhow::anyhow!(err))?;
 
     Ok(())
 }
