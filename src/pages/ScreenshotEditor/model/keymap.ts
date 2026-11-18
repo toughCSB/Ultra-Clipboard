@@ -134,38 +134,42 @@ const modifiedKey = (input: KeyInput, context: KeyContext) => {
   return zoom ? act(zoom) : null;
 };
 
-const translationKey = (input: KeyInput, context: KeyContext) => {
-  if (isLeaveKey(input)) return act({ type: "leaveTranslation" });
-  if (!(input.ctrlKey || input.metaKey)) return null;
+/** The keys of an overlay mode: how to leave it and its Ctrl/Cmd shortcuts. */
+interface OverlayKeys {
+  leave: EditorCommand;
+  shortcuts: ReadonlyMap<string, EditorCommand>;
+}
 
-  switch (input.code) {
-    case "KeyC":
-      return act({ type: "copy" });
-    case "KeyS":
-      return act({ type: "save" });
-    case "KeyW":
-      return act({ type: "close" });
-    case "Enter":
-      return act({ type: "copyAndClose" });
-  }
-
-  const zoom = context.hasDocument ? zoomCommand(input.code) : null;
-
-  return zoom ? act(zoom) : null;
+const overlayKeys: Record<Exclude<KeyMode, "edit">, OverlayKeys> = {
+  textSelection: {
+    leave: { type: "leaveTextSelection" },
+    shortcuts: new Map<string, EditorCommand>([
+      ["KeyC", { type: "copyImageText" }],
+      ["KeyS", { type: "save" }],
+      ["KeyW", { type: "close" }],
+    ]),
+  },
+  translation: {
+    leave: { type: "leaveTranslation" },
+    shortcuts: new Map<string, EditorCommand>([
+      ["Enter", { type: "copyAndClose" }],
+      ["KeyC", { type: "copy" }],
+      ["KeyS", { type: "save" }],
+      ["KeyW", { type: "close" }],
+    ]),
+  },
 };
 
-const textSelectionKey = (input: KeyInput, context: KeyContext) => {
-  if (isLeaveKey(input)) return act({ type: "leaveTextSelection" });
+const overlayKey = (
+  keys: OverlayKeys,
+  input: KeyInput,
+  context: KeyContext,
+) => {
+  if (isLeaveKey(input)) return act(keys.leave);
   if (!(input.ctrlKey || input.metaKey)) return null;
 
-  switch (input.code) {
-    case "KeyC":
-      return act({ type: "copyImageText" });
-    case "KeyW":
-      return act({ type: "close" });
-    case "KeyS":
-      return act({ type: "save" });
-  }
+  const shortcut = keys.shortcuts.get(input.code);
+  if (shortcut) return act(shortcut);
 
   const zoom = context.hasDocument ? zoomCommand(input.code) : null;
 
@@ -233,10 +237,8 @@ export const resolveKey = (
     return act({ type: "cancelDrag" });
   }
   if (context.keyModalOpen) return null;
-  if (context.mode === "translation") {
-    return context.target.inDialog ? null : translationKey(input, context);
-  }
-  if (context.mode === "textSelection") return textSelectionKey(input, context);
+  if (context.mode === "edit") return editKey(input, context);
+  if (context.mode === "translation" && context.target.inDialog) return null;
 
-  return editKey(input, context);
+  return overlayKey(overlayKeys[context.mode], input, context);
 };
