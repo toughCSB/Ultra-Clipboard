@@ -23,7 +23,7 @@ const MAX_BLOCKS: usize = 80;
 const MAX_SOURCE_BYTES: usize = 12_000;
 const MAX_RESPONSE_BYTES: usize = 128_000;
 const MAX_KEY_BYTES: usize = 4_096;
-pub const MAX_REQUEST_ID: u64 = 9_007_199_254_740_991;
+const MAX_REQUEST_ID: u64 = 9_007_199_254_740_991;
 
 /// How one translation request ended. Cancellation is distinct from an image that
 /// holds no text, which is `Blocks` with an empty list.

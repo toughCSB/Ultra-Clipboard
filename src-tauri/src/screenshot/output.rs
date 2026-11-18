@@ -46,6 +46,17 @@ const DRAG_PREVIEW_MAX: u32 = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportAction {
+    Image(ImageAction),
+    /// Recognizes text and returns translated layout blocks. The translation
+    /// flow validates the ID and owns the request from there.
+    Translate {
+        request_id: u64,
+    },
+}
+
+/// Actions that work on the editor image directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageAction {
     Copy,
     Save,
     SaveAs,
@@ -55,11 +66,9 @@ pub enum ExportAction {
     Ocr,
     /// Returns located text without changing the clipboard.
     SelectText,
-    /// Recognizes text and returns translated layout blocks.
-    Translate,
 }
 
-impl ExportAction {
+impl ImageAction {
     fn parse(value: &str) -> Option<Self> {
         match value {
             "copy" => Some(Self::Copy),
@@ -69,7 +78,6 @@ impl ExportAction {
             "prepareDrag" => Some(Self::PrepareDrag),
             "ocr" => Some(Self::Ocr),
             "selectText" => Some(Self::SelectText),
-            "translate" => Some(Self::Translate),
             _ => None,
         }
     }
@@ -80,7 +88,6 @@ pub struct ExportRequest {
     pub action: ExportAction,
     pub width: u32,
     pub height: u32,
-    pub request_id: Option<u64>,
     /// Offset of the exported area inside the editor image, in image pixels.
     pub offset_x: i32,
     pub offset_y: i32,
@@ -116,19 +123,17 @@ fn parse_parts(headers: &HeaderMap, body: &[u8]) -> Result<ExportRequest> {
             .ok_or_else(|| invalid("screenshot export headers are incomplete"))
     };
 
-    let action = ExportAction::parse(header(ACTION_HEADER)?)
-        .ok_or_else(|| invalid("screenshot export action is invalid"))?;
+    let action = match header(ACTION_HEADER)? {
+        "translate" => ExportAction::Translate {
+            request_id: parse_number::<u64>(header(REQUEST_ID_HEADER)?)?,
+        },
+        value => ExportAction::Image(
+            ImageAction::parse(value)
+                .ok_or_else(|| invalid("screenshot export action is invalid"))?,
+        ),
+    };
     let width = parse_number::<u32>(header(WIDTH_HEADER)?)?;
     let height = parse_number::<u32>(header(HEIGHT_HEADER)?)?;
-    let request_id = if action == ExportAction::Translate {
-        let id = parse_number::<u64>(header(REQUEST_ID_HEADER)?)?;
-        if id == 0 || id > super::translation::MAX_REQUEST_ID {
-            return Err(invalid("screenshot translation request ID is invalid"));
-        }
-        Some(id)
-    } else {
-        None
-    };
     let offset_x = parse_number::<i32>(header(OFFSET_X_HEADER)?)?;
     let offset_y = parse_number::<i32>(header(OFFSET_Y_HEADER)?)?;
     validate_pixels(width, height, body.len())?;
@@ -138,7 +143,6 @@ fn parse_parts(headers: &HeaderMap, body: &[u8]) -> Result<ExportRequest> {
         action,
         width,
         height,
-        request_id,
         offset_x,
         offset_y,
         rgba: body.to_vec(),
@@ -146,26 +150,28 @@ fn parse_parts(headers: &HeaderMap, body: &[u8]) -> Result<ExportRequest> {
 }
 
 pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportResult> {
+    let action = match request.action {
+        ExportAction::Translate { request_id } => {
+            return export_translation(app, request_id, request).await;
+        }
+        ExportAction::Image(action) => action,
+    };
     let state = app.state::<ScreenshotState>();
-    if request.action == ExportAction::Translate {
-        return export_translation(app, request).await;
-    }
     let Some(source) = state.image(&request.label) else {
         return Err(invalid("screenshot window is closed"));
     };
     let ExportRequest {
         label,
-        action,
         width,
         height,
-        request_id: _,
         offset_x,
         offset_y,
         rgba,
+        ..
     } = request;
 
     match action {
-        ExportAction::Copy => {
+        ImageAction::Copy => {
             let png = run_blocking(move || encode_png(width, height, &rgba)).await?;
             let history_recorded = copy_png(app, png, width, height).await?;
 
@@ -174,9 +180,9 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
-        ExportAction::Save | ExportAction::SaveAs => {
+        ImageAction::Save | ImageAction::SaveAs => {
             let png = run_blocking(move || encode_png(width, height, &rgba)).await?;
-            let saved_path = if action == ExportAction::Save {
+            let saved_path = if action == ImageAction::Save {
                 Some(
                     auto_save_png(app, png, source.captured_at, source.source_title.clone())
                         .await?,
@@ -197,13 +203,13 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
-        ExportAction::Pin => {
+        ImageAction::Pin => {
             pin::open(
                 app,
                 CapturedImage {
                     width,
                     height,
-                    scale_factor: source.scale_factor,
+                    monitor: source.monitor,
                     origin_x: source.origin_x.saturating_add(offset_x),
                     origin_y: source.origin_y.saturating_add(offset_y),
                     rgba,
@@ -214,7 +220,7 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
 
             Ok(ExportResult::default())
         }
-        ExportAction::PrepareDrag => {
+        ImageAction::PrepareDrag => {
             let dir = app
                 .path()
                 .app_cache_dir()
@@ -238,7 +244,7 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
 
             Ok(ExportResult::default())
         }
-        ExportAction::Ocr => {
+        ImageAction::Ocr => {
             let text = run_blocking(move || super::ocr::recognize(width, height, &rgba)).await?;
             if !text.is_empty() {
                 copy_text(&text).await?;
@@ -249,7 +255,7 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
-        ExportAction::SelectText => {
+        ImageAction::SelectText => {
             let recognition =
                 run_blocking(move || super::ocr::recognize_regions(width, height, &rgba)).await?;
             Ok(ExportResult {
@@ -258,17 +264,17 @@ pub async fn export(app: &AppHandle, request: ExportRequest) -> Result<ExportRes
                 ..ExportResult::default()
             })
         }
-        ExportAction::Translate => Err(invalid("screenshot translation is handled separately")),
     }
 }
 
 /// Hands the pixels to the translation flow, which owns registration, cancellation
 /// and cleanup. The window check runs inside the flow so a window closed mid-request
 /// reads as cancelled, not as an error.
-async fn export_translation(app: &AppHandle, request: ExportRequest) -> Result<ExportResult> {
-    let id = request
-        .request_id
-        .ok_or_else(|| invalid("screenshot translation request ID is missing"))?;
+async fn export_translation(
+    app: &AppHandle,
+    id: u64,
+    request: ExportRequest,
+) -> Result<ExportResult> {
     let ExportRequest {
         label,
         width,
@@ -758,24 +764,21 @@ mod tests {
     }
 
     #[test]
-    fn export_actions_parse_frontend_literals() {
-        assert_eq!(ExportAction::parse("copy"), Some(ExportAction::Copy));
-        assert_eq!(ExportAction::parse("save"), Some(ExportAction::Save));
-        assert_eq!(ExportAction::parse("saveAs"), Some(ExportAction::SaveAs));
+    fn image_actions_parse_frontend_literals() {
+        assert_eq!(ImageAction::parse("copy"), Some(ImageAction::Copy));
+        assert_eq!(ImageAction::parse("save"), Some(ImageAction::Save));
+        assert_eq!(ImageAction::parse("saveAs"), Some(ImageAction::SaveAs));
         assert_eq!(
-            ExportAction::parse("prepareDrag"),
-            Some(ExportAction::PrepareDrag)
+            ImageAction::parse("prepareDrag"),
+            Some(ImageAction::PrepareDrag)
         );
-        assert_eq!(ExportAction::parse("ocr"), Some(ExportAction::Ocr));
+        assert_eq!(ImageAction::parse("ocr"), Some(ImageAction::Ocr));
         assert_eq!(
-            ExportAction::parse("selectText"),
-            Some(ExportAction::SelectText)
+            ImageAction::parse("selectText"),
+            Some(ImageAction::SelectText)
         );
-        assert_eq!(
-            ExportAction::parse("translate"),
-            Some(ExportAction::Translate)
-        );
-        assert_eq!(ExportAction::parse("drag"), None);
+        assert_eq!(ImageAction::parse("translate"), None);
+        assert_eq!(ImageAction::parse("drag"), None);
     }
 
     fn export_headers(action: &str, width: &str, height: &str) -> HeaderMap {
@@ -804,10 +807,9 @@ mod tests {
         let request = parse_parts(&headers, &[0; 8]).unwrap();
 
         assert_eq!(request.label, "screenshot-editor-1");
-        assert_eq!(request.action, ExportAction::SaveAs);
+        assert_eq!(request.action, ExportAction::Image(ImageAction::SaveAs));
         assert_eq!((request.width, request.height), (2, 1));
         assert_eq!((request.offset_x, request.offset_y), (3, -4));
-        assert_eq!(request.request_id, None);
         assert_eq!(request.rgba.len(), 8);
     }
 
@@ -839,20 +841,18 @@ mod tests {
     }
 
     #[test]
-    fn translate_request_needs_a_bounded_request_id() {
+    fn translate_request_carries_its_request_id() {
         let mut headers = export_headers("translate", "2", "1");
         assert!(parse_error(&headers, &[0; 8]).contains("headers are incomplete"));
 
-        for id in [
-            "0",
-            &(super::super::translation::MAX_REQUEST_ID + 1).to_string(),
-        ] {
-            headers.insert(REQUEST_ID_HEADER, id.parse().unwrap());
-            assert!(parse_error(&headers, &[0; 8]).contains("request ID is invalid"));
-        }
+        headers.insert(REQUEST_ID_HEADER, "-1".parse().unwrap());
+        assert!(parse_error(&headers, &[0; 8]).contains("headers are invalid"));
 
         headers.insert(REQUEST_ID_HEADER, "7".parse().unwrap());
-        assert_eq!(parse_parts(&headers, &[0; 8]).unwrap().request_id, Some(7));
+        assert_eq!(
+            parse_parts(&headers, &[0; 8]).unwrap().action,
+            ExportAction::Translate { request_id: 7 }
+        );
     }
 
     #[test]

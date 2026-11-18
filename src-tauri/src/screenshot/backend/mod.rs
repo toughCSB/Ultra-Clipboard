@@ -63,7 +63,7 @@ pub fn work_area_logical_size(monitor: &MonitorGeometry) -> (f64, f64) {
 
 /// The size of a captured image in logical units.
 pub fn image_logical_size(image: &CapturedImage) -> (f64, f64) {
-    let scale = image.scale_factor.max(1.0);
+    let scale = image.monitor.scale_factor.max(1.0);
 
     (
         f64::from(image.width) / scale,

@@ -196,25 +196,10 @@ fn pin_frame(monitors: &[MonitorGeometry], image: &CapturedImage) -> (Position, 
         f64::from(image.origin_y),
     )
     .and_then(|index| monitors.get(index))
-    .or_else(|| monitors.first());
-    let Some(monitor) = monitor else {
-        return backend::window_frame(&capture_monitor(image), capture_area(image));
-    };
+    .or_else(|| monitors.first())
+    .unwrap_or(&image.monitor);
 
     backend::window_frame(monitor, fit_inside(image, monitor.bounds))
-}
-
-fn capture_area(image: &CapturedImage) -> PixelRect {
-    PixelRect::new(image.origin_x, image.origin_y, image.width, image.height)
-}
-
-/// Stands in for the monitor when none could be read: the capture itself.
-fn capture_monitor(image: &CapturedImage) -> MonitorGeometry {
-    MonitorGeometry {
-        bounds: capture_area(image),
-        work_area: capture_area(image),
-        scale_factor: image.scale_factor,
-    }
 }
 
 fn fit_inside(image: &CapturedImage, area: PixelRect) -> PixelRect {
@@ -263,21 +248,13 @@ fn schedule_ready_fallback(app: &AppHandle, label: String) {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Local;
-
     use super::*;
 
     fn image(origin_x: i32, origin_y: i32, width: u32, height: u32) -> CapturedImage {
-        CapturedImage {
-            width,
-            height,
-            scale_factor: 1.25,
-            origin_x,
-            origin_y,
-            rgba: Vec::new(),
-            captured_at: Local::now(),
-            source_title: None,
-        }
+        CapturedImage::blank(
+            monitor(0, 2160, 3840, 1.25),
+            PixelRect::new(origin_x, origin_y, width, height),
+        )
     }
 
     #[test]
@@ -305,22 +282,19 @@ mod tests {
     }
 
     fn monitor(x: i32, width: u32, height: u32, scale: f64) -> MonitorGeometry {
-        let bounds = PixelRect::new(x, 0, width, height);
-
-        MonitorGeometry {
-            bounds,
-            work_area: bounds,
-            scale_factor: scale,
-        }
+        MonitorGeometry::whole(PixelRect::new(x, 0, width, height), scale)
     }
 
     #[test]
-    fn pin_without_monitors_still_goes_through_the_backend() {
-        let image = image(400, 900, 320, 180);
+    fn pin_without_monitors_uses_the_capture_monitor() {
+        let image = CapturedImage {
+            monitor: monitor(10000, 3840, 2160, 1.0),
+            ..image(10100, 100, 320, 180)
+        };
 
         assert_eq!(
             pin_frame(&[], &image),
-            backend::window_frame(&capture_monitor(&image), capture_area(&image))
+            backend::window_frame(&image.monitor, PixelRect::new(10100, 100, 320, 180))
         );
     }
 

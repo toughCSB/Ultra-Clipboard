@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::geometry::PixelRect;
-use super::state::{CaptureSession, CapturedImage, MonitorGeometry};
+use super::state::{CaptureSession, CapturedImage};
 use super::EDITOR_WINDOW_LABEL_PREFIX;
 
 /// When an overlay becomes visible.
@@ -43,11 +43,7 @@ pub enum Event {
         selection: PixelRect,
     },
     /// A capture without an overlay produced its image.
-    DirectCaptured {
-        id: u64,
-        image: CapturedImage,
-        monitor: MonitorGeometry,
-    },
+    DirectCaptured { id: u64, image: CapturedImage },
     /// The editor of a selection could not be opened.
     EditorFailed { id: u64 },
     /// The editor with this label is ready or closed.
@@ -77,7 +73,6 @@ pub enum Effect {
     },
     OpenDirectEditor {
         image: CapturedImage,
-        monitor: MonitorGeometry,
     },
     OpenPermissionPreference,
     /// The selection was confirmed before every monitor's pixels arrived.
@@ -139,9 +134,7 @@ impl Session {
                 frame_label,
                 selection,
             } => self.commit_selection(id, frame_label, selection),
-            Event::DirectCaptured { id, image, monitor } => {
-                self.direct_captured(id, image, monitor)
-            }
+            Event::DirectCaptured { id, image } => self.direct_captured(id, image),
             Event::EditorFailed { id } => self.editor_failed(id),
             Event::EditorSettled { label } => self.editor_settled(&label),
             Event::Cancel { id } => self.cancel(id),
@@ -276,18 +269,13 @@ impl Session {
         }]
     }
 
-    fn direct_captured(
-        &mut self,
-        id: u64,
-        image: CapturedImage,
-        monitor: MonitorGeometry,
-    ) -> Vec<Effect> {
+    fn direct_captured(&mut self, id: u64, image: CapturedImage) -> Vec<Effect> {
         if !matches!(self.phase, Phase::Reserved { id: current } if current == id) {
             return Vec::new();
         }
         self.phase = Phase::Idle;
 
-        vec![Effect::OpenDirectEditor { image, monitor }]
+        vec![Effect::OpenDirectEditor { image }]
     }
 
     fn editor_failed(&mut self, id: u64) -> Vec<Effect> {
@@ -354,7 +342,7 @@ mod tests {
     use chrono::Local;
 
     use super::*;
-    use crate::screenshot::state::MonitorFrame;
+    use crate::screenshot::state::{MonitorFrame, MonitorGeometry};
     use crate::screenshot::CaptureMode;
 
     fn kinds(effects: &[Effect]) -> Vec<&'static str> {
@@ -389,11 +377,7 @@ mod tests {
             mode: CaptureMode::Area,
             frames: vec![MonitorFrame {
                 label: label(0),
-                monitor: MonitorGeometry {
-                    bounds,
-                    work_area: bounds,
-                    scale_factor: 1.0,
-                },
+                monitor: MonitorGeometry::whole(bounds, 1.0),
                 rgba: ready.then(|| Arc::new(vec![0; 8])),
             }],
             windows: Vec::new(),
@@ -712,17 +696,8 @@ mod tests {
 
     #[test]
     fn a_direct_capture_releases_its_reservation_and_opens_the_editor() {
-        let image = || CapturedImage {
-            width: 1,
-            height: 1,
-            scale_factor: 1.0,
-            origin_x: 0,
-            origin_y: 0,
-            rgba: vec![0; 4],
-            captured_at: Local::now(),
-            source_title: None,
-        };
         let monitor = session(0, None, true).frames[0].monitor;
+        let image = || CapturedImage::blank(monitor, PixelRect::new(0, 0, 1, 1));
         let mut state = Session::default();
         let id = reserve(&mut state);
 
@@ -730,14 +705,9 @@ mod tests {
             .apply(Event::DirectCaptured {
                 id: id + 1,
                 image: image(),
-                monitor,
             })
             .is_empty());
-        let effects = state.apply(Event::DirectCaptured {
-            id,
-            image: image(),
-            monitor,
-        });
+        let effects = state.apply(Event::DirectCaptured { id, image: image() });
 
         assert_eq!(kinds(&effects), ["open-direct-editor"]);
         assert!(state.reserve().is_some());

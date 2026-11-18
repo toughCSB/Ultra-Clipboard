@@ -750,11 +750,7 @@ mod tests {
     use super::*;
 
     fn monitor(x: i32, y: i32, width: u32, height: u32, scale: f64) -> MonitorGeometry {
-        MonitorGeometry {
-            bounds: PixelRect::new(x, y, width, height),
-            work_area: PixelRect::new(x, y, width, height),
-            scale_factor: scale,
-        }
+        MonitorGeometry::whole(PixelRect::new(x, y, width, height), scale)
     }
 
     /// Runs only in an interactive macOS process granted Screen Recording.

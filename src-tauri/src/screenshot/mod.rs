@@ -331,7 +331,7 @@ fn run_effect(app: &AppHandle, effect: Effect) -> Result<()> {
 
             result
         }
-        Effect::OpenDirectEditor { image, monitor } => editor::open(app, image, monitor, None),
+        Effect::OpenDirectEditor { image } => editor::open(app, image, None),
         Effect::OpenPermissionPreference => {
             if let Err(err) = crate::window::open_preference_with_highlight(
                 app,
@@ -387,14 +387,13 @@ fn open_selection(
         CapturedImage {
             width: selection.width,
             height: selection.height,
-            scale_factor: frame.monitor.scale_factor,
+            monitor: frame.monitor,
             origin_x: bounds.x.saturating_add(selection.x),
             origin_y: bounds.y.saturating_add(selection.y),
             rgba,
             captured_at: session.captured_at,
             source_title: session.source_title.clone(),
         },
-        frame.monitor,
         Some(editor_label),
     )
 }
@@ -747,7 +746,7 @@ fn capture(app: &AppHandle, target: CaptureTarget, capture_id: u64) -> Result<()
         let image = CapturedImage {
             width: area.width,
             height: area.height,
-            scale_factor: monitor.scale_factor,
+            monitor,
             origin_x: area.x,
             origin_y: area.y,
             rgba,
@@ -762,7 +761,6 @@ fn capture(app: &AppHandle, target: CaptureTarget, capture_id: u64) -> Result<()
             Event::DirectCaptured {
                 id: capture_id,
                 image,
-                monitor,
             },
         );
     }

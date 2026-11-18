@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use super::backend;
-use super::state::{CapturedImage, MonitorGeometry, ScreenshotState};
+use super::state::{CapturedImage, ScreenshotState};
 use super::EDITOR_WINDOW_LABEL_PREFIX;
 use crate::core::events;
 use crate::core::Result;
@@ -42,7 +42,7 @@ impl ImageInfo {
         Self {
             width: image.width,
             height: image.height,
-            scale_factor: image.scale_factor,
+            scale_factor: image.monitor.scale_factor,
             captured_at: image.captured_at.to_rfc3339(),
         }
     }
@@ -51,17 +51,13 @@ impl ImageInfo {
 /// Opens a hidden editor sized around the image on the capture monitor.
 /// The window is shown once the frontend has painted the image. A handoff
 /// editor uses the label its session reserved.
-pub fn open(
-    app: &AppHandle,
-    image: CapturedImage,
-    monitor: MonitorGeometry,
-    handoff_label: Option<String>,
-) -> Result<()> {
+pub fn open(app: &AppHandle, image: CapturedImage, handoff_label: Option<String>) -> Result<()> {
     let started = Instant::now();
     let state = app.state::<ScreenshotState>();
     let label =
         handoff_label.unwrap_or_else(|| format!("{EDITOR_WINDOW_LABEL_PREFIX}{}", state.next_id()));
-    let (width, height) = window_size(&image, &monitor);
+    let monitor = image.monitor;
+    let (width, height) = window_size(&image);
     state.insert_image(&label, image);
 
     let builder = WebviewWindowBuilder::new(
@@ -168,8 +164,8 @@ pub fn request_close(app: &AppHandle, label: &str) {
     }
 }
 
-fn window_size(image: &CapturedImage, monitor: &MonitorGeometry) -> (f64, f64) {
-    let (area_width, area_height) = backend::work_area_logical_size(monitor);
+fn window_size(image: &CapturedImage) -> (f64, f64) {
+    let (area_width, area_height) = backend::work_area_logical_size(&image.monitor);
     let max_width = area_width * WORK_AREA_RATIO;
     let max_height = area_height * WORK_AREA_RATIO;
     let (image_width, image_height) = backend::image_logical_size(image);
@@ -201,10 +197,9 @@ fn schedule_ready_fallback(app: &AppHandle, label: String) {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Local;
-
     use super::*;
     use crate::screenshot::geometry::PixelRect;
+    use crate::screenshot::state::MonitorGeometry;
 
     #[test]
     fn screenshot_navigation_stays_on_its_app_document() {
@@ -246,17 +241,8 @@ mod tests {
         ));
     }
 
-    fn image(width: u32, height: u32, scale_factor: f64) -> CapturedImage {
-        CapturedImage {
-            width,
-            height,
-            scale_factor,
-            origin_x: 0,
-            origin_y: 0,
-            rgba: Vec::new(),
-            captured_at: Local::now(),
-            source_title: None,
-        }
+    fn image(width: u32, height: u32) -> CapturedImage {
+        CapturedImage::blank(portrait_monitor(), PixelRect::new(0, 0, width, height))
     }
 
     fn portrait_monitor() -> MonitorGeometry {
@@ -269,14 +255,14 @@ mod tests {
 
     #[test]
     fn small_capture_uses_minimum_editor_size() {
-        let (width, height) = window_size(&image(200, 100, 1.25), &portrait_monitor());
+        let (width, height) = window_size(&image(200, 100));
 
         assert_eq!((width, height), (960.0, 560.0));
     }
 
     #[test]
     fn fullscreen_capture_is_limited_to_work_area() {
-        let (width, height) = window_size(&image(2160, 3840, 1.25), &portrait_monitor());
+        let (width, height) = window_size(&image(2160, 3840));
 
         assert_eq!(width, (2160.0 / 1.25 * 0.9_f64).round());
         assert_eq!(height, (3733.0 / 1.25 * 0.9_f64).round());

@@ -51,13 +51,44 @@ impl CaptureSession {
 pub struct CapturedImage {
     pub width: u32,
     pub height: u32,
-    pub scale_factor: f64,
+    /// The monitor the image was captured on, kept so a pin can be placed
+    /// even when the current monitors cannot be read.
+    pub monitor: MonitorGeometry,
     /// Virtual desktop position of the image's top-left pixel when it was captured.
     pub origin_x: i32,
     pub origin_y: i32,
     pub rgba: Vec<u8>,
     pub captured_at: DateTime<Local>,
     pub source_title: Option<String>,
+}
+
+#[cfg(test)]
+impl MonitorGeometry {
+    /// A test monitor whose work area covers its whole bounds.
+    pub fn whole(bounds: PixelRect, scale_factor: f64) -> Self {
+        Self {
+            bounds,
+            work_area: bounds,
+            scale_factor,
+        }
+    }
+}
+
+#[cfg(test)]
+impl CapturedImage {
+    /// A test image without pixels covering `area` of `monitor`.
+    pub fn blank(monitor: MonitorGeometry, area: PixelRect) -> Self {
+        Self {
+            width: area.width,
+            height: area.height,
+            monitor,
+            origin_x: area.x,
+            origin_y: area.y,
+            rgba: Vec::new(),
+            captured_at: Local::now(),
+            source_title: None,
+        }
+    }
 }
 
 #[derive(Default)]

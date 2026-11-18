@@ -414,13 +414,7 @@ mod tests {
     use super::*;
 
     fn monitor(x: i32, scale: f64) -> MonitorGeometry {
-        let bounds = PixelRect::new(x, 0, 1920, 1080);
-
-        MonitorGeometry {
-            bounds,
-            work_area: bounds,
-            scale_factor: scale,
-        }
+        MonitorGeometry::whole(PixelRect::new(x, 0, 1920, 1080), scale)
     }
 
     #[test]
